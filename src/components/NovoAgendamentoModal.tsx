@@ -6,6 +6,7 @@ import {
   hojeISO,
 } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
+import { useClientes } from '@/modules/clientes/store'
 
 type Props = {
   aberto: boolean
@@ -27,6 +28,7 @@ export default function NovoAgendamentoModal({
   onFechar,
 }: Props) {
   const { adicionar, agendamentos } = useAgenda()
+  const { clientes, porNome } = useClientes()
   const [cliente, setCliente] = useState('')
   const [telefone, setTelefone] = useState('')
   const [servico, setServico] = useState(SERVICOS[0].nome)
@@ -133,9 +135,22 @@ export default function NovoAgendamentoModal({
               id="ag-cliente"
               className={campo}
               placeholder="Ex.: Lucas Mendes"
+              list="ag-lista-clientes"
               value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
+              onChange={(e) => {
+                const valor = e.target.value
+                setCliente(valor)
+                const existente = porNome(valor)
+                if (existente?.telefone) setTelefone(existente.telefone)
+              }}
             />
+            <datalist id="ag-lista-clientes">
+              {clientes.map((c) => (
+                <option key={c.id} value={c.nome}>
+                  {c.telefone}
+                </option>
+              ))}
+            </datalist>
           </div>
           <div>
             <label className={rotulo} htmlFor="ag-tel">

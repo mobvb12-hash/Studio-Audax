@@ -95,8 +95,8 @@ export default function AppLayout({
 }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen bg-[#F3ECDA] text-[#1C1A15]">
-      {/* Sidebar desktop — igual ao print */}
-      <aside className="hidden w-[260px] shrink-0 flex-col border-r border-[#E9DDC0] bg-[#FAF6EB] md:flex">
+      {/* Sidebar — menu sempre lateralizado */}
+      <aside className="flex w-[230px] shrink-0 flex-col border-r border-[#E9DDC0] bg-[#FAF6EB] lg:w-[260px]">
         <div className="border-b border-[#E9DDC0] px-5 py-5">
           <p className="text-[22px] leading-none font-bold tracking-tight">
             Studio <span className="text-[#8A6A14]">Audax</span>
@@ -136,31 +136,6 @@ export default function AppLayout({
 
       {/* Coluna principal */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Barra mobile */}
-        <header className="border-b border-[#E9DDC0] bg-[#FAF6EB] md:hidden">
-          <div className="flex items-center justify-between px-4 py-3">
-            <p className="text-lg font-bold">
-              Studio <span className="text-[#8A6A14]">Audax</span>
-            </p>
-          </div>
-          <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
-            {SECOES.flatMap((s) => s.itens).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onNavegar(item.id)}
-                className={`shrink-0 rounded-md px-3 py-1.5 text-sm ${
-                  paginaAtual === item.id
-                    ? 'bg-[#E9DDC0] font-medium text-[#1C1A15]'
-                    : 'text-[#4A4436]'
-                }`}
-              >
-                {item.rotulo}
-              </button>
-            ))}
-          </nav>
-        </header>
-
         <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 lg:px-8 lg:py-8">
           {children}
         </main>

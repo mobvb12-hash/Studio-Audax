@@ -2,7 +2,9 @@ import { useState } from 'react'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
+import { ClientesProvider } from '@/modules/clientes/store'
 import Agenda from '@/pages/Agenda'
+import Clientes from '@/pages/Clientes'
 import Dashboard from '@/pages/Dashboard'
 
 const ROTULOS: Record<PaginaId, string> = {
@@ -48,6 +50,7 @@ function Conteudo() {
         <Dashboard onNovo={() => setModalAberto(true)} />
       )}
       {pagina === 'agenda' && <Agenda onNovo={() => setModalAberto(true)} />}
+      {pagina === 'clientes' && <Clientes />}
       {pagina !== 'painel' && pagina !== 'agenda' && (
         <ModuloFuturo pagina={pagina} />
       )}
@@ -61,9 +64,11 @@ function Conteudo() {
 
 function App() {
   return (
-    <AgendaProvider>
-      <Conteudo />
-    </AgendaProvider>
+    <ClientesProvider>
+      <AgendaProvider>
+        <Conteudo />
+      </AgendaProvider>
+    </ClientesProvider>
   )
 }
 
