@@ -8,8 +8,33 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import type { Cliente, NovoClienteInput } from './types'
+import { preferenciasPadrao } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:clientes:v1'
+
+/** Preenche campos ausentes (registros antigos) com os padrões atuais. */
+function normalizarCliente(bruto: Partial<Cliente>): Cliente {
+  const agora = new Date().toISOString()
+  return {
+    id: bruto.id ?? '',
+    nome: bruto.nome ?? '',
+    telefone: bruto.telefone ?? '',
+    email: bruto.email ?? '',
+    observacao: bruto.observacao ?? '',
+    genero: bruto.genero ?? 'nao_informado',
+    cpf: bruto.cpf ?? '',
+    cnpj: bruto.cnpj ?? '',
+    nascimento: bruto.nascimento ?? '',
+    etiquetas: Array.isArray(bruto.etiquetas) ? bruto.etiquetas : [],
+    instagram: bruto.instagram ?? '',
+    comoNosConheceu: bruto.comoNosConheceu ?? '',
+    telefones: Array.isArray(bruto.telefones) ? bruto.telefones : [],
+    endereco: bruto.endereco ?? null,
+    preferencias: { ...preferenciasPadrao(), ...bruto.preferencias },
+    criadoEm: bruto.criadoEm ?? agora,
+    atualizadoEm: bruto.atualizadoEm ?? agora,
+  }
+}
 
 type ClientesContexto = {
   clientes: Cliente[]
@@ -38,8 +63,8 @@ function carregar(): Cliente[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
     if (!bruto) return []
-    const lista = JSON.parse(bruto) as Cliente[]
-    return Array.isArray(lista) ? lista : []
+    const lista = JSON.parse(bruto) as Partial<Cliente>[]
+    return Array.isArray(lista) ? lista.map(normalizarCliente) : []
   } catch {
     return []
   }
@@ -70,15 +95,25 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
         throw new Error('Já existe um cliente com este telefone.')
       }
       const agora = new Date().toISOString()
-      const novo: Cliente = {
+      const novo: Cliente = normalizarCliente({
         id: gerarId(),
         nome,
         telefone: input.telefone.trim(),
         email: input.email.trim(),
         observacao: input.observacao.trim(),
+        genero: input.genero,
+        cpf: input.cpf?.trim() ?? '',
+        cnpj: input.cnpj?.trim() ?? '',
+        nascimento: input.nascimento ?? '',
+        etiquetas: input.etiquetas,
+        instagram: input.instagram?.trim() ?? '',
+        comoNosConheceu: input.comoNosConheceu ?? '',
+        telefones: input.telefones,
+        endereco: input.endereco ?? null,
+        preferencias: input.preferencias,
         criadoEm: agora,
         atualizadoEm: agora,
-      }
+      })
       setClientes((atual) => ordenar([...atual, novo]))
       return novo
     },
@@ -108,14 +143,25 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
         ordenar(
           atual.map((c) =>
             c.id === id
-              ? {
+              ? normalizarCliente({
                   ...c,
                   nome,
                   telefone: input.telefone.trim(),
                   email: input.email.trim(),
                   observacao: input.observacao.trim(),
+                  genero: input.genero ?? c.genero,
+                  cpf: input.cpf?.trim() || c.cpf,
+                  cnpj: input.cnpj?.trim() || c.cnpj,
+                  nascimento: input.nascimento || c.nascimento,
+                  etiquetas: input.etiquetas ?? c.etiquetas,
+                  instagram: input.instagram?.trim() || c.instagram,
+                  comoNosConheceu: input.comoNosConheceu || c.comoNosConheceu,
+                  telefones: input.telefones ?? c.telefones,
+                  endereco:
+                    input.endereco === undefined ? c.endereco : input.endereco,
+                  preferencias: input.preferencias ?? c.preferencias,
                   atualizadoEm: new Date().toISOString(),
-                }
+                })
               : c,
           ),
         ),

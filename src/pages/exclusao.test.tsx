@@ -32,6 +32,9 @@ describe('Confirmação de exclusão destrutiva', () => {
     fireEvent.change(screen.getByLabelText('Nome *'), {
       target: { value: 'Lucas Mendes' },
     })
+    fireEvent.change(screen.getByLabelText('Telefone *'), {
+      target: { value: '(11) 98888-7777' },
+    })
     fireEvent.click(screen.getByText('Cadastrar cliente'))
 
     fireEvent.click(screen.getByLabelText('Excluir Lucas Mendes'))

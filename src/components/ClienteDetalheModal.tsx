@@ -69,6 +69,59 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
   const totalGasto = recebido.reduce((soma, l) => soma + l.valorLiquido, 0)
   const concluidos = historico.filter((ag) => ag.status === 'concluido').length
 
+  const GENERO_ROTULO: Record<string, string> = {
+    nao_informado: 'Não informado',
+    masculino: 'Masculino',
+    feminino: 'Feminino',
+    outro: 'Outro',
+  }
+  const simNao = (v: boolean) => (v ? 'Sim' : 'Não')
+
+  const dadosCadastrais: { rotulo: string; valor: string }[] = []
+  dadosCadastrais.push({ rotulo: 'Gênero', valor: GENERO_ROTULO[cliente.genero] ?? 'Não informado' })
+  if (cliente.cpf) dadosCadastrais.push({ rotulo: 'CPF', valor: cliente.cpf })
+  if (cliente.cnpj) dadosCadastrais.push({ rotulo: 'CNPJ', valor: cliente.cnpj })
+  if (cliente.nascimento)
+    dadosCadastrais.push({
+      rotulo: 'Nascimento',
+      valor: formatarDataLonga(cliente.nascimento),
+    })
+  if (cliente.instagram)
+    dadosCadastrais.push({ rotulo: 'Instagram', valor: cliente.instagram })
+  if (cliente.comoNosConheceu)
+    dadosCadastrais.push({
+      rotulo: 'Como nos conheceu',
+      valor: cliente.comoNosConheceu,
+    })
+  if (cliente.telefones.length > 0)
+    dadosCadastrais.push({
+      rotulo: 'Outros telefones',
+      valor: cliente.telefones
+        .map((t) => `${t.tipo}: ${t.numero}`)
+        .join(' · '),
+    })
+  if (cliente.endereco)
+    dadosCadastrais.push({
+      rotulo: 'Endereço',
+      valor: [
+        `${cliente.endereco.logradouro}, ${cliente.endereco.numero}`,
+        cliente.endereco.complemento,
+        cliente.endereco.bairro,
+        `${cliente.endereco.cidade}/${cliente.endereco.uf}`,
+        cliente.endereco.cep && `CEP ${cliente.endereco.cep}`,
+      ]
+        .filter(Boolean)
+        .join(' — '),
+    })
+  dadosCadastrais.push({
+    rotulo: 'Notificações',
+    valor: `E-mail de agendamentos: ${simNao(cliente.preferencias.emailAgendamentos)} · SMS/Push: ${simNao(cliente.preferencias.smsLembrete)}`,
+  })
+  dadosCadastrais.push({
+    rotulo: 'Campanhas',
+    valor: `SMS: ${simNao(cliente.preferencias.smsMarketing)} · E-mail: ${simNao(cliente.preferencias.emailMarketing)}`,
+  })
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
@@ -126,6 +179,39 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
               Total gasto
             </p>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            Dados cadastrais
+          </p>
+          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1">
+            <dl className="divide-y divide-[#EFE7D3]">
+              {dadosCadastrais.map((d) => (
+                <div
+                  key={d.rotulo}
+                  className="flex items-start justify-between gap-3 py-2 text-sm"
+                >
+                  <dt className="shrink-0 text-[#8A8171]">{d.rotulo}</dt>
+                  <dd className="text-right font-medium text-[#1C1A15]">
+                    {d.valor}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          {cliente.etiquetas.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-1.5">
+              {cliente.etiquetas.map((e) => (
+                <li
+                  key={e}
+                  className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-1 text-xs font-medium text-[#8A6A14]"
+                >
+                  {e}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="mt-4">
