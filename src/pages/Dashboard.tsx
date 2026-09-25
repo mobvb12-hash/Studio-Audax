@@ -3,12 +3,11 @@
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
+import { useCaixa } from '@/modules/caixa/store'
+import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import { useProfissionais } from '@/modules/profissionais/store'
+import { formatarBRL } from '@/lib/moeda'
 import Avatar from '@/components/Avatar'
-
-function formatarBRL(valor: number): string {
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
 
 function dataHoje(): string {
   const texto = new Date().toLocaleDateString('pt-BR', {
@@ -25,6 +24,7 @@ const STATUS_ROTULO: Record<StatusAgendamento, string> = {
   confirmado: 'Confirmado',
   concluido: 'Concluído',
   cancelado: 'Cancelado',
+  nao_compareceu: 'Não compareceu',
 }
 
 function statusClasse(status: StatusAgendamento): string {
@@ -32,6 +32,9 @@ function statusClasse(status: StatusAgendamento): string {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700'
   if (status === 'pendente')
     return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (status === 'nao_compareceu')
+    return 'border-slate-200 bg-slate-50 text-slate-600'
+  if (status === 'cancelado') return 'border-red-200 bg-red-50 text-red-600'
   return 'border-[#E5DCC3] bg-[#F3ECDA] text-[#4A4436]'
 }
 
@@ -66,19 +69,43 @@ function CaixaVazia({ texto }: { texto: string }) {
 export default function Dashboard({ onNovo }: { onNovo: () => void }) {
   const { porData } = useAgenda()
   const { profissionais } = useProfissionais()
+  const { lancamentos, resumoDoDia, diaFechado } = useCaixa()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
+
+  const mesAtual = hojeISO().slice(0, 7)
+  const doMes = lancamentos.filter(
+    (l) => !l.estornado && l.data.startsWith(mesAtual),
+  )
+  const receitaMes = doMes
+    .filter((l) => l.tipo === 'receita')
+    .reduce((soma, l) => soma + l.valorLiquido, 0)
+  const despesasMes = doMes
+    .filter((l) => l.tipo === 'despesa')
+    .reduce((soma, l) => soma + l.valorLiquido, 0)
+  const atendimentosMes = doMes.filter((l) => l.origem === 'atendimento')
+  const ticketMedio =
+    atendimentosMes.length > 0
+      ? atendimentosMes.reduce((soma, l) => soma + l.valorLiquido, 0) /
+        atendimentosMes.length
+      : 0
+
+  const resumoHoje = resumoDoDia(hojeISO())
 
   const kpis = [
     {
       rotulo: 'Receita do mês',
-      valor: formatarBRL(0),
-      sub: '0 atendimento(s) concluído(s)',
+      valor: formatarBRL(receitaMes),
+      sub: `${atendimentosMes.length} atendimento(s) recebido(s)`,
     },
-    { rotulo: 'Despesas do mês', valor: formatarBRL(0) },
-    { rotulo: 'Comissões a pagar', valor: formatarBRL(0) },
-    { rotulo: 'Resultado líquido', valor: formatarBRL(0), verde: true },
-    { rotulo: 'Ticket médio', valor: formatarBRL(0) },
+    { rotulo: 'Despesas do mês', valor: formatarBRL(despesasMes) },
+    { rotulo: 'Comissões a pagar', valor: formatarBRL(0), sub: 'em breve' },
+    {
+      rotulo: 'Resultado líquido',
+      valor: formatarBRL(receitaMes - despesasMes),
+      verde: true,
+    },
+    { rotulo: 'Ticket médio', valor: formatarBRL(ticketMedio) },
     { rotulo: 'Hoje', valor: String(totalHoje), sub: 'agend.' },
     { rotulo: 'Assinaturas ativas', valor: '0' },
   ]
@@ -168,6 +195,72 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
         </div>
 
         <div className="flex flex-col gap-4">
+          <Cartao
+            titulo="Caixa de hoje"
+            contador={diaFechado(hojeISO()) ? 'fechado' : 'aberto'}
+          >
+            <div className="flex items-center justify-between py-1.5 text-sm">
+              <span className="font-medium text-[#1C1A15]">Recebido hoje</span>
+              <span className="font-semibold text-[#8A6A14]">
+                {formatarBRL(resumoHoje.totalRecebido)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between border-t border-[#EFE7D3] py-1.5 text-sm">
+              <span className="font-medium text-[#1C1A15]">Despesas hoje</span>
+              <span className="font-semibold text-red-700">
+                {formatarBRL(resumoHoje.despesas)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between border-t border-[#EFE7D3] py-1.5 text-sm">
+              <span className="font-medium text-[#1C1A15]">Resultado</span>
+              <span className="font-semibold text-[#6B8E5A]">
+                {formatarBRL(resumoHoje.liquido)}
+              </span>
+            </div>
+            <div className="mt-3 border-t border-[#E9DDC0] pt-3">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                Por forma de pagamento
+              </p>
+              <ul className="mt-1.5 divide-y divide-[#EFE7D3]">
+                {FORMAS_PAGAMENTO.map((f) => (
+                  <li
+                    key={f}
+                    className="flex items-center justify-between py-1.5 text-[13px]"
+                  >
+                    <span className="text-[#4A4436]">{FORMAS_ROTULO[f]}</span>
+                    <span className="font-medium text-[#1C1A15]">
+                      {formatarBRL(resumoHoje.porForma[f])}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {resumoHoje.porProfissional.length > 0 && (
+              <div className="mt-3 border-t border-[#E9DDC0] pt-3">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                  Por profissional
+                </p>
+                <ul className="mt-1.5 divide-y divide-[#EFE7D3]">
+                  {resumoHoje.porProfissional.map((p) => (
+                    <li
+                      key={p.nome}
+                      className="flex items-center justify-between py-1.5 text-[13px]"
+                    >
+                      <span className="text-[#4A4436]">
+                        {p.nome}{' '}
+                        <span className="text-xs text-[#8A8171]">
+                          ({p.qtd})
+                        </span>
+                      </span>
+                      <span className="font-medium text-[#1C1A15]">
+                        {formatarBRL(p.valor)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Cartao>
           <Cartao titulo="Estoque baixo" contador="0">
             <CaixaVazia texto="Nenhum produto abaixo do mínimo." />
           </Cartao>

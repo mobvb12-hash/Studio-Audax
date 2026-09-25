@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
+import PagamentoModal from '@/components/PagamentoModal'
 import {
   HORARIOS,
   formatarDataLonga,
@@ -8,6 +9,7 @@ import {
 } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { Agendamento, StatusAgendamento } from '@/modules/agenda/types'
+import { useCaixa } from '@/modules/caixa/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { useServicos } from '@/modules/servicos/store'
 
@@ -30,6 +32,7 @@ const STATUS_ROTULO: Record<StatusAgendamento, string> = {
   confirmado: 'Confirmado',
   concluido: 'Concluído',
   cancelado: 'Cancelado',
+  nao_compareceu: 'Não compareceu',
 }
 
 function montarSlots(): Slot[] {
@@ -61,6 +64,8 @@ function estiloStatus(status: StatusAgendamento): string {
     return 'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200'
   if (status === 'concluido')
     return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33] hover:bg-[#DCEFD4]'
+  if (status === 'nao_compareceu')
+    return 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
   return 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
 }
 
@@ -68,6 +73,8 @@ function estiloBadge(status: StatusAgendamento): string {
   if (status === 'confirmado') return 'border-[#4F9417] bg-[#5FA83E] text-white'
   if (status === 'pendente') return 'border-amber-300 bg-amber-100 text-amber-900'
   if (status === 'concluido') return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+  if (status === 'nao_compareceu')
+    return 'border-slate-300 bg-slate-100 text-slate-700'
   return 'border-red-200 bg-red-50 text-red-600'
 }
 
@@ -76,15 +83,21 @@ function DetalheAgendamento({
   duracaoDo,
   mudarStatus,
   remover,
+  pago,
+  onPagar,
   onFechar,
 }: {
   ag: Agendamento
   duracaoDo: (servico: string) => number
   mudarStatus: (id: string, status: StatusAgendamento) => void
   remover: (id: string) => void
+  pago: boolean
+  onPagar: () => void
   onFechar: () => void
 }) {
   const duracao = duracaoDo(ag.servico)
+  const bloqueado = ag.status === 'cancelado' || ag.status === 'nao_compareceu'
+  const emAberto = ag.status === 'pendente' || ag.status === 'confirmado'
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
@@ -135,55 +148,96 @@ function DetalheAgendamento({
               </dd>
             </div>
           )}
+          <div className="flex justify-between gap-3">
+            <dt className="text-[#8A8171]">Recebimento</dt>
+            <dd
+              className={`font-semibold ${pago ? 'text-[#3F6B33]' : 'text-[#8A6A14]'}`}
+            >
+              {pago ? 'Pago' : 'Em aberto'}
+            </dd>
+          </div>
         </dl>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {ag.status === 'pendente' && (
-            <button
-              type="button"
-              onClick={() => {
-                mudarStatus(ag.id, 'confirmado')
-                onFechar()
-              }}
-              className="rounded-lg bg-[#8A6A14] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6F550F]"
-            >
-              Confirmar
-            </button>
+          {pago ? (
+            <span className="rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-3 py-2 text-xs font-semibold text-[#3F6B33]">
+              Pagamento registrado — opções liberadas apenas no Caixa
+            </span>
+          ) : (
+            <>
+              {ag.status === 'pendente' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    mudarStatus(ag.id, 'confirmado')
+                    onFechar()
+                  }}
+                  className="rounded-lg bg-[#8A6A14] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                >
+                  Confirmar
+                </button>
+              )}
+              {!bloqueado && (
+                <button
+                  type="button"
+                  onClick={onPagar}
+                  className="rounded-lg bg-[#5FA83E] px-3 py-2 text-xs font-semibold text-white hover:bg-[#549531]"
+                >
+                  {ag.status === 'concluido'
+                    ? 'Registrar pagamento'
+                    : 'Concluir e receber'}
+                </button>
+              )}
+              {emAberto && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    mudarStatus(ag.id, 'concluido')
+                    onFechar()
+                  }}
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium hover:bg-[#F3ECDA]"
+                >
+                  Concluir
+                </button>
+              )}
+              {emAberto && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    mudarStatus(ag.id, 'nao_compareceu')
+                    onFechar()
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  Não compareceu
+                </button>
+              )}
+              {emAberto && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    mudarStatus(ag.id, 'cancelado')
+                    onFechar()
+                  }}
+                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  Cancelar
+                </button>
+              )}
+              {!pago && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    remover(ag.id)
+                    onFechar()
+                  }}
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  Excluir
+                </button>
+              )}
+            </>
           )}
-          {ag.status !== 'concluido' && ag.status !== 'cancelado' && (
-            <button
-              type="button"
-              onClick={() => {
-                mudarStatus(ag.id, 'concluido')
-                onFechar()
-              }}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium hover:bg-[#F3ECDA]"
-            >
-              Concluir
-            </button>
-          )}
-          {ag.status !== 'cancelado' && ag.status !== 'concluido' && (
-            <button
-              type="button"
-              onClick={() => {
-                mudarStatus(ag.id, 'cancelado')
-                onFechar()
-              }}
-              className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
-            >
-              Cancelar
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              remover(ag.id)
-              onFechar()
-            }}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
-          >
-            Excluir
-          </button>
         </div>
 
         <button
@@ -200,10 +254,12 @@ function DetalheAgendamento({
 
 export default function Agenda({ onNovo }: Props) {
   const { agendamentos, mudarStatus, remover } = useAgenda()
+  const { jaPago } = useCaixa()
   const { profissionais } = useProfissionais()
   const { servicos } = useServicos()
   const [data, setData] = useState(hojeISO())
   const [selecionado, setSelecionado] = useState<Agendamento | null>(null)
+  const [pagando, setPagando] = useState<Agendamento | null>(null)
 
   const doDia = useMemo(
     () =>
@@ -403,7 +459,19 @@ export default function Agenda({ onNovo }: Props) {
           duracaoDo={duracaoDo}
           mudarStatus={mudarStatus}
           remover={remover}
+          pago={Boolean(jaPago(selecionado.id))}
+          onPagar={() => {
+            setPagando(selecionado)
+            setSelecionado(null)
+          }}
           onFechar={() => setSelecionado(null)}
+        />
+      )}
+
+      {pagando && (
+        <PagamentoModal
+          agendamento={pagando}
+          onFechar={() => setPagando(null)}
         />
       )}
     </div>

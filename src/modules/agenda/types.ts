@@ -4,6 +4,7 @@ export type StatusAgendamento =
   | 'confirmado'
   | 'concluido'
   | 'cancelado'
+  | 'nao_compareceu'
 
 export type Agendamento = {
   id: string

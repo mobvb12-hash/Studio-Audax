@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
 import { formatarDataLonga } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
@@ -21,6 +22,7 @@ export default function Clientes() {
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
+  const [historicoDo, setHistoricoDo] = useState<Cliente | null>(null)
 
   const historico = useMemo(() => {
     const mapa = new Map<string, { total: number; ultimo: string }>()
@@ -138,6 +140,13 @@ export default function Clientes() {
                 <div className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
+                    onClick={() => setHistoricoDo(cliente)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  >
+                    Histórico
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => abrirEdicao(cliente)}
                     className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
                   >
@@ -162,6 +171,13 @@ export default function Clientes() {
         <ClienteFormModal
           cliente={editando}
           onFechar={() => setModalAberto(false)}
+        />
+      )}
+
+      {historicoDo && (
+        <ClienteDetalheModal
+          cliente={historicoDo}
+          onFechar={() => setHistoricoDo(null)}
         />
       )}
     </div>

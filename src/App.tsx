@@ -2,10 +2,12 @@ import { useState } from 'react'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
+import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
+import Caixa from '@/pages/Caixa'
 import Clientes from '@/pages/Clientes'
 import Dashboard from '@/pages/Dashboard'
 import Profissionais from '@/pages/Profissionais'
@@ -47,6 +49,7 @@ function ModuloFuturo({ pagina }: { pagina: PaginaId }) {
 const IMPLEMENTADAS: PaginaId[] = [
   'painel',
   'agenda',
+  'caixa',
   'clientes',
   'servicos',
   'profissionais',
@@ -66,6 +69,7 @@ function Conteudo() {
     <AppLayout paginaAtual={pagina} onNavegar={setPagina}>
       {pagina === 'painel' && <Dashboard onNovo={() => abrirNovo()} />}
       {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
+      {pagina === 'caixa' && <Caixa />}
       {pagina === 'clientes' && <Clientes />}
       {pagina === 'servicos' && <Servicos />}
       {pagina === 'profissionais' && <Profissionais />}
@@ -88,7 +92,9 @@ function App() {
       <ProfissionaisProvider>
         <ServicosProvider>
           <AgendaProvider>
-            <Conteudo />
+            <CaixaProvider>
+              <Conteudo />
+            </CaixaProvider>
           </AgendaProvider>
         </ServicosProvider>
       </ProfissionaisProvider>
