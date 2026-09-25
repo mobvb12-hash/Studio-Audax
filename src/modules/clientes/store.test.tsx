@@ -157,3 +157,82 @@ describe('Clientes — store', () => {
     expect(ctx.clientes).toHaveLength(1)
   })
 })
+
+describe('Clientes — status ativo/inativo (sem apagar dados)', () => {
+  it('cliente nasce ativo e alternarAtivo inativa/reativa preservando tudo', () => {
+    montar()
+    act(() => {
+      ctx.adicionar({
+        nome: 'Ana Dias',
+        telefone: '(11) 97777-6666',
+        email: '',
+        observacao: 'cliente fixo',
+      })
+    })
+    expect(ctx.clientes[0].ativo).toBe(true)
+
+    const id = ctx.clientes[0].id
+    act(() => {
+      ctx.alternarAtivo(id)
+    })
+    expect(ctx.clientes).toHaveLength(1)
+    expect(ctx.clientes[0].id).toBe(id)
+    expect(ctx.clientes[0].nome).toBe('Ana Dias')
+    expect(ctx.clientes[0].observacao).toBe('cliente fixo')
+    expect(ctx.clientes[0].ativo).toBe(false)
+
+    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
+    expect(noStorage).toHaveLength(1)
+    expect(noStorage[0].ativo).toBe(false)
+
+    act(() => {
+      ctx.alternarAtivo(id)
+    })
+    expect(ctx.clientes[0].ativo).toBe(true)
+  })
+
+  it('atualizar preserva o status inativo do cliente', () => {
+    montar()
+    act(() => {
+      ctx.adicionar({
+        nome: 'Ana Dias',
+        telefone: '(11) 97777-6666',
+        email: '',
+        observacao: '',
+      })
+    })
+    act(() => {
+      ctx.alternarAtivo(ctx.clientes[0].id)
+    })
+    act(() => {
+      ctx.atualizar(ctx.clientes[0].id, {
+        nome: 'Ana Dias',
+        telefone: '(11) 91111-2222',
+        email: 'ana@email.com',
+        observacao: 'editada',
+      })
+    })
+    expect(ctx.clientes[0].ativo).toBe(false)
+    expect(ctx.clientes[0].telefone).toBe('(11) 91111-2222')
+  })
+
+  it('registros antigos no localStorage ganham ativo: true ao carregar', () => {
+    localStorage.setItem(
+      CHAVE,
+      JSON.stringify([
+        {
+          id: 'old-1',
+          nome: 'Zé Antigo',
+          telefone: '(11) 90000-0000',
+          email: '',
+          observacao: '',
+        },
+      ]),
+    )
+    montar()
+    const lista = lerLista()
+    expect(lista).toHaveLength(1)
+    expect(lista[0].nome).toBe('Zé Antigo')
+    expect(lista[0].ativo).toBe(true)
+  })
+})

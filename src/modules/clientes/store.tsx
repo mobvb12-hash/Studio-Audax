@@ -25,6 +25,7 @@ function normalizarCliente(bruto: Partial<Cliente>): Cliente {
     cpf: bruto.cpf ?? '',
     cnpj: bruto.cnpj ?? '',
     nascimento: bruto.nascimento ?? '',
+    ativo: bruto.ativo ?? true,
     etiquetas: Array.isArray(bruto.etiquetas) ? bruto.etiquetas : [],
     instagram: bruto.instagram ?? '',
     comoNosConheceu: bruto.comoNosConheceu ?? '',
@@ -40,6 +41,8 @@ type ClientesContexto = {
   clientes: Cliente[]
   adicionar: (input: NovoClienteInput) => Cliente
   atualizar: (id: string, input: NovoClienteInput) => void
+  /** Inativa/reativa sem apagar nada: histórico e vínculos permanecem */
+  alternarAtivo: (id: string) => void
   remover: (id: string) => void
   porId: (id: string) => Cliente | undefined
   porNome: (nome: string) => Cliente | undefined
@@ -102,6 +105,7 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
         email: input.email.trim(),
         observacao: input.observacao.trim(),
         genero: input.genero,
+        ativo: input.ativo ?? true,
         cpf: input.cpf?.trim() ?? '',
         cnpj: input.cnpj?.trim() ?? '',
         nascimento: input.nascimento ?? '',
@@ -150,6 +154,7 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
                   email: input.email.trim(),
                   observacao: input.observacao.trim(),
                   genero: input.genero ?? c.genero,
+                  ativo: input.ativo ?? c.ativo,
                   cpf: input.cpf?.trim() || c.cpf,
                   cnpj: input.cnpj?.trim() || c.cnpj,
                   nascimento: input.nascimento || c.nascimento,
@@ -170,6 +175,16 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
     [clientes],
   )
 
+  const alternarAtivo = useCallback((id: string) => {
+    setClientes((atual) =>
+      atual.map((c) =>
+        c.id === id
+          ? { ...c, ativo: !c.ativo, atualizadoEm: new Date().toISOString() }
+          : c,
+      ),
+    )
+  }, [])
+
   const remover = useCallback((id: string) => {
     setClientes((atual) => atual.filter((c) => c.id !== id))
   }, [])
@@ -186,8 +201,16 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
   )
 
   const valor = useMemo(
-    () => ({ clientes, adicionar, atualizar, remover, porId, porNome }),
-    [clientes, adicionar, atualizar, remover, porId, porNome],
+    () => ({
+      clientes,
+      adicionar,
+      atualizar,
+      alternarAtivo,
+      remover,
+      porId,
+      porNome,
+    }),
+    [clientes, adicionar, atualizar, alternarAtivo, remover, porId, porNome],
   )
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>

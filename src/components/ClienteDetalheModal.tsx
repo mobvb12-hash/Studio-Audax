@@ -74,6 +74,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
 
   const totalGasto = recebido.reduce((soma, l) => soma + l.valorLiquido, 0)
   const concluidos = historico.filter((ag) => ag.status === 'concluido').length
+  const ultimoConcluido = historico.find((ag) => ag.status === 'concluido')?.data
 
   const GENERO_ROTULO: Record<string, string> = {
     nao_informado: 'Não informado',
@@ -142,9 +143,20 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
             <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
               Histórico do cliente
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
-              {cliente.nome}
-            </h2>
+            <div className="mt-1 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-[#1C1A15]">
+                {cliente.nome}
+              </h2>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                  cliente.ativo
+                    ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+                    : 'border-slate-300 bg-slate-100 text-slate-700'
+                }`}
+              >
+                {cliente.ativo ? 'Ativo' : 'Inativo'}
+              </span>
+            </div>
             <p className="text-[13px] text-[#8A8171]">
               {cliente.telefone || 'Sem telefone'}
               {cliente.email && ` · ${cliente.email}`}
@@ -160,7 +172,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5 text-center">
             <p className="text-lg leading-none font-bold text-[#8A6A14]">
               {historico.length}
@@ -175,6 +187,14 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
             </p>
             <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
               Concluídos
+            </p>
+          </div>
+          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5 text-center">
+            <p className="text-[13px] leading-tight font-bold text-[#8A6A14]">
+              {ultimoConcluido ? formatarDataLonga(ultimoConcluido) : '—'}
+            </p>
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+              Último atendimento
             </p>
           </div>
           <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5 text-center">

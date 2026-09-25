@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Clientes from './Clientes'
@@ -18,7 +19,9 @@ function montarClientes() {
     <ClientesProvider>
       <AgendaProvider>
         <CaixaProvider>
-          <Clientes />
+          <ClubeProvider>
+            <Clientes />
+          </ClubeProvider>
         </CaixaProvider>
       </AgendaProvider>
     </ClientesProvider>,

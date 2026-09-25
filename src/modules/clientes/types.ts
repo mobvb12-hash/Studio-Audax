@@ -50,6 +50,12 @@ export type Cliente = {
   telefone: string
   email: string
   observacao: string
+  /**
+   * Status ativo/inativo. Inativar nunca apaga dados: histórico,
+   * pagamentos e assinaturas permanecem. Registros antigos sem o campo
+   * ganham `true` ao serem carregados.
+   */
+  ativo: boolean
   genero: ClienteGenero
   cpf: string
   cnpj: string
@@ -72,6 +78,8 @@ export type NovoClienteInput = {
   telefone: string
   email: string
   observacao: string
+  /** Omitido = cliente nasce ativo */
+  ativo?: boolean
   genero?: ClienteGenero
   cpf?: string
   cnpj?: string

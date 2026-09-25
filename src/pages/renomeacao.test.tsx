@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import Clientes from './Clientes'
 
 let ctxClientes: ReturnType<typeof useClientes>
@@ -27,8 +28,10 @@ function montar() {
     <ClientesProvider>
       <AgendaProvider>
         <CaixaProvider>
-          <Captura />
-          <Clientes />
+          <ClubeProvider>
+            <Captura />
+            <Clientes />
+          </ClubeProvider>
         </CaixaProvider>
       </AgendaProvider>
     </ClientesProvider>,

@@ -89,6 +89,8 @@ export type ClubeContexto = {
   cancelar: (assinaturaId: string, motivo?: string) => void
   /** Registro de pagamento que renova o ciclo (+1 mês) e entra no Caixa */
   registrarPagamento: (input: PagamentoAssinaturaInput) => ResultadoPagamento
+  /** Propaga a renomeacao do cadastro para as assinaturas do cliente */
+  renomearCliente: (antigo: string, novo: string) => void
 }
 
 const Contexto = createContext<ClubeContexto | null>(null)
@@ -241,6 +243,17 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
     [estado.assinaturas, registrarReceitaClube],
   )
 
+  const renomearCliente = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setEstado((atual) => ({
+      ...atual,
+      assinaturas: atual.assinaturas.map((a) =>
+        a.cliente === antigo ? { ...a, cliente: destino } : a,
+      ),
+    }))
+  }, [])
+
   const valor = useMemo(
     () => ({
       assinaturas: estado.assinaturas,
@@ -251,6 +264,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       assinar,
       cancelar,
       registrarPagamento,
+      renomearCliente,
     }),
     [
       estado.assinaturas,
@@ -261,6 +275,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       assinar,
       cancelar,
       registrarPagamento,
+      renomearCliente,
     ],
   )
 

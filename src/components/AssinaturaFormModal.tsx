@@ -35,7 +35,7 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
   }, [onFechar])
 
   const disponiveis = useMemo(
-    () => clientes.filter((c) => podeAssinar(c.id)),
+    () => clientes.filter((c) => c.ativo && podeAssinar(c.id)),
     [clientes, podeAssinar],
   )
 
@@ -99,8 +99,9 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
 
         {disponiveis.length === 0 ? (
           <div className="mt-4 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
-            Todos os clientes já têm assinatura em andamento. Cancele uma
-            assinatura existente para cadastrar outra.
+            {clientes.some((c) => c.ativo)
+              ? 'Todos os clientes já têm assinatura em andamento. Cancele uma assinatura existente para cadastrar outra.'
+              : 'Nenhum cliente ativo disponível. Reative um cliente na página Clientes para criar uma assinatura.'}
           </div>
         ) : (
           <div className="mt-4 grid grid-cols-2 gap-3">

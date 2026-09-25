@@ -492,11 +492,13 @@ export default function PDV() {
                     onChange={(e) => setClienteId(e.target.value)}
                   >
                     <option value="">Sem cliente</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                      </option>
-                    ))}
+                    {clientes
+                      .filter((c) => c.ativo)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome}
+                        </option>
+                      ))}
                   </select>
                   {assinatura && assinanteVigente && (
                     <p className="mt-1.5 text-xs font-medium text-[#3F6B33]">

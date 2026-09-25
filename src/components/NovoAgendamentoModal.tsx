@@ -8,6 +8,8 @@ import { useServicos } from '@/modules/servicos/store'
 import { normalizarTexto } from '@/lib/moeda'
 
 type Props = {
+  /** Pré-preenche o cliente (ação "Agendar" vinda da página Clientes) */
+  clienteInicial?: string
   dataInicial?: string
   horarioInicial?: string
   profissionalInicial?: string
@@ -21,6 +23,7 @@ const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
 export default function NovoAgendamentoModal({
+  clienteInicial,
   dataInicial,
   horarioInicial,
   profissionalInicial,
@@ -30,8 +33,10 @@ export default function NovoAgendamentoModal({
   const { clientes, porNome } = useClientes()
   const { servicos } = useServicos()
   const { profissionais } = useProfissionais()
-  const [cliente, setCliente] = useState('')
-  const [telefone, setTelefone] = useState('')
+  const [cliente, setCliente] = useState(clienteInicial ?? '')
+  const [telefone, setTelefone] = useState(
+    () => (clienteInicial ? porNome(clienteInicial)?.telefone ?? '' : ''),
+  )
   const [servico, setServico] = useState(() => servicos[0]?.nome ?? '')
   const [profissional, setProfissional] = useState(
     () => profissionalInicial ?? profissionais[0]?.nome ?? '',
@@ -162,11 +167,13 @@ export default function NovoAgendamentoModal({
               }}
             />
             <datalist id="ag-lista-clientes">
-              {clientes.map((c) => (
-                <option key={c.id} value={c.nome}>
-                  {c.telefone}
-                </option>
-              ))}
+              {clientes
+                .filter((c) => c.ativo)
+                .map((c) => (
+                  <option key={c.id} value={c.nome}>
+                    {c.telefone}
+                  </option>
+                ))}
             </datalist>
           </div>
           <div>

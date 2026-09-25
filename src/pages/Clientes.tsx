@@ -2,14 +2,41 @@ import { useMemo, useState } from 'react'
 import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
-import { formatarDataLonga } from '@/modules/agenda/catalogo'
+import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
+import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
+import {
+  filtrarClientes,
+  gastoDoCliente,
+  gastosPorCliente,
+  normalizarBusca,
+  resumoAtendimentos,
+  resumoClientes,
+  type FiltroStatusCliente,
+} from '@/modules/clientes/regras'
 import { useClientes } from '@/modules/clientes/store'
 import type { Cliente } from '@/modules/clientes/types'
+import {
+  assinaturaVigente,
+  statusAssinatura,
+  STATUS_ROTULO,
+} from '@/modules/clube/regras'
+import { useClube } from '@/modules/clube/store'
+import { formatarBRL } from '@/lib/moeda'
 
-function normalizar(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+const FILTROS: { id: FiltroStatusCliente; rotulo: string }[] = [
+  { id: 'todos', rotulo: 'Todos' },
+  { id: 'ativos', rotulo: 'Ativos' },
+  { id: 'inativos', rotulo: 'Inativos' },
+]
+
+function chipClasse(ativa: boolean): string {
+  return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+    ativa
+      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
+      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
+  }`
 }
 
 function iniciais(nome: string): string {
@@ -19,40 +46,44 @@ function iniciais(nome: string): string {
 }
 
 export default function Clientes() {
-  const { clientes, remover } = useClientes()
+  const { clientes, remover, alternarAtivo } = useClientes()
   const { agendamentos, renomearCliente: renomearNaAgenda } = useAgenda()
-  const { renomearCliente: renomearNoCaixa } = useCaixa()
+  const { lancamentos, renomearCliente: renomearNoCaixa } = useCaixa()
+  const { assinaturaDoCliente, renomearCliente: renomearNoClube } = useClube()
   const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState<FiltroStatusCliente>('todos')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [historicoDo, setHistoricoDo] = useState<Cliente | null>(null)
   const [excluindo, setExcluindo] = useState<Cliente | null>(null)
+  const [agendarPara, setAgendarPara] = useState<Cliente | null>(null)
 
-  const historico = useMemo(() => {
-    const mapa = new Map<string, { total: number; ultimo: string }>()
-    for (const ag of agendamentos) {
-      if (ag.status !== 'concluido') continue
-      const chave = normalizar(ag.cliente)
-      if (!chave) continue
-      const atual = mapa.get(chave) ?? { total: 0, ultimo: '' }
-      atual.total += 1
-      if (ag.data > atual.ultimo) atual.ultimo = ag.data
-      mapa.set(chave, atual)
-    }
-    return mapa
-  }, [agendamentos])
+  const hoje = useMemo(() => hojeISO(), [])
+  const atendimentos = useMemo(
+    () => resumoAtendimentos(agendamentos),
+    [agendamentos],
+  )
+  const gastos = useMemo(
+    () => gastosPorCliente(lancamentos, clientes),
+    [lancamentos, clientes],
+  )
+  const resumo = useMemo(() => resumoClientes(clientes), [clientes])
+  const totalConcluidos = useMemo(() => {
+    let soma = 0
+    for (const r of atendimentos.values()) soma += r.total
+    return soma
+  }, [atendimentos])
+  const filtrados = useMemo(
+    () => filtrarClientes(clientes, busca, filtro),
+    [clientes, busca, filtro],
+  )
 
-  const filtrados = useMemo(() => {
-    if (!busca.trim()) return clientes
-    const termo = normalizar(busca)
-    const digitos = busca.replace(/\D/g, '')
-    return clientes.filter((cliente) => {
-      if (termo && normalizar(cliente.nome).includes(termo)) return true
-      if (digitos && cliente.telefone.replace(/\D/g, '').includes(digitos))
-        return true
-      return false
-    })
-  }, [clientes, busca])
+  const kpis = [
+    { rotulo: 'Total de clientes', valor: String(resumo.total) },
+    { rotulo: 'Clientes ativos', valor: String(resumo.ativos) },
+    { rotulo: 'Clientes inativos', valor: String(resumo.inativos) },
+    { rotulo: 'Atendimentos concluídos', valor: String(totalConcluidos) },
+  ]
 
   function abrirNovo() {
     setEditando(null)
@@ -72,10 +103,10 @@ export default function Clientes() {
             Clientes
           </h1>
           <p className="mt-2 text-[13px] text-[#4A4436]">
-            {clientes.length} cliente(s) cadastrado(s) ·{' '}
-            {filtrados.length === clientes.length
+            {resumo.total} cliente(s) cadastrado(s) ·{' '}
+            {filtrados.length === resumo.total
               ? 'todos'
-              : `${filtrados.length} na busca`}
+              : `${filtrados.length} exibido(s)`}
           </p>
         </div>
         <button
@@ -87,29 +118,67 @@ export default function Clientes() {
         </button>
       </div>
 
-      <div className="mt-5 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4">
-        <label className="sr-only" htmlFor="cli-busca">
-          Buscar cliente
-        </label>
-        <input
-          id="cli-busca"
-          className="w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
-          placeholder="Buscar por nome ou telefone..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-        />
+      <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
+        <div className="flex min-w-[640px] divide-x divide-[#E5DCC3]">
+          {kpis.map((kpi) => (
+            <div key={kpi.rotulo} className="min-w-[150px] flex-1 px-4 py-4">
+              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+                {kpi.rotulo}
+              </p>
+              <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
+                {kpi.valor}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {FILTROS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFiltro(f.id)}
+              className={chipClasse(filtro === f.id)}
+            >
+              {f.rotulo}
+            </button>
+          ))}
+        </div>
+        <div className="w-full sm:w-72">
+          <label className="sr-only" htmlFor="cli-busca">
+            Buscar cliente
+          </label>
+          <input
+            id="cli-busca"
+            className="w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
+            placeholder="Buscar por nome ou telefone..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
       </div>
 
       {filtrados.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-10 text-center text-sm text-[#A99E85]">
           {clientes.length === 0
             ? 'Nenhum cliente cadastrado. Clique em “Novo cliente” para começar.'
-            : 'Nenhum cliente encontrado para esta busca.'}
+            : busca.trim()
+              ? 'Nenhum cliente encontrado para esta busca.'
+              : filtro === 'ativos'
+                ? 'Nenhum cliente ativo no momento.'
+                : 'Nenhum cliente inativo no momento.'}
         </div>
       ) : (
         <ul className="mt-4 flex flex-col gap-2">
           {filtrados.map((cliente) => {
-            const info = historico.get(normalizar(cliente.nome))
+            const info = atendimentos.get(normalizarBusca(cliente.nome))
+            const gasto = gastoDoCliente(gastos, cliente)
+            const assinatura = assinaturaDoCliente(cliente.id)
+            const vigente = assinatura
+              ? assinaturaVigente(assinatura, hoje)
+              : false
             return (
               <li
                 key={cliente.id}
@@ -133,6 +202,30 @@ export default function Clientes() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                      cliente.ativo
+                        ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+                        : 'border-slate-300 bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {cliente.ativo ? 'Ativo' : 'Inativo'}
+                  </span>
+                  {assinatura && (
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                        vigente
+                          ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+                          : 'border-amber-300 bg-amber-100 text-amber-900'
+                      }`}
+                    >
+                      {vigente
+                        ? 'Assinante'
+                        : `Assinatura ${STATUS_ROTULO[
+                            statusAssinatura(assinatura, hoje)
+                          ].toLowerCase()}`}
+                    </span>
+                  )}
                   <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436]">
                     {info?.total ?? 0} atendimento(s)
                   </span>
@@ -141,8 +234,18 @@ export default function Clientes() {
                       Último: {formatarDataLonga(info.ultimo)}
                     </span>
                   )}
+                  <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-1 text-xs font-medium text-[#8A6A14]">
+                    {formatarBRL(gasto)}
+                  </span>
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAgendarPara(cliente)}
+                    className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                  >
+                    Agendar
+                  </button>
                   <button
                     type="button"
                     onClick={() => setHistoricoDo(cliente)}
@@ -156,6 +259,14 @@ export default function Clientes() {
                     className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
                   >
                     Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alternarAtivo(cliente.id)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                    aria-label={`${cliente.ativo ? 'Inativar' : 'Reativar'} ${cliente.nome}`}
+                  >
+                    {cliente.ativo ? 'Inativar' : 'Reativar'}
                   </button>
                   <button
                     type="button"
@@ -178,6 +289,7 @@ export default function Clientes() {
           aoRenomear={(antigo, novo) => {
             renomearNaAgenda(antigo, novo)
             renomearNoCaixa(antigo, novo)
+            renomearNoClube(antigo, novo)
           }}
           onFechar={() => setModalAberto(false)}
         />
@@ -187,6 +299,13 @@ export default function Clientes() {
         <ClienteDetalheModal
           cliente={historicoDo}
           onFechar={() => setHistoricoDo(null)}
+        />
+      )}
+
+      {agendarPara && (
+        <NovoAgendamentoModal
+          clienteInicial={agendarPara.nome}
+          onFechar={() => setAgendarPara(null)}
         />
       )}
 

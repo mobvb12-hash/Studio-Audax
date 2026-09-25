@@ -130,7 +130,9 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
       <ClientesProvider>
         <AgendaProvider>
           <CaixaProvider>
-            <Clientes />
+            <ClubeProvider>
+              <Clientes />
+            </ClubeProvider>
           </CaixaProvider>
         </AgendaProvider>
       </ClientesProvider>,
