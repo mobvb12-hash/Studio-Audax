@@ -30,12 +30,30 @@ function ordenar(lista: Profissional[]): Profissional[] {
   return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
+/** Garante campos novos em registros antigos (telefone/email/foto). */
+function normalizar(partial: Partial<Profissional>): Profissional | null {
+  if (!partial.id || !partial.nome) return null
+  return {
+    id: partial.id,
+    nome: partial.nome,
+    telefone: partial.telefone ?? '',
+    email: partial.email ?? '',
+    foto: partial.foto ?? '',
+    criadoEm: partial.criadoEm ?? new Date().toISOString(),
+  }
+}
+
 function carregar(): Profissional[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
     if (bruto) {
-      const lista = JSON.parse(bruto) as Profissional[]
-      if (Array.isArray(lista)) return lista
+      const lista = JSON.parse(bruto) as Partial<Profissional>[]
+      if (Array.isArray(lista)) {
+        const migrada = lista
+          .map(normalizar)
+          .filter((p): p is Profissional => p !== null)
+        if (migrada.length > 0) return ordenar(migrada)
+      }
     }
   } catch {
     // corrompido: recria a partir do seed
@@ -44,6 +62,9 @@ function carregar(): Profissional[] {
   return SEED.map((nome) => ({
     id: `prof-${nome.toLowerCase()}`,
     nome,
+    telefone: '',
+    email: '',
+    foto: '',
     criadoEm: agora,
   }))
 }
@@ -65,6 +86,9 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
     const novo: Profissional = {
       id: gerarId(),
       nome: input.nome.trim(),
+      telefone: input.telefone.trim(),
+      email: input.email.trim(),
+      foto: input.foto,
       criadoEm: new Date().toISOString(),
     }
     setProfissionais((atual) => ordenar([...atual, novo]))
@@ -75,7 +99,15 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
     setProfissionais((atual) =>
       ordenar(
         atual.map((p) =>
-          p.id === id ? { ...p, nome: input.nome.trim() } : p,
+          p.id === id
+            ? {
+                ...p,
+                nome: input.nome.trim(),
+                telefone: input.telefone.trim(),
+                email: input.email.trim(),
+                foto: input.foto,
+              }
+            : p,
         ),
       ),
     )

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import Avatar from '@/components/Avatar'
 import {
   HORARIOS,
   formatarDataLonga,
@@ -17,6 +18,8 @@ export type SlotAgendamento = {
 }
 
 type Slot = { hora: string; intervalo: boolean }
+
+type Coluna = { nome: string; foto: string }
 
 type Props = {
   onNovo: (slot?: SlotAgendamento) => void
@@ -210,12 +213,16 @@ export default function Agenda({ onNovo }: Props) {
     [agendamentos, data],
   )
 
-  const colunas = useMemo(() => {
-    const nomes = profissionais.map((p) => p.nome)
+  const colunas = useMemo<Coluna[]>(() => {
+    const lista: Coluna[] = profissionais.map((p) => ({
+      nome: p.nome,
+      foto: p.foto ?? '',
+    }))
     for (const ag of doDia) {
-      if (!nomes.includes(ag.profissional)) nomes.push(ag.profissional)
+      if (!lista.some((c) => c.nome === ag.profissional))
+        lista.push({ nome: ag.profissional, foto: '' })
     }
-    return nomes
+    return lista
   }, [profissionais, doDia])
 
   const duracaoDo = useMemo(() => {
@@ -295,17 +302,15 @@ export default function Agenda({ onNovo }: Props) {
         >
           {/* Cabeçalho */}
           <div className="border-b border-r border-[#E5DCC3] bg-[#FAF6EB]" />
-          {colunas.map((prof) => (
+          {colunas.map((col) => (
             <div
-              key={prof}
+              key={col.nome}
               className="flex items-center gap-2 border-b border-r border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2"
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E9DDC0] text-[11px] font-bold text-[#8A6A14]">
-                {prof.slice(0, 2).toUpperCase()}
-              </span>
+              <Avatar nome={col.nome} foto={col.foto} tamanho="sm" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-[#1C1A15]">
-                  {prof}
+                  {col.nome}
                 </p>
                 <p className="text-[10px] text-[#8A8171]">Barbeiro(a)</p>
               </div>
@@ -324,16 +329,20 @@ export default function Agenda({ onNovo }: Props) {
           ))}
 
           {SLOTS.map((slot, i) =>
-            colunas.map((prof, c) =>
+            colunas.map((col, c) =>
               slot.intervalo ? null : (
                 <div
-                  key={`${slot.hora}-${prof}`}
+                  key={`${slot.hora}-${col.nome}`}
                   className="cursor-pointer border-r border-b border-[#EFE7D3] transition-colors hover:bg-[#F7F1E2]"
                   style={{ gridColumn: c + 2, gridRow: i + 2 }}
                   onClick={() =>
-                    onNovo({ data, horario: slot.hora, profissional: prof })
+                    onNovo({
+                      data,
+                      horario: slot.hora,
+                      profissional: col.nome,
+                    })
                   }
-                  aria-label={`Agendar ${slot.hora} com ${prof}`}
+                  aria-label={`Agendar ${slot.hora} com ${col.nome}`}
                 />
               ),
             ),
@@ -354,7 +363,7 @@ export default function Agenda({ onNovo }: Props) {
           {doDia.map((ag) => {
             const linha = linhaDe(ag.horario)
             if (linha < 2) return null
-            const coluna = colunas.indexOf(ag.profissional)
+            const coluna = colunas.findIndex((c) => c.nome === ag.profissional)
             if (coluna < 0) return null
             const duracao = duracaoDo(ag.servico)
             const spanMax = SLOTS.length + 2 - linha

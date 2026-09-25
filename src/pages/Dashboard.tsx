@@ -4,6 +4,7 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
 import { useProfissionais } from '@/modules/profissionais/store'
+import Avatar from '@/components/Avatar'
 
 function formatarBRL(valor: number): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -190,9 +191,11 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
                       className="flex items-center justify-between gap-2 py-2.5"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E9DDC0] text-[11px] font-bold text-[#8A6A14]">
-                          {prof.nome.slice(0, 2).toUpperCase()}
-                        </span>
+                        <Avatar
+                          nome={prof.nome}
+                          foto={prof.foto}
+                          tamanho="sm"
+                        />
                         <p className="truncate text-sm font-bold text-[#1C1A15]">
                           {prof.nome}
                         </p>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import Avatar from '@/components/Avatar'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -54,16 +55,14 @@ export default function Profissionais() {
               key={prof.id}
               className="flex flex-col gap-3 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4 sm:flex-row sm:items-center"
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E9DDC0] text-sm font-bold text-[#8A6A14]">
-                {prof.nome.slice(0, 2).toUpperCase()}
-              </div>
+              <Avatar nome={prof.nome} foto={prof.foto} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold text-[#1C1A15]">
                   {prof.nome}
                 </p>
                 <p className="mt-0.5 text-[13px] text-[#4A4436]">
-                  Barbeiro(a) · desde{' '}
-                  {new Date(prof.criadoEm).toLocaleDateString('pt-BR')}
+                  {prof.telefone || 'Sem telefone'}
+                  {prof.email ? ` · ${prof.email}` : ''}
                 </p>
               </div>
               <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-xs font-medium text-[#4A4436]">
