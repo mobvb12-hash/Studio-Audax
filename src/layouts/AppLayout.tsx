@@ -10,6 +10,7 @@ export type PaginaId =
   | 'clientes'
   | 'profissionais'
   | 'servicos'
+  | 'comissoes'
   | 'pacotes'
   | 'clube'
   | 'estoque'
@@ -45,6 +46,7 @@ const SECOES: Secao[] = [
     titulo: 'Negócio',
     itens: [
       { id: 'profissionais', rotulo: 'Profissionais' },
+      { id: 'comissoes', rotulo: 'Comissões' },
       { id: 'servicos', rotulo: 'Serviços' },
       { id: 'pacotes', rotulo: 'Pacotes' },
       { id: 'clube', rotulo: 'Clube de assinaturas' },

@@ -4,11 +4,13 @@ import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ComissoesProvider } from '@/modules/comissoes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
 import Caixa from '@/pages/Caixa'
 import Clientes from '@/pages/Clientes'
+import Comissoes from '@/pages/Comissoes'
 import Dashboard from '@/pages/Dashboard'
 import Profissionais from '@/pages/Profissionais'
 import Servicos from '@/pages/Servicos'
@@ -22,6 +24,7 @@ const ROTULOS: Record<PaginaId, string> = {
   comandas: 'Comandas',
   clientes: 'Clientes',
   profissionais: 'Profissionais',
+  comissoes: 'Comissões',
   servicos: 'Serviços',
   pacotes: 'Pacotes',
   clube: 'Clube de assinaturas',
@@ -53,6 +56,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'clientes',
   'servicos',
   'profissionais',
+  'comissoes',
 ]
 
 function Conteudo() {
@@ -73,6 +77,7 @@ function Conteudo() {
       {pagina === 'clientes' && <Clientes />}
       {pagina === 'servicos' && <Servicos />}
       {pagina === 'profissionais' && <Profissionais />}
+      {pagina === 'comissoes' && <Comissoes />}
       {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
       {modalAberto && (
         <NovoAgendamentoModal
@@ -93,7 +98,9 @@ function App() {
         <ServicosProvider>
           <AgendaProvider>
             <CaixaProvider>
-              <Conteudo />
+              <ComissoesProvider>
+                <Conteudo />
+              </ComissoesProvider>
             </CaixaProvider>
           </AgendaProvider>
         </ServicosProvider>

@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ComissoesProvider } from '@/modules/comissoes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda from './Agenda'
 import Caixa from './Caixa'
+import Comissoes from './Comissoes'
 
 beforeEach(() => {
   localStorage.clear()
@@ -47,6 +49,34 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     expect(screen.getByText('Audax')).toBeTruthy()
     expect(screen.getByText('Diego')).toBeTruthy()
     expect(screen.getByText('+ Agendar')).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('Comissões renderiza cabeçalho, filtros de período e tabela', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ClientesProvider>
+        <ProfissionaisProvider>
+          <ServicosProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <ComissoesProvider>
+                  <Comissoes />
+                </ComissoesProvider>
+              </CaixaProvider>
+            </AgendaProvider>
+          </ServicosProvider>
+        </ProfissionaisProvider>
+      </ClientesProvider>,
+    )
+    expect(screen.getByRole('heading', { name: 'Comissões' })).toBeTruthy()
+    expect(screen.getByText('Este mês')).toBeTruthy()
+    expect(screen.getByText('Personalizado')).toBeTruthy()
+    expect(screen.getByText('Barbeiro')).toBeTruthy()
+    expect(screen.getByText('Total geral')).toBeTruthy()
+    expect(screen.getByText('Audax')).toBeTruthy()
+    expect(screen.getByText('Diego')).toBeTruthy()
     expect(erros).not.toHaveBeenCalled()
     erros.mockRestore()
   })
