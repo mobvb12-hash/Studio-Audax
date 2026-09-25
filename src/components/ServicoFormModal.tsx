@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CATEGORIAS_SUGERIDAS } from '@/modules/servicos/regras'
 import { useServicos } from '@/modules/servicos/store'
 import type { Servico } from '@/modules/servicos/types'
 
@@ -28,6 +29,7 @@ export default function ServicoFormModal({
   const [duracao, setDuracao] = useState(() =>
     servico ? String(servico.duracaoMin) : '',
   )
+  const [categoria, setCategoria] = useState(() => servico?.categoria ?? '')
   const [erro, setErro] = useState('')
 
   const editando = Boolean(servico)
@@ -55,7 +57,16 @@ export default function ServicoFormModal({
       setErro('Informe a duração em minutos (mínimo 5).')
       return
     }
-    const dados = { nome, preco: precoNum, duracaoMin: duracaoNum }
+    if (categoria.trim().length > 40) {
+      setErro('Categoria muito longa (máximo 40 caracteres).')
+      return
+    }
+    const dados = {
+      nome,
+      preco: precoNum,
+      duracaoMin: duracaoNum,
+      categoria,
+    }
     try {
       if (servico) {
         const antigo = servico.nome
@@ -137,6 +148,24 @@ export default function ServicoFormModal({
               value={duracao}
               onChange={(e) => setDuracao(e.target.value)}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={rotulo} htmlFor="srv-categoria">
+              Categoria
+            </label>
+            <input
+              id="srv-categoria"
+              className={campo}
+              list="srv-lista-categorias"
+              placeholder="Ex.: Cabelo, Barba (opcional)"
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+            />
+            <datalist id="srv-lista-categorias">
+              {CATEGORIAS_SUGERIDAS.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </div>
         </div>
 

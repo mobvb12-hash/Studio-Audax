@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { SERVICOS as SEED } from '@/modules/agenda/catalogo'
+import { validarServico } from './regras'
 import type { NovoServicoInput, Servico } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:servicos:v1'
@@ -16,6 +17,7 @@ type ServicosContexto = {
   servicos: Servico[]
   adicionar: (input: NovoServicoInput) => Servico
   atualizar: (id: string, input: NovoServicoInput) => void
+  alternarAtivo: (id: string) => void
   remover: (id: string) => void
   porId: (id: string) => Servico | undefined
 }
@@ -34,12 +36,33 @@ function normalizar(texto: string): string {
   return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
 
+/** Migração: registros antigos ganham categoria vazia e ativo: true. */
+function migrar(bruto: Partial<Servico>): Servico | null {
+  if (!bruto.id || !bruto.nome) return null
+  const criadoEm = bruto.criadoEm ?? new Date().toISOString()
+  return {
+    id: bruto.id,
+    nome: bruto.nome,
+    preco: typeof bruto.preco === 'number' ? bruto.preco : 0,
+    duracaoMin: typeof bruto.duracaoMin === 'number' ? bruto.duracaoMin : 30,
+    categoria: typeof bruto.categoria === 'string' ? bruto.categoria : '',
+    ativo: typeof bruto.ativo === 'boolean' ? bruto.ativo : true,
+    criadoEm,
+    atualizadoEm: bruto.atualizadoEm ?? criadoEm,
+  }
+}
+
 function carregar(): Servico[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
     if (bruto) {
-      const lista = JSON.parse(bruto) as Servico[]
-      if (Array.isArray(lista)) return lista
+      const lista = JSON.parse(bruto) as Partial<Servico>[]
+      if (Array.isArray(lista)) {
+        // lista salva (mesmo vazia) é preservada — o seed só entra em
+        // instalação nova ou storage corrompido
+        const migrada = lista.map(migrar).filter((s): s is Servico => s !== null)
+        return ordenar(migrada)
+      }
     }
   } catch {
     // corrompido: recria a partir do seed
@@ -51,6 +74,8 @@ function carregar(): Servico[] {
       nome: s.nome,
       preco: s.preco,
       duracaoMin: s.duracaoMin,
+      categoria: '',
+      ativo: true,
       criadoEm: agora,
       atualizadoEm: agora,
     })),
@@ -71,6 +96,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
   const adicionar = useCallback(
     (input: NovoServicoInput) => {
       const nome = input.nome.trim()
+      const categoria = input.categoria?.trim() ?? ''
+      const erro = validarServico({ ...input, nome, categoria })
+      if (erro) throw new Error(erro)
       if (servicos.some((s) => normalizar(s.nome) === normalizar(nome))) {
         throw new Error('Já existe um serviço com este nome.')
       }
@@ -80,6 +108,8 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         nome,
         preco: input.preco,
         duracaoMin: input.duracaoMin,
+        categoria,
+        ativo: true,
         criadoEm: agora,
         atualizadoEm: agora,
       }
@@ -92,6 +122,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
   const atualizar = useCallback(
     (id: string, input: NovoServicoInput) => {
       const nome = input.nome.trim()
+      const categoria = input.categoria?.trim() ?? ''
+      const erro = validarServico({ ...input, nome, categoria })
+      if (erro) throw new Error(erro)
       if (
         servicos.some(
           (s) => s.id !== id && normalizar(s.nome) === normalizar(nome),
@@ -108,6 +141,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
                   nome,
                   preco: input.preco,
                   duracaoMin: input.duracaoMin,
+                  categoria,
                   atualizadoEm: new Date().toISOString(),
                 }
               : s,
@@ -117,6 +151,17 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
     },
     [servicos],
   )
+
+  /** Inativar/reativar nunca apaga o serviço nem o histórico dele. */
+  const alternarAtivo = useCallback((id: string) => {
+    setServicos((atual) =>
+      atual.map((s) =>
+        s.id === id
+          ? { ...s, ativo: !s.ativo, atualizadoEm: new Date().toISOString() }
+          : s,
+      ),
+    )
+  }, [])
 
   const remover = useCallback((id: string) => {
     setServicos((atual) => atual.filter((s) => s.id !== id))
@@ -128,8 +173,8 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
   )
 
   const valor = useMemo(
-    () => ({ servicos, adicionar, atualizar, remover, porId }),
-    [servicos, adicionar, atualizar, remover, porId],
+    () => ({ servicos, adicionar, atualizar, alternarAtivo, remover, porId }),
+    [servicos, adicionar, atualizar, alternarAtivo, remover, porId],
   )
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>

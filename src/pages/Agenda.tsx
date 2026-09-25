@@ -384,7 +384,12 @@ export default function Agenda({ onNovo }: Props) {
   const temAlmoco = linhaAlmoco >= 0
 
   const passo = visual === 'semana' ? 7 : 1
-  const profissionalPadrao = profissionais[0]?.nome ?? ''
+  // Clique rápido na semana agenda com o primeiro profissional ativo
+  const profissionalPadrao =
+    (profissionais.find((p) => p.ativo) ?? profissionais[0])?.nome ?? ''
+  // Profissional inativo mantém coluna e histórico, apenas sinalizado
+  const profissionalInativo = (nome: string) =>
+    profissionais.some((p) => p.nome === nome && !p.ativo)
 
   const botaoNav =
     'rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-semibold hover:bg-[#F3ECDA]'
@@ -513,7 +518,10 @@ export default function Agenda({ onNovo }: Props) {
                   <p className="truncate text-sm font-bold text-[#1C1A15]">
                     {col.nome}
                   </p>
-                  <p className="text-[10px] text-[#8A8171]">Barbeiro(a)</p>
+                  <p className="text-[10px] text-[#8A8171]">
+                    Barbeiro(a)
+                    {profissionalInativo(col.nome) ? ' · inativo' : ''}
+                  </p>
                 </div>
               </div>
             ))}

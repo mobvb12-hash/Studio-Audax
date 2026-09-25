@@ -3,14 +3,15 @@ import ConfirmarModal from '@/components/ConfirmarModal'
 import ServicoFormModal from '@/components/ServicoFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
+import { servicoEmUso } from '@/modules/servicos/regras'
 import { useServicos } from '@/modules/servicos/store'
 import type { Servico } from '@/modules/servicos/types'
 import { formatarBRL } from '@/lib/moeda'
 
 export default function Servicos() {
-  const { servicos, remover } = useServicos()
-  const { renomearServico: renomearNaAgenda } = useAgenda()
-  const { renomearServico: renomearNoCaixa } = useCaixa()
+  const { servicos, remover, alternarAtivo } = useServicos()
+  const { agendamentos, renomearServico: renomearNaAgenda } = useAgenda()
+  const { lancamentos, renomearServico: renomearNoCaixa } = useCaixa()
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Servico | null>(null)
@@ -19,8 +20,15 @@ export default function Servicos() {
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return servicos
-    return servicos.filter((s) => s.nome.toLowerCase().includes(termo))
+    return servicos.filter(
+      (s) =>
+        s.nome.toLowerCase().includes(termo) ||
+        s.categoria.toLowerCase().includes(termo),
+    )
   }, [servicos, busca])
+
+  const ativos = servicos.filter((s) => s.ativo).length
+  const inativos = servicos.length - ativos
 
   function abrirNovo() {
     setEditando(null)
@@ -35,7 +43,8 @@ export default function Servicos() {
             Serviços
           </h1>
           <p className="mt-2 text-[13px] text-[#4A4436]">
-            {servicos.length} serviço(s) · preço e duração usados na Agenda
+            {servicos.length} serviço(s) · {ativos} ativo(s) · {inativos}{' '}
+            inativo(s) · preço e duração usados na Agenda
           </p>
         </div>
         <button
@@ -84,6 +93,22 @@ export default function Servicos() {
                 <p className="mt-0.5 text-[13px] text-[#4A4436]">
                   Duração de {servico.duracaoMin} minutos
                 </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                      servico.ativo
+                        ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+                        : 'border-slate-300 bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {servico.ativo ? 'Ativo' : 'Inativo'}
+                  </span>
+                  {servico.categoria && (
+                    <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs font-medium text-[#4A4436]">
+                      {servico.categoria}
+                    </span>
+                  )}
+                </div>
               </div>
               <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-sm font-semibold text-[#8A6A14]">
                 {formatarBRL(servico.preco)}
@@ -98,6 +123,14 @@ export default function Servicos() {
                   className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
                 >
                   Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alternarAtivo(servico.id)}
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  aria-label={`${servico.ativo ? 'Inativar' : 'Reativar'} ${servico.nome}`}
+                >
+                  {servico.ativo ? 'Inativar' : 'Reativar'}
                 </button>
                 <button
                   type="button"
@@ -131,6 +164,12 @@ export default function Servicos() {
           rotuloConfirmar="Sim, excluir"
           perigo
           onConfirmar={() => {
+            const uso = servicoEmUso(excluindo.nome, agendamentos, lancamentos)
+            if (uso.emUso) {
+              throw new Error(
+                `“${excluindo.nome}” já aparece em ${uso.agendamentos} agendamento(s) e ${uso.lancamentos} lançamento(oes) do caixa — não é possível excluí-lo. Use “Inativar” para deixar de oferecê-lo em novos agendamentos.`,
+              )
+            }
             remover(excluindo.id)
             setExcluindo(null)
           }}

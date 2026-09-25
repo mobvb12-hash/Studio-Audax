@@ -8,7 +8,7 @@ import { useProfissionais } from '@/modules/profissionais/store'
 import type { Profissional } from '@/modules/profissionais/types'
 
 export default function Profissionais() {
-  const { profissionais, remover } = useProfissionais()
+  const { profissionais, remover, alternarAtivo } = useProfissionais()
   const { agendamentos, renomearProfissional: renomearNaAgenda } = useAgenda()
   const { renomearProfissional: renomearNoCaixa } = useCaixa()
   const [modalAberto, setModalAberto] = useState(false)
@@ -32,8 +32,9 @@ export default function Profissionais() {
             Profissionais
           </h1>
           <p className="mt-2 text-[13px] text-[#4A4436]">
-            {profissionais.length} profissional(is) · cada um vira uma coluna
-            na Agenda
+            {profissionais.length} profissional(is) ·{' '}
+            {profissionais.filter((p) => p.ativo).length} ativo(s) · cada um
+            vira uma coluna na Agenda
           </p>
         </div>
         <button
@@ -68,6 +69,17 @@ export default function Profissionais() {
                   {prof.telefone || 'Sem telefone'}
                   {prof.email ? ` · ${prof.email}` : ''}
                 </p>
+                <div className="mt-1.5">
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                      prof.ativo
+                        ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+                        : 'border-slate-300 bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {prof.ativo ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
               </div>
               <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-xs font-medium text-[#4A4436]">
                 {contagem.get(prof.nome) ?? 0} atendimento(s)
@@ -82,6 +94,14 @@ export default function Profissionais() {
                   className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
                 >
                   Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alternarAtivo(prof.id)}
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  aria-label={`${prof.ativo ? 'Inativar' : 'Reativar'} ${prof.nome}`}
+                >
+                  {prof.ativo ? 'Inativar' : 'Reativar'}
                 </button>
                 <button
                   type="button"

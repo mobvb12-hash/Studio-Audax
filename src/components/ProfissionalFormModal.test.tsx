@@ -100,6 +100,7 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
       telefone: '',
       email: '',
       foto: FOTO_ANTIGA,
+      ativo: true,
       criadoEm: '2026-01-01T00:00:00.000Z',
     }
     localStorage.setItem(

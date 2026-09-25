@@ -34,13 +34,22 @@ export default function NovoAgendamentoModal({
   const { clientes, porNome } = useClientes()
   const { servicos } = useServicos()
   const { profissionais } = useProfissionais()
+  // Novos agendamentos só podem usar serviços/profissionais ativos
+  const servicosAtivos = useMemo(
+    () => servicos.filter((s) => s.ativo),
+    [servicos],
+  )
+  const profissionaisAtivos = useMemo(
+    () => profissionais.filter((p) => p.ativo),
+    [profissionais],
+  )
   const [cliente, setCliente] = useState(clienteInicial ?? '')
   const [telefone, setTelefone] = useState(
     () => (clienteInicial ? porNome(clienteInicial)?.telefone ?? '' : ''),
   )
-  const [servico, setServico] = useState(() => servicos[0]?.nome ?? '')
+  const [servico, setServico] = useState(() => servicosAtivos[0]?.nome ?? '')
   const [profissional, setProfissional] = useState(
-    () => profissionalInicial ?? profissionais[0]?.nome ?? '',
+    () => profissionalInicial ?? profissionaisAtivos[0]?.nome ?? '',
   )
   const [data, setData] = useState(() => dataInicial ?? hojeISO())
   const [horario, setHorario] = useState(() => horarioInicial ?? '14:00')
@@ -80,8 +89,26 @@ export default function NovoAgendamentoModal({
       setErro('Cadastre um serviço no módulo Serviços antes de agendar.')
       return
     }
+    const servicoSel = servicos.find((s) => s.nome === servico)
+    if (!servicoSel) {
+      setErro('Cadastre um serviço no módulo Serviços antes de agendar.')
+      return
+    }
+    if (!servicoSel.ativo) {
+      setErro('Serviço inativo — escolha outro serviço.')
+      return
+    }
     if (!profissional) {
       setErro('Cadastre um profissional no módulo Profissionais antes de agendar.')
+      return
+    }
+    const profSel = profissionais.find((p) => p.nome === profissional)
+    if (!profSel) {
+      setErro('Cadastre um profissional no módulo Profissionais antes de agendar.')
+      return
+    }
+    if (!profSel.ativo) {
+      setErro('Profissional inativo — escolha outro profissional.')
       return
     }
     const duracaoDo = (nome: string) =>
@@ -213,8 +240,10 @@ export default function NovoAgendamentoModal({
               value={servico}
               onChange={(e) => setServico(e.target.value)}
             >
-              {servicos.length === 0 && <option value="">Sem serviços</option>}
-              {servicos.map((s) => (
+              {servicosAtivos.length === 0 && (
+                <option value="">Sem serviços ativos</option>
+              )}
+              {servicosAtivos.map((s) => (
                 <option key={s.id} value={s.nome}>
                   {s.nome} — R$ {s.preco}
                 </option>
@@ -231,10 +260,10 @@ export default function NovoAgendamentoModal({
               value={profissional}
               onChange={(e) => setProfissional(e.target.value)}
             >
-              {profissionais.length === 0 && (
-                <option value="">Sem profissionais</option>
+              {profissionaisAtivos.length === 0 && (
+                <option value="">Sem profissionais ativos</option>
               )}
-              {profissionais.map((p) => (
+              {profissionaisAtivos.map((p) => (
                 <option key={p.id} value={p.nome}>
                   {p.nome}
                 </option>

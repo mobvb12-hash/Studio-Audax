@@ -36,7 +36,9 @@ export default function RemarcarAgendamentoModal({
   }, [expediente, agendamento.horario])
 
   const opcoesProfissional = useMemo(() => {
-    const nomes = profissionais.map((p) => p.nome)
+    // Só profissionais ativos recebem a remarcação — o atual do
+    // agendamento é mantido na lista mesmo se inativou depois (histórico)
+    const nomes = profissionais.filter((p) => p.ativo).map((p) => p.nome)
     if (!nomes.includes(agendamento.profissional)) {
       return [agendamento.profissional, ...nomes]
     }

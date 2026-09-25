@@ -17,7 +17,13 @@ export type LinhaProducao = {
   comissao: number
 }
 
-type ProfissionalBasico = { id: string; nome: string; foto?: string }
+type ProfissionalBasico = {
+  id: string
+  nome: string
+  foto?: string
+  /** Status no cadastro de profissionais (false = inativo, histórico mantido) */
+  ativo?: boolean
+}
 
 export function linhasDoPeriodo(
   lancamentos: Lancamento[],
@@ -42,6 +48,7 @@ export function linhasDoPeriodo(
     id: p.id,
     nome: p.nome,
     foto: p.foto,
+    ativo: p.ativo,
   }))
   for (const nome of nomesComProducao) {
     if (!profissionais.some((p) => p.nome === nome)) {
@@ -50,7 +57,7 @@ export function linhasDoPeriodo(
   }
 
   return base
-    .map(({ id, nome, foto }) => {
+    .map(({ id, nome, foto, ativo }) => {
       const config = configDe(id)
       const producao = calcularProducao(lancamentos, nome, periodo)
       return {
@@ -58,7 +65,8 @@ export function linhasDoPeriodo(
         profissionalId: id,
         nome,
         foto,
-        inativo: !config.ativo,
+        // Inativo por comissão OU por cadastro: o histórico continua visível
+        inativo: !config.ativo || ativo === false,
         percentual: config.percentual,
         qtd: producao.qtdAtendimentos,
         producao: producao.liquido,

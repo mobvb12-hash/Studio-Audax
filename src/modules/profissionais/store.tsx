@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { PROFISSIONAIS as SEED } from '@/modules/agenda/catalogo'
+import { validarProfissional } from './regras'
 import type { NovoProfissionalInput, Profissional } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:profissionais:v1'
@@ -16,6 +17,7 @@ type ProfissionaisContexto = {
   profissionais: Profissional[]
   adicionar: (input: NovoProfissionalInput) => Profissional
   atualizar: (id: string, input: NovoProfissionalInput) => void
+  alternarAtivo: (id: string) => void
   remover: (id: string) => void
   porId: (id: string) => Profissional | undefined
 }
@@ -30,7 +32,7 @@ function ordenar(lista: Profissional[]): Profissional[] {
   return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
-/** Garante campos novos em registros antigos (telefone/email/foto). */
+/** Garante campos novos em registros antigos (telefone/email/foto/ativo). */
 function normalizar(partial: Partial<Profissional>): Profissional | null {
   if (!partial.id || !partial.nome) return null
   return {
@@ -39,6 +41,7 @@ function normalizar(partial: Partial<Profissional>): Profissional | null {
     telefone: partial.telefone ?? '',
     email: partial.email ?? '',
     foto: partial.foto ?? '',
+    ativo: typeof partial.ativo === 'boolean' ? partial.ativo : true,
     criadoEm: partial.criadoEm ?? new Date().toISOString(),
   }
 }
@@ -71,6 +74,7 @@ function carregar(): Profissional[] {
     telefone: '',
     email: '',
     foto: '',
+    ativo: true,
     criadoEm: agora,
   }))
 }
@@ -91,6 +95,12 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   const adicionar = useCallback(
     (input: NovoProfissionalInput) => {
       const nome = input.nome.trim()
+      const erro = validarProfissional({
+        nome,
+        telefone: input.telefone,
+        email: input.email,
+      })
+      if (erro) throw new Error(erro)
       if (
         profissionais.some((p) => nomeChave(p.nome) === nomeChave(nome))
       ) {
@@ -102,6 +112,7 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         telefone: input.telefone.trim(),
         email: input.email.trim(),
         foto: input.foto,
+        ativo: true,
         criadoEm: new Date().toISOString(),
       }
       setProfissionais((atual) => ordenar([...atual, novo]))
@@ -113,6 +124,12 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   const atualizar = useCallback(
     (id: string, input: NovoProfissionalInput) => {
       const nome = input.nome.trim()
+      const erro = validarProfissional({
+        nome,
+        telefone: input.telefone,
+        email: input.email,
+      })
+      if (erro) throw new Error(erro)
       if (
         profissionais.some(
           (p) => p.id !== id && nomeChave(p.nome) === nomeChave(nome),
@@ -139,6 +156,13 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
     [profissionais],
   )
 
+  /** Inativar/reativar nunca apaga o profissional nem o histórico dele. */
+  const alternarAtivo = useCallback((id: string) => {
+    setProfissionais((atual) =>
+      atual.map((p) => (p.id === id ? { ...p, ativo: !p.ativo } : p)),
+    )
+  }, [])
+
   const remover = useCallback((id: string) => {
     setProfissionais((atual) => atual.filter((p) => p.id !== id))
   }, [])
@@ -149,8 +173,15 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   )
 
   const valor = useMemo(
-    () => ({ profissionais, adicionar, atualizar, remover, porId }),
-    [profissionais, adicionar, atualizar, remover, porId],
+    () => ({
+      profissionais,
+      adicionar,
+      atualizar,
+      alternarAtivo,
+      remover,
+      porId,
+    }),
+    [profissionais, adicionar, atualizar, alternarAtivo, remover, porId],
   )
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>

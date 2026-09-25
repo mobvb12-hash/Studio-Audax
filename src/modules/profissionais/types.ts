@@ -6,6 +6,12 @@ export type Profissional = {
   email: string
   /** Foto em data URL (JPEG compactado) ou string vazia */
   foto: string
+  /**
+   * Status ativo/inativo. Inativar nunca apaga dados: atendimentos,
+   * agenda e comissões já realizados permanecem; o profissional apenas
+   * deixa de receber novos agendamentos.
+   */
+  ativo: boolean
   criadoEm: string
 }
 

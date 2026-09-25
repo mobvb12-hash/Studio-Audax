@@ -70,8 +70,9 @@ export default function PDV() {
   const caixaFechado = diaFechado(hoje)
   // PDV só vende o que existe: ativo e com estoque
   const produtosVendaveis = produtos.filter((p) => p.ativo && p.estoque > 0)
+  // Profissional precisa estar ativo no cadastro E na configuração de comissão
   const profissionaisAtivos = profissionais.filter(
-    (p) => configDe(p.id).ativo,
+    (p) => p.ativo && configDe(p.id).ativo,
   )
 
   const subtotal = carrinho.reduce(

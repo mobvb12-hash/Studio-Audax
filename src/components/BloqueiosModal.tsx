@@ -20,8 +20,9 @@ const TIPOS = Object.keys(TIPOS_BLOQUEIO_ROTULO) as TipoBloqueio[]
 export default function BloqueiosModal({ onFechar }: Props) {
   const { bloqueios, criarBloqueio, removerBloqueio } = useAgenda()
   const { profissionais } = useProfissionais()
+  const profissionaisAtivos = profissionais.filter((p) => p.ativo)
   const [profissional, setProfissional] = useState(
-    () => profissionais[0]?.nome ?? '',
+    () => profissionaisAtivos[0]?.nome ?? '',
   )
   const [data, setData] = useState(hojeISO())
   const [dataFim, setDataFim] = useState('')
@@ -98,10 +99,10 @@ export default function BloqueiosModal({ onFechar }: Props) {
               value={profissional}
               onChange={(e) => setProfissional(e.target.value)}
             >
-              {profissionais.length === 0 && (
-                <option value="">Sem profissionais</option>
+              {profissionaisAtivos.length === 0 && (
+                <option value="">Sem profissionais ativos</option>
               )}
-              {profissionais.map((p) => (
+              {profissionaisAtivos.map((p) => (
                 <option key={p.id} value={p.nome}>
                   {p.nome}
                 </option>
