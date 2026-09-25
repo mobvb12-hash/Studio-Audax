@@ -30,6 +30,10 @@ function ordenar(lista: Servico[]): Servico[] {
   return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
+function normalizar(texto: string): string {
+  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+}
+
 function carregar(): Servico[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
@@ -64,37 +68,55 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
     }
   }, [servicos])
 
-  const adicionar = useCallback((input: NovoServicoInput) => {
-    const agora = new Date().toISOString()
-    const novo: Servico = {
-      id: gerarId(),
-      nome: input.nome.trim(),
-      preco: input.preco,
-      duracaoMin: input.duracaoMin,
-      criadoEm: agora,
-      atualizadoEm: agora,
-    }
-    setServicos((atual) => ordenar([...atual, novo]))
-    return novo
-  }, [])
+  const adicionar = useCallback(
+    (input: NovoServicoInput) => {
+      const nome = input.nome.trim()
+      if (servicos.some((s) => normalizar(s.nome) === normalizar(nome))) {
+        throw new Error('Já existe um serviço com este nome.')
+      }
+      const agora = new Date().toISOString()
+      const novo: Servico = {
+        id: gerarId(),
+        nome,
+        preco: input.preco,
+        duracaoMin: input.duracaoMin,
+        criadoEm: agora,
+        atualizadoEm: agora,
+      }
+      setServicos((atual) => ordenar([...atual, novo]))
+      return novo
+    },
+    [servicos],
+  )
 
-  const atualizar = useCallback((id: string, input: NovoServicoInput) => {
-    setServicos((atual) =>
-      ordenar(
-        atual.map((s) =>
-          s.id === id
-            ? {
-                ...s,
-                nome: input.nome.trim(),
-                preco: input.preco,
-                duracaoMin: input.duracaoMin,
-                atualizadoEm: new Date().toISOString(),
-              }
-            : s,
+  const atualizar = useCallback(
+    (id: string, input: NovoServicoInput) => {
+      const nome = input.nome.trim()
+      if (
+        servicos.some(
+          (s) => s.id !== id && normalizar(s.nome) === normalizar(nome),
+        )
+      ) {
+        throw new Error('Já existe um serviço com este nome.')
+      }
+      setServicos((atual) =>
+        ordenar(
+          atual.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  nome,
+                  preco: input.preco,
+                  duracaoMin: input.duracaoMin,
+                  atualizadoEm: new Date().toISOString(),
+                }
+              : s,
+          ),
         ),
-      ),
-    )
-  }, [])
+      )
+    },
+    [servicos],
+  )
 
   const remover = useCallback((id: string) => {
     setServicos((atual) => atual.filter((s) => s.id !== id))

@@ -7,6 +7,8 @@ import type { Profissional } from '@/modules/profissionais/types'
 type Props = {
   profissional?: Profissional | null
   onFechar: () => void
+  /** Chamado quando o nome muda, para propagar aos módulos (Agenda/Caixa) */
+  aoRenomear?: (antigo: string, novo: string) => void
 }
 
 const campo =
@@ -25,6 +27,7 @@ function iniciais(nome: string): string {
 export default function ProfissionalFormModal({
   profissional,
   onFechar,
+  aoRenomear,
 }: Props) {
   const { adicionar, atualizar } = useProfissionais()
   const [nome, setNome] = useState(() => profissional?.nome ?? '')
@@ -70,9 +73,19 @@ export default function ProfissionalFormModal({
       return
     }
     const dados = { nome, telefone, email, foto }
-    if (profissional) atualizar(profissional.id, dados)
-    else adicionar(dados)
-    onFechar()
+    try {
+      if (profissional) {
+        const antigo = profissional.nome
+        const destino = nome.trim()
+        atualizar(profissional.id, dados)
+        if (antigo !== destino) aoRenomear?.(antigo, destino)
+      } else {
+        adicionar(dados)
+      }
+      onFechar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível salvar.')
+    }
   }
 
   return (

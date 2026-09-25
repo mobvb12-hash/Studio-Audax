@@ -5,6 +5,8 @@ import type { Servico } from '@/modules/servicos/types'
 type Props = {
   servico?: Servico | null
   onFechar: () => void
+  /** Chamado quando o nome muda, para propagar aos módulos (Agenda/Caixa) */
+  aoRenomear?: (antigo: string, novo: string) => void
 }
 
 const campo =
@@ -13,7 +15,11 @@ const campo =
 const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
-export default function ServicoFormModal({ servico, onFechar }: Props) {
+export default function ServicoFormModal({
+  servico,
+  onFechar,
+  aoRenomear,
+}: Props) {
   const { adicionar, atualizar } = useServicos()
   const [nome, setNome] = useState(() => servico?.nome ?? '')
   const [preco, setPreco] = useState(() =>
@@ -50,9 +56,19 @@ export default function ServicoFormModal({ servico, onFechar }: Props) {
       return
     }
     const dados = { nome, preco: precoNum, duracaoMin: duracaoNum }
-    if (servico) atualizar(servico.id, dados)
-    else adicionar(dados)
-    onFechar()
+    try {
+      if (servico) {
+        const antigo = servico.nome
+        const destino = nome.trim()
+        atualizar(servico.id, dados)
+        if (antigo !== destino) aoRenomear?.(antigo, destino)
+      } else {
+        adicionar(dados)
+      }
+      onFechar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível salvar.')
+    }
   }
 
   return (

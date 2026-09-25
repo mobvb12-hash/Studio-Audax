@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import ServicoFormModal from '@/components/ServicoFormModal'
+import { useAgenda } from '@/modules/agenda/store'
+import { useCaixa } from '@/modules/caixa/store'
 import { useServicos } from '@/modules/servicos/store'
 import type { Servico } from '@/modules/servicos/types'
 import { formatarBRL } from '@/lib/moeda'
 
 export default function Servicos() {
   const { servicos, remover } = useServicos()
+  const { renomearServico: renomearNaAgenda } = useAgenda()
+  const { renomearServico: renomearNoCaixa } = useCaixa()
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Servico | null>(null)
@@ -84,7 +88,7 @@ export default function Servicos() {
               <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-sm font-semibold text-[#8A6A14]">
                 {formatarBRL(servico.preco)}
               </span>
-              <div className="flex shrink-0 gap-1.5">
+              <div className="flex shrink-0 flex-wrap gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -112,6 +116,10 @@ export default function Servicos() {
       {modalAberto && (
         <ServicoFormModal
           servico={editando}
+          aoRenomear={(antigo, novo) => {
+            renomearNaAgenda(antigo, novo)
+            renomearNoCaixa(antigo, novo)
+          }}
           onFechar={() => setModalAberto(false)}
         />
       )}

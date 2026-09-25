@@ -87,6 +87,9 @@ describe('Caixa — recebimento de atendimentos', () => {
     expect(() => ctx.registrarPagamento(pagamento({ valor: -5 }))).toThrow(
       /inválido/i,
     )
+    expect(() => ctx.registrarPagamento(pagamento({ valor: 0 }))).toThrow(
+      /inválido/i,
+    )
     expect(() =>
       ctx.registrarPagamento(
         pagamento({ formaPagamento: 'boleto' as FormaPagamento }),
@@ -343,6 +346,57 @@ describe('Caixa — fechamento e reabertura', () => {
     expect(() => ctx.estornar(ctx.lancamentos[0].id)).toThrow(/fechado/)
     expect(ctx.lancamentos).toHaveLength(1)
     expect(ctx.lancamentos[0].estornado).toBeFalsy()
+  })
+})
+
+describe('Caixa — propagação de renomeações de cadastro', () => {
+  it('renomeia profissional, serviço e cliente nos lançamentos existentes', () => {
+    montar()
+    act(() => {
+      ctx.registrarPagamento(pagamento())
+      ctx.venderProduto({
+        data: DIA,
+        produto: 'Pomada',
+        quantidade: 1,
+        preco: 30,
+        desconto: 0,
+        formaPagamento: 'pix',
+        profissional: 'Diego',
+      })
+    })
+
+    act(() => {
+      ctx.renomearProfissional('Audax', 'Audax Barbearia')
+      ctx.renomearServico('Corte Degradê', 'Corte novo')
+      ctx.renomearCliente('Lucas Mendes', 'Lucas')
+    })
+
+    const atendimento = ctx.lancamentos.find((l) => l.origem === 'atendimento')
+    expect(atendimento?.profissional).toBe('Audax Barbearia')
+    expect(atendimento?.servico).toBe('Corte novo')
+    expect(atendimento?.cliente).toBe('Lucas')
+
+    const venda = ctx.lancamentos.find((l) => l.origem === 'produto')
+    expect(venda?.profissional).toBe('Diego')
+
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_LANC) ?? '[]')
+    expect(salvo[0].profissional).toBe('Audax Barbearia')
+    expect(salvo[0].servico).toBe('Corte novo')
+    expect(salvo[0].cliente).toBe('Lucas')
+  })
+
+  it('renomear sem correspondência não altera lançamentos', () => {
+    montar()
+    act(() => {
+      ctx.registrarPagamento(pagamento())
+    })
+    const antes = JSON.stringify(ctx.lancamentos)
+    act(() => {
+      ctx.renomearProfissional('Nome Inexistente', 'Outro')
+      ctx.renomearServico('Corte Degradê', 'Corte Degradê')
+      ctx.renomearCliente('Lucas Mendes', '   ')
+    })
+    expect(JSON.stringify(ctx.lancamentos)).toBe(antes)
   })
 })
 

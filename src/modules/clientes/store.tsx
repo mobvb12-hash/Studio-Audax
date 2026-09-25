@@ -56,39 +56,73 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
     }
   }, [clientes])
 
-  const adicionar = useCallback((input: NovoClienteInput) => {
-    const agora = new Date().toISOString()
-    const novo: Cliente = {
-      id: gerarId(),
-      nome: input.nome.trim(),
-      telefone: input.telefone.trim(),
-      email: input.email.trim(),
-      observacao: input.observacao.trim(),
-      criadoEm: agora,
-      atualizadoEm: agora,
-    }
-    setClientes((atual) => ordenar([...atual, novo]))
-    return novo
-  }, [])
+  const adicionar = useCallback(
+    (input: NovoClienteInput) => {
+      const nome = input.nome.trim()
+      const digitos = input.telefone.replace(/\D/g, '')
+      if (clientes.some((c) => normalizar(c.nome) === normalizar(nome))) {
+        throw new Error('Já existe um cliente com este nome.')
+      }
+      if (
+        digitos &&
+        clientes.some((c) => c.telefone.replace(/\D/g, '') === digitos)
+      ) {
+        throw new Error('Já existe um cliente com este telefone.')
+      }
+      const agora = new Date().toISOString()
+      const novo: Cliente = {
+        id: gerarId(),
+        nome,
+        telefone: input.telefone.trim(),
+        email: input.email.trim(),
+        observacao: input.observacao.trim(),
+        criadoEm: agora,
+        atualizadoEm: agora,
+      }
+      setClientes((atual) => ordenar([...atual, novo]))
+      return novo
+    },
+    [clientes],
+  )
 
-  const atualizar = useCallback((id: string, input: NovoClienteInput) => {
-    setClientes((atual) =>
-      ordenar(
-        atual.map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                nome: input.nome.trim(),
-                telefone: input.telefone.trim(),
-                email: input.email.trim(),
-                observacao: input.observacao.trim(),
-                atualizadoEm: new Date().toISOString(),
-              }
-            : c,
+  const atualizar = useCallback(
+    (id: string, input: NovoClienteInput) => {
+      const nome = input.nome.trim()
+      const digitos = input.telefone.replace(/\D/g, '')
+      if (
+        clientes.some(
+          (c) => c.id !== id && normalizar(c.nome) === normalizar(nome),
+        )
+      ) {
+        throw new Error('Já existe um cliente com este nome.')
+      }
+      if (
+        digitos &&
+        clientes.some(
+          (c) => c.id !== id && c.telefone.replace(/\D/g, '') === digitos,
+        )
+      ) {
+        throw new Error('Já existe um cliente com este telefone.')
+      }
+      setClientes((atual) =>
+        ordenar(
+          atual.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  nome,
+                  telefone: input.telefone.trim(),
+                  email: input.email.trim(),
+                  observacao: input.observacao.trim(),
+                  atualizadoEm: new Date().toISOString(),
+                }
+              : c,
+          ),
         ),
-      ),
-    )
-  }, [])
+      )
+    },
+    [clientes],
+  )
 
   const remover = useCallback((id: string) => {
     setClientes((atual) => atual.filter((c) => c.id !== id))

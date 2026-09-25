@@ -5,6 +5,7 @@ import { useAgenda } from '@/modules/agenda/store'
 import { useClientes } from '@/modules/clientes/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { useServicos } from '@/modules/servicos/store'
+import { normalizarTexto } from '@/lib/moeda'
 
 type Props = {
   dataInicial?: string
@@ -84,6 +85,21 @@ export default function NovoAgendamentoModal({
     if (conflito.conflito) {
       setErro(
         `Conflito: ${conflito.agendamento.cliente} ocupa ${conflito.agendamento.horario}–${conflito.fimExistente} com ${profissional} (duração de ${duracaoDo(conflito.agendamento.servico)} min).`,
+      )
+      return
+    }
+    const clienteChave = normalizarTexto(cliente)
+    const jaAgendado = agendamentos.find(
+      (ag) =>
+        ag.data === data &&
+        ag.horario === horario &&
+        normalizarTexto(ag.cliente) === clienteChave &&
+        ag.status !== 'cancelado' &&
+        ag.status !== 'nao_compareceu',
+    )
+    if (jaAgendado) {
+      setErro(
+        `Cliente já tem agendamento neste horário com ${jaAgendado.profissional} (${jaAgendado.servico}).`,
       )
       return
     }

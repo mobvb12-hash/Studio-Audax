@@ -21,6 +21,10 @@ type AgendaContexto = {
   mudarStatus: (id: string, status: StatusAgendamento) => void
   remover: (id: string) => void
   porData: (dataISO: string) => Agendamento[]
+  /** Propaga renomeações de cadastro para os agendamentos existentes */
+  renomearProfissional: (antigo: string, novo: string) => void
+  renomearServico: (antigo: string, novo: string) => void
+  renomearCliente: (antigo: string, novo: string) => void
 }
 
 const Contexto = createContext<AgendaContexto | null>(null)
@@ -87,6 +91,37 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
     setAgendamentos((atual) => atual.filter((ag) => ag.id !== id))
   }, [])
 
+  const renomearProfissional = useCallback(
+    (antigo: string, novo: string) => {
+      const destino = novo.trim()
+      if (!antigo || !destino || antigo === destino) return
+      setAgendamentos((atual) =>
+        atual.map((ag) =>
+          ag.profissional === antigo ? { ...ag, profissional: destino } : ag,
+        ),
+      )
+    },
+    [],
+  )
+
+  const renomearServico = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setAgendamentos((atual) =>
+      atual.map((ag) => (ag.servico === antigo ? { ...ag, servico: destino } : ag)),
+    )
+  }, [])
+
+  const renomearCliente = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setAgendamentos((atual) =>
+      atual.map((ag) =>
+        ag.cliente === antigo ? { ...ag, cliente: destino } : ag,
+      ),
+    )
+  }, [])
+
   const porData = useCallback(
     (dataISO: string) =>
       agendamentos
@@ -96,8 +131,26 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   )
 
   const valor = useMemo(
-    () => ({ agendamentos, adicionar, mudarStatus, remover, porData }),
-    [agendamentos, adicionar, mudarStatus, remover, porData],
+    () => ({
+      agendamentos,
+      adicionar,
+      mudarStatus,
+      remover,
+      porData,
+      renomearProfissional,
+      renomearServico,
+      renomearCliente,
+    }),
+    [
+      agendamentos,
+      adicionar,
+      mudarStatus,
+      remover,
+      porData,
+      renomearProfissional,
+      renomearServico,
+      renomearCliente,
+    ],
   )
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>

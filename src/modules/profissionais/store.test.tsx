@@ -1,9 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ProfissionaisProvider, useProfissionais } from './store'
 import type { Profissional } from './types'
 
 const CHAVE = 'studio-audax:profissionais:v1'
+
+let ctx: ReturnType<typeof useProfissionais>
+
+function Captura() {
+  const valor = useProfissionais()
+  useEffect(() => {
+    ctx = valor
+  })
+  return null
+}
 
 function Lista() {
   const { profissionais, adicionar, atualizar } = useProfissionais()
@@ -49,6 +60,7 @@ function lerLista(): Profissional[] {
 function montar() {
   return render(
     <ProfissionaisProvider>
+      <Captura />
       <Lista />
     </ProfissionaisProvider>,
   )
@@ -56,6 +68,7 @@ function montar() {
 
 beforeEach(() => {
   localStorage.clear()
+  ctx = undefined as unknown as ReturnType<typeof useProfissionais>
 })
 
 describe('Profissionais — store', () => {
@@ -130,5 +143,33 @@ describe('Profissionais — store', () => {
     expect(luan?.foto).toBe('data:image/jpeg;base64,NOVA')
     expect(lista.map((p) => p.nome)).toContain('Audax')
     expect(lista.map((p) => p.nome)).toContain('Diego')
+  })
+
+  it('preserva lista vazia salva sem reinstalar o seed', () => {
+    localStorage.setItem(CHAVE, JSON.stringify([]))
+    montar()
+    expect(lerLista()).toHaveLength(0)
+  })
+
+  it('rejeita profissional duplicado por nome', () => {
+    montar()
+    expect(() =>
+      ctx.adicionar({ nome: 'audax', telefone: '', email: '', foto: '' }),
+    ).toThrow(/Já existe um profissional com este nome/)
+
+    act(() => {
+      ctx.adicionar({
+        nome: 'Luan Silva',
+        telefone: '',
+        email: '',
+        foto: '',
+      })
+    })
+    expect(() =>
+      ctx.adicionar({ nome: 'Luan Silva', telefone: '', email: '', foto: '' }),
+    ).toThrow(/Já existe um profissional com este nome/)
+    expect(
+      ctx.profissionais.filter((p) => p.nome === 'Luan Silva'),
+    ).toHaveLength(1)
   })
 })

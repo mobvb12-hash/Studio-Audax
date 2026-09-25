@@ -4,6 +4,7 @@ import ClienteFormModal from '@/components/ClienteFormModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import { formatarDataLonga } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
+import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
 import type { Cliente } from '@/modules/clientes/types'
 
@@ -19,7 +20,8 @@ function iniciais(nome: string): string {
 
 export default function Clientes() {
   const { clientes, remover } = useClientes()
-  const { agendamentos } = useAgenda()
+  const { agendamentos, renomearCliente: renomearNaAgenda } = useAgenda()
+  const { renomearCliente: renomearNoCaixa } = useCaixa()
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
@@ -29,7 +31,7 @@ export default function Clientes() {
   const historico = useMemo(() => {
     const mapa = new Map<string, { total: number; ultimo: string }>()
     for (const ag of agendamentos) {
-      if (ag.status === 'cancelado' || ag.status === 'nao_compareceu') continue
+      if (ag.status !== 'concluido') continue
       const chave = normalizar(ag.cliente)
       if (!chave) continue
       const atual = mapa.get(chave) ?? { total: 0, ultimo: '' }
@@ -140,7 +142,7 @@ export default function Clientes() {
                     </span>
                   )}
                 </div>
-                <div className="flex shrink-0 gap-1.5">
+                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                   <button
                     type="button"
                     onClick={() => setHistoricoDo(cliente)}
@@ -173,6 +175,10 @@ export default function Clientes() {
       {modalAberto && (
         <ClienteFormModal
           cliente={editando}
+          aoRenomear={(antigo, novo) => {
+            renomearNaAgenda(antigo, novo)
+            renomearNoCaixa(antigo, novo)
+          }}
           onFechar={() => setModalAberto(false)}
         />
       )}

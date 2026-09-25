@@ -1,9 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ServicosProvider, useServicos } from './store'
 import type { Servico } from './types'
 
 const CHAVE = 'studio-audax:servicos:v1'
+
+let ctx: ReturnType<typeof useServicos>
+
+function Captura() {
+  const valor = useServicos()
+  useEffect(() => {
+    ctx = valor
+  })
+  return null
+}
 
 function Tela() {
   const { servicos, adicionar, atualizar, remover } = useServicos()
@@ -49,6 +60,7 @@ function lerLista(): Servico[] {
 function montar() {
   return render(
     <ServicosProvider>
+      <Captura />
       <Tela />
     </ServicosProvider>,
   )
@@ -56,6 +68,7 @@ function montar() {
 
 beforeEach(() => {
   localStorage.clear()
+  ctx = undefined as unknown as ReturnType<typeof useServicos>
 })
 
 describe('Serviços — store', () => {
@@ -114,5 +127,20 @@ describe('Serviços — store', () => {
     expect(novo?.preco).toBe(25)
     // catálogo original preservado
     expect(lerLista().map((s) => s.nome)).toContain('Corte Degradê')
+  })
+
+  it('rejeita serviço duplicado por nome', () => {
+    montar()
+    expect(() =>
+      ctx.adicionar({ nome: 'corte degradê', preco: 60, duracaoMin: 30 }),
+    ).toThrow(/Já existe um serviço com este nome/)
+
+    act(() => {
+      ctx.adicionar({ nome: 'Pezinho', preco: 25, duracaoMin: 20 })
+    })
+    expect(() =>
+      ctx.adicionar({ nome: 'Pezinho', preco: 30, duracaoMin: 15 }),
+    ).toThrow(/Já existe um serviço com este nome/)
+    expect(ctx.servicos.filter((s) => s.nome === 'Pezinho')).toHaveLength(1)
   })
 })

@@ -100,3 +100,30 @@ describe('NovoAgendamentoModal — conflito de horários', () => {
     expect(onFechar).not.toHaveBeenCalled()
   })
 })
+
+describe('NovoAgendamentoModal — cliente duplicado no horário', () => {
+  it('bloqueia mesmo cliente no mesmo horário mesmo com profissional diferente', () => {
+    semear('10:00', 'Audax')
+    const onFechar = montar('10:00', 'Diego')
+    fireEvent.change(screen.getByLabelText('Cliente *'), {
+      target: { value: 'lucas mendes' },
+    })
+    fireEvent.click(screen.getByText('Salvar agendamento'))
+    expect(
+      screen.getByText(/Cliente já tem agendamento neste horário/),
+    ).toBeTruthy()
+    expect(onFechar).not.toHaveBeenCalled()
+  })
+
+  it('cliente diferente no mesmo horário salva normalmente', () => {
+    semear('10:00', 'Audax')
+    const onFechar = montar('10:00', 'Diego')
+    fireEvent.change(screen.getByLabelText('Cliente *'), {
+      target: { value: 'Ana Souza' },
+    })
+    fireEvent.click(screen.getByText('Salvar agendamento'))
+    expect(onFechar).toHaveBeenCalledTimes(1)
+    const lista = JSON.parse(localStorage.getItem(CHAVE_AG) ?? '[]')
+    expect(lista).toHaveLength(2)
+  })
+})

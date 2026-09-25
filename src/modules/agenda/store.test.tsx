@@ -6,7 +6,15 @@ import type { Agendamento } from './types'
 const CHAVE = 'studio-audax:agendamentos:v1'
 
 function Tela() {
-  const { agendamentos, adicionar, mudarStatus, remover } = useAgenda()
+  const {
+    agendamentos,
+    adicionar,
+    mudarStatus,
+    remover,
+    renomearProfissional,
+    renomearServico,
+    renomearCliente,
+  } = useAgenda()
   const primeiro = agendamentos[0]
   return (
     <div>
@@ -55,6 +63,24 @@ function Tela() {
           </button>
           <button type="button" onClick={() => remover(primeiro.id)}>
             excluir
+          </button>
+          <button
+            type="button"
+            onClick={() => renomearProfissional('Audax', 'Audax Barbearia')}
+          >
+            renomear-profissional
+          </button>
+          <button
+            type="button"
+            onClick={() => renomearServico('Corte Degradê', 'Corte novo')}
+          >
+            renomear-servico
+          </button>
+          <button
+            type="button"
+            onClick={() => renomearCliente('Lucas Mendes', 'Lucas')}
+          >
+            renomear-cliente
           </button>
         </>
       )}
@@ -131,5 +157,36 @@ describe('Agenda — store', () => {
     expect(lista).toHaveLength(1)
     expect(lista[0].status).toBe('cancelado')
     expect(lista[0].cliente).toBe('Lucas Mendes')
+  })
+
+  it('propaga renomeações de profissional, serviço e cliente aos agendamentos', () => {
+    montar()
+    fireEvent.click(screen.getByText('criar'))
+
+    fireEvent.click(screen.getByText('renomear-profissional'))
+    fireEvent.click(screen.getByText('renomear-servico'))
+    fireEvent.click(screen.getByText('renomear-cliente'))
+
+    const ag = lerLista()[0]
+    expect(ag.profissional).toBe('Audax Barbearia')
+    expect(ag.servico).toBe('Corte novo')
+    expect(ag.cliente).toBe('Lucas')
+
+    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
+    expect(noStorage[0].profissional).toBe('Audax Barbearia')
+    expect(noStorage[0].servico).toBe('Corte novo')
+    expect(noStorage[0].cliente).toBe('Lucas')
+  })
+
+  it('renomear sem alteração ou com nome inexistente não muda nada', () => {
+    montar()
+    fireEvent.click(screen.getByText('criar'))
+
+    fireEvent.click(screen.getByText('renomear-cliente'))
+    const depois = lerLista()[0]
+    expect(depois.cliente).toBe('Lucas')
+
+    fireEvent.click(screen.getByText('renomear-profissional'))
+    expect(lerLista()[0].profissional).toBe('Audax Barbearia')
   })
 })

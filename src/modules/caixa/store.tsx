@@ -75,6 +75,10 @@ export type CaixaContexto = {
   estornar: (id: string) => void
   fecharCaixa: (data: string) => Fechamento
   reabrirCaixa: (data: string, motivo: string) => void
+  /** Propaga renomeações de cadastro para os lançamentos existentes */
+  renomearProfissional: (antigo: string, novo: string) => void
+  renomearServico: (antigo: string, novo: string) => void
+  renomearCliente: (antigo: string, novo: string) => void
 }
 
 const Contexto = createContext<CaixaContexto | null>(null)
@@ -231,7 +235,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       if (jaPago(input.agendamentoId)) {
         throw new Error('Este atendimento já foi pago. Não é permitido duplicar.')
       }
-      if (!Number.isFinite(input.valor) || input.valor < 0) {
+      if (!Number.isFinite(input.valor) || input.valor <= 0) {
         throw new Error('Valor inválido.')
       }
       if (!Number.isFinite(input.desconto) || input.desconto < 0) {
@@ -418,6 +422,36 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [fechamentos],
   )
 
+  const renomearProfissional = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setLancamentos((atual) =>
+      atual.map((l) =>
+        l.profissional === antigo ? { ...l, profissional: destino } : l,
+      ),
+    )
+  }, [])
+
+  const renomearServico = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setLancamentos((atual) =>
+      atual.map((l) =>
+        l.servico === antigo ? { ...l, servico: destino } : l,
+      ),
+    )
+  }, [])
+
+  const renomearCliente = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setLancamentos((atual) =>
+      atual.map((l) =>
+        l.cliente === antigo ? { ...l, cliente: destino } : l,
+      ),
+    )
+  }, [])
+
   const valor = useMemo(
     () => ({
       lancamentos,
@@ -434,6 +468,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       estornar,
       fecharCaixa,
       reabrirCaixa,
+      renomearProfissional,
+      renomearServico,
+      renomearCliente,
     }),
     [
       lancamentos,
@@ -450,6 +487,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       estornar,
       fecharCaixa,
       reabrirCaixa,
+      renomearProfissional,
+      renomearServico,
+      renomearCliente,
     ],
   )
 

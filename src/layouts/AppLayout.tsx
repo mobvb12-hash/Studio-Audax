@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 
 export type PaginaId =
@@ -95,10 +96,56 @@ export default function AppLayout({
   paginaAtual,
   onNavegar,
 }: AppLayoutProps) {
+  const [menuAberto, setMenuAberto] = useState(false)
+
+  const navegar = (pagina: PaginaId) => {
+    setMenuAberto(false)
+    onNavegar(pagina)
+  }
+
   return (
     <div className="flex min-h-screen bg-[#F3ECDA] text-[#1C1A15]">
-      {/* Sidebar — menu sempre lateralizado */}
-      <aside className="flex w-[230px] shrink-0 flex-col border-r border-[#E9DDC0] bg-[#FAF6EB] lg:w-[260px]">
+      {/* Barra superior — apenas mobile */}
+      <header className="fixed inset-x-0 top-0 z-30 flex items-center gap-3 border-b border-[#E9DDC0] bg-[#FAF6EB] px-4 py-3 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMenuAberto((a) => !a)}
+          aria-label={menuAberto ? 'Fechar menu' : 'Abrir menu'}
+          aria-expanded={menuAberto}
+          className="rounded-lg border border-[#E5DCC3] bg-white p-2 text-[#1C1A15] hover:bg-[#F3ECDA]"
+        >
+          <svg
+            aria-hidden="true"
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <p className="text-[18px] leading-none font-bold tracking-tight">
+          Studio <span className="text-[#8A6A14]">Audax</span>
+        </p>
+      </header>
+
+      {/* Fundo escuro do menu — apenas mobile */}
+      {menuAberto && (
+        <div
+          className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+          onClick={() => setMenuAberto(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar — drawer no mobile, lateral fixa no desktop */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-[230px] flex-col border-r border-[#E9DDC0] bg-[#FAF6EB] transition-transform duration-200 lg:static lg:w-[260px] lg:translate-x-0 lg:transition-none ${
+          menuAberto ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="border-b border-[#E9DDC0] px-5 py-5">
           <p className="text-[22px] leading-none font-bold tracking-tight">
             Studio <span className="text-[#8A6A14]">Audax</span>
@@ -121,7 +168,7 @@ export default function AppLayout({
                     id={item.id}
                     rotulo={item.rotulo}
                     ativo={paginaAtual === item.id}
-                    onNavegar={onNavegar}
+                    onNavegar={navegar}
                   />
                 ))}
               </div>
@@ -138,6 +185,7 @@ export default function AppLayout({
 
       {/* Coluna principal */}
       <div className="flex min-w-0 flex-1 flex-col">
+        <div className="h-[53px] lg:hidden" aria-hidden="true" />
         <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 lg:px-8 lg:py-8">
           {children}
         </main>

@@ -5,6 +5,9 @@ import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
+import { periodoMes } from '@/modules/comissoes/periodo'
+import { linhasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
+import { useComissoes } from '@/modules/comissoes/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL } from '@/lib/moeda'
 import Avatar from '@/components/Avatar'
@@ -70,6 +73,7 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
   const { porData } = useAgenda()
   const { profissionais } = useProfissionais()
   const { lancamentos, resumoDoDia, diaFechado } = useCaixa()
+  const { configDe } = useComissoes()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
 
@@ -84,11 +88,16 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
     .filter((l) => l.tipo === 'despesa')
     .reduce((soma, l) => soma + l.valorLiquido, 0)
   const atendimentosMes = doMes.filter((l) => l.origem === 'atendimento')
+  const vendasMes = doMes.filter((l) => l.origem === 'produto')
   const ticketMedio =
     atendimentosMes.length > 0
       ? atendimentosMes.reduce((soma, l) => soma + l.valorLiquido, 0) /
         atendimentosMes.length
       : 0
+
+  const comissaoMes = totaisDoPeriodo(
+    linhasDoPeriodo(lancamentos, profissionais, configDe, periodoMes()),
+  ).comissao
 
   const resumoHoje = resumoDoDia(hojeISO())
 
@@ -96,10 +105,10 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
     {
       rotulo: 'Receita do mês',
       valor: formatarBRL(receitaMes),
-      sub: `${atendimentosMes.length} atendimento(s) recebido(s)`,
+      sub: `${atendimentosMes.length} atendimento(s) · ${vendasMes.length} venda(s)`,
     },
     { rotulo: 'Despesas do mês', valor: formatarBRL(despesasMes) },
-    { rotulo: 'Comissões a pagar', valor: formatarBRL(0), sub: 'em breve' },
+    { rotulo: 'Comissões a pagar', valor: formatarBRL(comissaoMes) },
     {
       rotulo: 'Resultado líquido',
       valor: formatarBRL(receitaMes - despesasMes),
@@ -276,7 +285,8 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
                   const hoje = agendaHoje.filter(
                     (ag) =>
                       ag.profissional === prof.nome &&
-                      ag.status !== 'cancelado',
+                      ag.status !== 'cancelado' &&
+                      ag.status !== 'nao_compareceu',
                   ).length
                   return (
                     <li

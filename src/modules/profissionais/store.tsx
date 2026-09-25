@@ -43,16 +43,22 @@ function normalizar(partial: Partial<Profissional>): Profissional | null {
   }
 }
 
+function nomeChave(texto: string): string {
+  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+}
+
 function carregar(): Profissional[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
     if (bruto) {
       const lista = JSON.parse(bruto) as Partial<Profissional>[]
       if (Array.isArray(lista)) {
+        // lista salva (mesmo vazia) é preservada — o seed só entra em
+        // instalação nova ou storage corrompido
         const migrada = lista
           .map(normalizar)
           .filter((p): p is Profissional => p !== null)
-        if (migrada.length > 0) return ordenar(migrada)
+        return ordenar(migrada)
       }
     }
   } catch {
@@ -82,36 +88,56 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
     }
   }, [profissionais])
 
-  const adicionar = useCallback((input: NovoProfissionalInput) => {
-    const novo: Profissional = {
-      id: gerarId(),
-      nome: input.nome.trim(),
-      telefone: input.telefone.trim(),
-      email: input.email.trim(),
-      foto: input.foto,
-      criadoEm: new Date().toISOString(),
-    }
-    setProfissionais((atual) => ordenar([...atual, novo]))
-    return novo
-  }, [])
+  const adicionar = useCallback(
+    (input: NovoProfissionalInput) => {
+      const nome = input.nome.trim()
+      if (
+        profissionais.some((p) => nomeChave(p.nome) === nomeChave(nome))
+      ) {
+        throw new Error('Já existe um profissional com este nome.')
+      }
+      const novo: Profissional = {
+        id: gerarId(),
+        nome,
+        telefone: input.telefone.trim(),
+        email: input.email.trim(),
+        foto: input.foto,
+        criadoEm: new Date().toISOString(),
+      }
+      setProfissionais((atual) => ordenar([...atual, novo]))
+      return novo
+    },
+    [profissionais],
+  )
 
-  const atualizar = useCallback((id: string, input: NovoProfissionalInput) => {
-    setProfissionais((atual) =>
-      ordenar(
-        atual.map((p) =>
-          p.id === id
-            ? {
-                ...p,
-                nome: input.nome.trim(),
-                telefone: input.telefone.trim(),
-                email: input.email.trim(),
-                foto: input.foto,
-              }
-            : p,
+  const atualizar = useCallback(
+    (id: string, input: NovoProfissionalInput) => {
+      const nome = input.nome.trim()
+      if (
+        profissionais.some(
+          (p) => p.id !== id && nomeChave(p.nome) === nomeChave(nome),
+        )
+      ) {
+        throw new Error('Já existe um profissional com este nome.')
+      }
+      setProfissionais((atual) =>
+        ordenar(
+          atual.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  nome,
+                  telefone: input.telefone.trim(),
+                  email: input.email.trim(),
+                  foto: input.foto,
+                }
+              : p,
+          ),
         ),
-      ),
-    )
-  }, [])
+      )
+    },
+    [profissionais],
+  )
 
   const remover = useCallback((id: string) => {
     setProfissionais((atual) => atual.filter((p) => p.id !== id))

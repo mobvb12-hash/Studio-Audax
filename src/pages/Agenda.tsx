@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import PagamentoModal from '@/components/PagamentoModal'
 import {
@@ -99,6 +99,15 @@ function DetalheAgendamento({
   const bloqueado = ag.status === 'cancelado' || ag.status === 'nao_compareceu'
   const emAberto = ag.status === 'pendente' || ag.status === 'confirmado'
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
+
+  useEffect(() => {
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.key === 'Escape') onFechar()
+    }
+    window.addEventListener('keydown', aoTeclar)
+    return () => window.removeEventListener('keydown', aoTeclar)
+  }, [onFechar])
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
@@ -360,6 +369,7 @@ export default function Agenda({ onNovo }: Props) {
         </button>
         <input
           type="date"
+          aria-label="Data da agenda"
           value={data}
           onChange={(e) => e.target.value && setData(e.target.value)}
           className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"

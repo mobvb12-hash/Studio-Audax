@@ -5,6 +5,8 @@ import type { Cliente } from '@/modules/clientes/types'
 type Props = {
   cliente?: Cliente | null
   onFechar: () => void
+  /** Chamado quando o nome muda, para propagar aos módulos (Agenda/Caixa) */
+  aoRenomear?: (antigo: string, novo: string) => void
 }
 
 const campo =
@@ -13,7 +15,11 @@ const campo =
 const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
-export default function ClienteFormModal({ cliente, onFechar }: Props) {
+export default function ClienteFormModal({
+  cliente,
+  onFechar,
+  aoRenomear,
+}: Props) {
   const { adicionar, atualizar } = useClientes()
   const [nome, setNome] = useState(() => cliente?.nome ?? '')
   const [telefone, setTelefone] = useState(() => cliente?.telefone ?? '')
@@ -46,9 +52,19 @@ export default function ClienteFormModal({ cliente, onFechar }: Props) {
       email,
       observacao,
     }
-    if (cliente) atualizar(cliente.id, dados)
-    else adicionar(dados)
-    onFechar()
+    try {
+      if (cliente) {
+        const antigo = cliente.nome
+        const destino = nome.trim()
+        atualizar(cliente.id, dados)
+        if (antigo !== destino) aoRenomear?.(antigo, destino)
+      } else {
+        adicionar(dados)
+      }
+      onFechar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível salvar.')
+    }
   }
 
   return (

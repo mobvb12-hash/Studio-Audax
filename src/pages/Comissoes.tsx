@@ -11,25 +11,14 @@ import {
   periodoSemana,
   rotuloPeriodo,
 } from '@/modules/comissoes/periodo'
-import { calcularComissao, calcularProducao } from '@/modules/comissoes/producao'
+import { linhasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
+import type { LinhaProducao } from '@/modules/comissoes/resumo'
 import { useComissoes } from '@/modules/comissoes/store'
 import type { Periodo } from '@/modules/comissoes/types'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL } from '@/lib/moeda'
 
 type TipoPreenchido = 'hoje' | 'semana' | 'mes' | 'custom'
-
-type LinhaTabela = {
-  chave: string
-  profissionalId: string
-  nome: string
-  foto?: string
-  inativo: boolean
-  percentual: number
-  qtd: number
-  producao: number
-  comissao: number
-}
 
 const ROTULO_TIPO: Record<TipoPreenchido, string> = {
   hoje: 'Hoje',
@@ -62,8 +51,8 @@ export default function Comissoes() {
     id: string
     nome: string
   } | null>(null)
-  const [detalhe, setDetalhe] = useState<LinhaTabela | null>(null)
-  const [fechando, setFechando] = useState<LinhaTabela | null>(null)
+  const [detalhe, setDetalhe] = useState<LinhaProducao | null>(null)
+  const [fechando, setFechando] = useState<LinhaProducao | null>(null)
   const [reabrindo, setReabrindo] = useState<
     { id: string; nome: string } | null
   >(null)
@@ -75,50 +64,13 @@ export default function Comissoes() {
     return custom
   }, [tipo, custom])
 
-  const linhas = useMemo<LinhaTabela[]>(() => {
-    const nomesComProducao = new Set(
-      lancamentos
-        .filter(
-          (l) =>
-            l.origem === 'atendimento' &&
-            l.profissional &&
-            l.data >= periodo.inicio &&
-            l.data <= periodo.fim,
-        )
-        .map((l) => l.profissional as string),
-    )
+  const linhas = useMemo<LinhaProducao[]>(
+    () => linhasDoPeriodo(lancamentos, profissionais, configDe, periodo),
+    [lancamentos, profissionais, configDe, periodo],
+  )
 
-    const base: { id: string; nome: string; foto?: string }[] =
-      profissionais.map((p) => ({ id: p.id, nome: p.nome, foto: p.foto }))
-
-    for (const nome of nomesComProducao) {
-      if (!profissionais.some((p) => p.nome === nome)) {
-        base.push({ id: `nome:${nome}`, nome })
-      }
-    }
-
-    return base
-      .map(({ id, nome, foto }) => {
-        const config = configDe(id)
-        const producao = calcularProducao(lancamentos, nome, periodo)
-        return {
-          chave: id,
-          profissionalId: id,
-          nome,
-          foto,
-          inativo: !config.ativo,
-          percentual: config.percentual,
-          qtd: producao.qtdAtendimentos,
-          producao: producao.liquido,
-          comissao: calcularComissao(producao.liquido, config.percentual),
-        }
-      })
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-  }, [lancamentos, profissionais, configDe, periodo])
-
-  const totalQtd = linhas.reduce((soma, l) => soma + l.qtd, 0)
-  const totalProducao = linhas.reduce((soma, l) => soma + l.producao, 0)
-  const totalComissao = linhas.reduce((soma, l) => soma + l.comissao, 0)
+  const { qtd: totalQtd, producao: totalProducao, comissao: totalComissao } =
+    useMemo(() => totaisDoPeriodo(linhas), [linhas])
 
   const auditoriaVisivel = useMemo(
     () => auditoria.slice().reverse().slice(0, 8),

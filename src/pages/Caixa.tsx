@@ -220,6 +220,7 @@ export default function Caixa() {
         </button>
         <input
           type="date"
+          aria-label="Data do caixa"
           value={data}
           onChange={(e) => e.target.value && setData(e.target.value)}
           className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
@@ -325,7 +326,7 @@ export default function Caixa() {
                     <span className="text-[#4A4436]">
                       {p.nome}{' '}
                       <span className="text-xs text-[#8A8171]">
-                        ({p.qtd} atendimento(s))
+                        ({p.qtd} recebimento(s))
                       </span>
                     </span>
                     <span className="font-semibold text-[#1C1A15]">

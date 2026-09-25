@@ -53,7 +53,11 @@ describe('Confirmação de exclusão destrutiva', () => {
   it('Serviços: excluir exige confirmação', async () => {
     render(
       <ServicosProvider>
-        <Servicos />
+        <AgendaProvider>
+          <CaixaProvider>
+            <Servicos />
+          </CaixaProvider>
+        </AgendaProvider>
       </ServicosProvider>,
     )
     fireEvent.click(screen.getByLabelText('Excluir Corte Degradê'))
@@ -70,7 +74,9 @@ describe('Confirmação de exclusão destrutiva', () => {
     render(
       <ProfissionaisProvider>
         <AgendaProvider>
-          <Profissionais />
+          <CaixaProvider>
+            <Profissionais />
+          </CaixaProvider>
         </AgendaProvider>
       </ProfissionaisProvider>,
     )

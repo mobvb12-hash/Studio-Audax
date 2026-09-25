@@ -3,12 +3,14 @@ import Avatar from '@/components/Avatar'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
 import { useAgenda } from '@/modules/agenda/store'
+import { useCaixa } from '@/modules/caixa/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Profissional } from '@/modules/profissionais/types'
 
 export default function Profissionais() {
   const { profissionais, remover } = useProfissionais()
-  const { agendamentos } = useAgenda()
+  const { agendamentos, renomearProfissional: renomearNaAgenda } = useAgenda()
+  const { renomearProfissional: renomearNoCaixa } = useCaixa()
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Profissional | null>(null)
   const [excluindo, setExcluindo] = useState<Profissional | null>(null)
@@ -16,7 +18,7 @@ export default function Profissionais() {
   const contagem = useMemo(() => {
     const mapa = new Map<string, number>()
     for (const ag of agendamentos) {
-      if (ag.status === 'cancelado' || ag.status === 'nao_compareceu') continue
+      if (ag.status !== 'concluido') continue
       mapa.set(ag.profissional, (mapa.get(ag.profissional) ?? 0) + 1)
     }
     return mapa
@@ -70,7 +72,7 @@ export default function Profissionais() {
               <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-xs font-medium text-[#4A4436]">
                 {contagem.get(prof.nome) ?? 0} atendimento(s)
               </span>
-              <div className="flex shrink-0 gap-1.5">
+              <div className="flex shrink-0 flex-wrap gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -98,6 +100,10 @@ export default function Profissionais() {
       {modalAberto && (
         <ProfissionalFormModal
           profissional={editando}
+          aoRenomear={(antigo, novo) => {
+            renomearNaAgenda(antigo, novo)
+            renomearNoCaixa(antigo, novo)
+          }}
           onFechar={() => setModalAberto(false)}
         />
       )}

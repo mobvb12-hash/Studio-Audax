@@ -1,9 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ClientesProvider, useClientes } from './store'
 import type { Cliente } from './types'
 
 const CHAVE = 'studio-audax:clientes:v1'
+
+let ctx: ReturnType<typeof useClientes>
+
+function Captura() {
+  const valor = useClientes()
+  useEffect(() => {
+    ctx = valor
+  })
+  return null
+}
 
 function Tela() {
   const { clientes, adicionar, atualizar, remover } = useClientes()
@@ -55,6 +66,7 @@ function lerLista(): Cliente[] {
 function montar() {
   return render(
     <ClientesProvider>
+      <Captura />
       <Tela />
     </ClientesProvider>,
   )
@@ -62,6 +74,7 @@ function montar() {
 
 beforeEach(() => {
   localStorage.clear()
+  ctx = undefined as unknown as ReturnType<typeof useClientes>
 })
 
 describe('Clientes — store', () => {
@@ -111,5 +124,36 @@ describe('Clientes — store', () => {
     expect(lista).toHaveLength(1)
     expect(lista[0].telefone).toBe('(11) 90000-1111')
     expect(lista[0].email).toBe('editado@email.com')
+  })
+
+  it('rejeita cliente duplicado por nome e por telefone', () => {
+    montar()
+    act(() => {
+      ctx.adicionar({
+        nome: 'Lucas Mendes',
+        telefone: '(11) 98888-7777',
+        email: '',
+        observacao: '',
+      })
+    })
+    expect(() =>
+      ctx.adicionar({
+        nome: 'lucas mendes',
+        telefone: '(11) 90000-0000',
+        email: '',
+        observacao: '',
+      }),
+    ).toThrow(/Já existe um cliente com este nome/)
+    expect(ctx.clientes).toHaveLength(1)
+
+    expect(() =>
+      ctx.adicionar({
+        nome: 'Ana Dias',
+        telefone: '(11) 98888-7777',
+        email: '',
+        observacao: '',
+      }),
+    ).toThrow(/Já existe um cliente com este telefone/)
+    expect(ctx.clientes).toHaveLength(1)
   })
 })
