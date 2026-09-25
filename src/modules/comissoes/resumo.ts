@@ -82,3 +82,37 @@ export function totaisDoPeriodo(linhas: LinhaProducao[]): {
     { qtd: 0, producao: 0, comissao: 0 },
   )
 }
+
+/** Mesma linha de produção, enriquecida com detalhes do período (Relatórios). */
+export type LinhaDetalhada = LinhaProducao & {
+  descontos: number
+  estornos: number
+  qtdEstornos: number
+  producaoProdutos: number
+  qtdProdutos: number
+}
+
+/**
+ * Mesmíssima base de linhasDoPeriodo — apenas repassa os detalhes já
+ * calculados por calcularProducao. Nenhuma regra paralela de comissão.
+ */
+export function linhasDetalhadasDoPeriodo(
+  lancamentos: Lancamento[],
+  profissionais: ProfissionalBasico[],
+  configDe: (profissionalId: string) => ConfigComissao,
+  periodo: Periodo,
+): LinhaDetalhada[] {
+  return linhasDoPeriodo(lancamentos, profissionais, configDe, periodo).map(
+    (linha) => {
+      const detalhe = calcularProducao(lancamentos, linha.nome, periodo)
+      return {
+        ...linha,
+        descontos: detalhe.descontos,
+        estornos: detalhe.valorEstornos,
+        qtdEstornos: detalhe.qtdEstornos,
+        producaoProdutos: detalhe.producaoProdutos,
+        qtdProdutos: detalhe.qtdProdutos,
+      }
+    },
+  )
+}

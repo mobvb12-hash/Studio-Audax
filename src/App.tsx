@@ -13,6 +13,7 @@ import Clientes from '@/pages/Clientes'
 import Comissoes from '@/pages/Comissoes'
 import Dashboard from '@/pages/Dashboard'
 import Profissionais from '@/pages/Profissionais'
+import Relatorios from '@/pages/Relatorios'
 import Servicos from '@/pages/Servicos'
 
 const ROTULOS: Record<PaginaId, string> = {
@@ -57,6 +58,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'servicos',
   'profissionais',
   'comissoes',
+  'relatorios',
 ]
 
 function Conteudo() {
@@ -78,6 +80,7 @@ function Conteudo() {
       {pagina === 'servicos' && <Servicos />}
       {pagina === 'profissionais' && <Profissionais />}
       {pagina === 'comissoes' && <Comissoes />}
+      {pagina === 'relatorios' && <Relatorios />}
       {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
       {modalAberto && (
         <NovoAgendamentoModal

@@ -12,6 +12,7 @@ import Clientes from './Clientes'
 import Comissoes from './Comissoes'
 import Dashboard from './Dashboard'
 import Profissionais from './Profissionais'
+import Relatorios from './Relatorios'
 import Servicos from './Servicos'
 
 beforeEach(() => {
@@ -157,6 +158,34 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     expect(screen.getByRole('heading', { name: 'Profissionais' })).toBeTruthy()
     expect(screen.getByText('Audax')).toBeTruthy()
     expect(screen.getByText('Diego')).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('Relatórios renderiza filtros, resumo e seções com estado vazio', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ClientesProvider>
+        <ProfissionaisProvider>
+          <AgendaProvider>
+            <CaixaProvider>
+              <ComissoesProvider>
+                <Relatorios />
+              </ComissoesProvider>
+            </CaixaProvider>
+          </AgendaProvider>
+        </ProfissionaisProvider>
+      </ClientesProvider>,
+    )
+    expect(screen.getByRole('heading', { name: 'Relatórios' })).toBeTruthy()
+    expect(screen.getByText('Hoje')).toBeTruthy()
+    expect(screen.getByText('Ontem')).toBeTruthy()
+    expect(screen.getByText('Mês anterior')).toBeTruthy()
+    expect(
+      screen.getByText('Nenhuma movimentação no período selecionado.'),
+    ).toBeTruthy()
+    expect(screen.getByText('Formas de pagamento')).toBeTruthy()
+    expect(screen.getByText('Comissões do período')).toBeTruthy()
     expect(erros).not.toHaveBeenCalled()
     erros.mockRestore()
   })
