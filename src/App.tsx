@@ -3,9 +3,13 @@ import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ProfissionaisProvider } from '@/modules/profissionais/store'
+import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
 import Clientes from '@/pages/Clientes'
 import Dashboard from '@/pages/Dashboard'
+import Profissionais from '@/pages/Profissionais'
+import Servicos from '@/pages/Servicos'
 
 const ROTULOS: Record<PaginaId, string> = {
   painel: 'Painel',
@@ -40,6 +44,14 @@ function ModuloFuturo({ pagina }: { pagina: PaginaId }) {
   )
 }
 
+const IMPLEMENTADAS: PaginaId[] = [
+  'painel',
+  'agenda',
+  'clientes',
+  'servicos',
+  'profissionais',
+]
+
 function Conteudo() {
   const [pagina, setPagina] = useState<PaginaId>('painel')
   const [modalAberto, setModalAberto] = useState(false)
@@ -55,16 +67,17 @@ function Conteudo() {
       {pagina === 'painel' && <Dashboard onNovo={() => abrirNovo()} />}
       {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
       {pagina === 'clientes' && <Clientes />}
-      {pagina !== 'painel' && pagina !== 'agenda' && pagina !== 'clientes' && (
-        <ModuloFuturo pagina={pagina} />
+      {pagina === 'servicos' && <Servicos />}
+      {pagina === 'profissionais' && <Profissionais />}
+      {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
+      {modalAberto && (
+        <NovoAgendamentoModal
+          dataInicial={inicial?.data}
+          horarioInicial={inicial?.horario}
+          profissionalInicial={inicial?.profissional}
+          onFechar={() => setModalAberto(false)}
+        />
       )}
-      <NovoAgendamentoModal
-        aberto={modalAberto}
-        dataInicial={inicial?.data}
-        horarioInicial={inicial?.horario}
-        profissionalInicial={inicial?.profissional}
-        onFechar={() => setModalAberto(false)}
-      />
     </AppLayout>
   )
 }
@@ -72,9 +85,13 @@ function Conteudo() {
 function App() {
   return (
     <ClientesProvider>
-      <AgendaProvider>
-        <Conteudo />
-      </AgendaProvider>
+      <ProfissionaisProvider>
+        <ServicosProvider>
+          <AgendaProvider>
+            <Conteudo />
+          </AgendaProvider>
+        </ServicosProvider>
+      </ProfissionaisProvider>
     </ClientesProvider>
   )
 }

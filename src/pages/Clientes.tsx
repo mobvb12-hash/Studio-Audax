@@ -158,11 +158,12 @@ export default function Clientes() {
         </ul>
       )}
 
-      <ClienteFormModal
-        aberto={modalAberto}
-        cliente={editando}
-        onFechar={() => setModalAberto(false)}
-      />
+      {modalAberto && (
+        <ClienteFormModal
+          cliente={editando}
+          onFechar={() => setModalAberto(false)}
+        />
+      )}
     </div>
   )
 }

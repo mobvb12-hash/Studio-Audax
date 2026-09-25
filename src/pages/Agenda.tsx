@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import {
   HORARIOS,
-  PROFISSIONAIS,
-  SERVICOS,
   formatarDataLonga,
   hojeISO,
   somarDias,
 } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { Agendamento, StatusAgendamento } from '@/modules/agenda/types'
+import { useProfissionais } from '@/modules/profissionais/store'
+import { useServicos } from '@/modules/servicos/store'
 
 export type SlotAgendamento = {
   data: string
@@ -43,10 +43,6 @@ function montarSlots(): Slot[] {
 
 const SLOTS = montarSlots()
 
-function duracaoDo(servico: string): number {
-  return SERVICOS.find((s) => s.nome === servico)?.duracaoMin ?? 30
-}
-
 function somaMinutos(hora: string, min: number): string {
   const [h, m] = hora.split(':').map(Number)
   const total = h * 60 + m + min
@@ -74,11 +70,13 @@ function estiloBadge(status: StatusAgendamento): string {
 
 function DetalheAgendamento({
   ag,
+  duracaoDo,
   mudarStatus,
   remover,
   onFechar,
 }: {
   ag: Agendamento
+  duracaoDo: (servico: string) => number
   mudarStatus: (id: string, status: StatusAgendamento) => void
   remover: (id: string) => void
   onFechar: () => void
@@ -199,6 +197,8 @@ function DetalheAgendamento({
 
 export default function Agenda({ onNovo }: Props) {
   const { agendamentos, mudarStatus, remover } = useAgenda()
+  const { profissionais } = useProfissionais()
+  const { servicos } = useServicos()
   const [data, setData] = useState(hojeISO())
   const [selecionado, setSelecionado] = useState<Agendamento | null>(null)
 
@@ -206,10 +206,22 @@ export default function Agenda({ onNovo }: Props) {
     () =>
       agendamentos
         .filter((ag) => ag.data === data)
-        .filter((ag) => PROFISSIONAIS.includes(ag.profissional))
         .sort((a, b) => a.horario.localeCompare(b.horario)),
     [agendamentos, data],
   )
+
+  const colunas = useMemo(() => {
+    const nomes = profissionais.map((p) => p.nome)
+    for (const ag of doDia) {
+      if (!nomes.includes(ag.profissional)) nomes.push(ag.profissional)
+    }
+    return nomes
+  }, [profissionais, doDia])
+
+  const duracaoDo = useMemo(() => {
+    return (servico: string) =>
+      servicos.find((s) => s.nome === servico)?.duracaoMin ?? 30
+  }, [servicos])
 
   const pendentes = doDia.filter((a) => a.status === 'pendente').length
   const confirmados = doDia.filter((a) => a.status === 'confirmado').length
@@ -277,18 +289,18 @@ export default function Agenda({ onNovo }: Props) {
         <div
           className="grid min-w-[640px]"
           style={{
-            gridTemplateColumns: `56px repeat(${PROFISSIONAIS.length}, minmax(0, 1fr))`,
+            gridTemplateColumns: `56px repeat(${colunas.length}, minmax(0, 1fr))`,
             gridTemplateRows: `auto repeat(${SLOTS.length}, minmax(52px, auto))`,
           }}
         >
           {/* Cabeçalho */}
-          <div className="sticky top-0 z-20 border-b border-r border-[#E5DCC3] bg-[#FAF6EB]" />
-          {PROFISSIONAIS.map((prof) => (
+          <div className="border-b border-r border-[#E5DCC3] bg-[#FAF6EB]" />
+          {colunas.map((prof) => (
             <div
               key={prof}
-              className="sticky top-0 z-20 flex items-center gap-2 border-b border-r border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2 last:border-r-0"
+              className="flex items-center gap-2 border-b border-r border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E9DDC0] text-[11px] font-bold text-[#8A6A14]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E9DDC0] text-[11px] font-bold text-[#8A6A14]">
                 {prof.slice(0, 2).toUpperCase()}
               </span>
               <div className="min-w-0">
@@ -312,7 +324,7 @@ export default function Agenda({ onNovo }: Props) {
           ))}
 
           {SLOTS.map((slot, i) =>
-            PROFISSIONAIS.map((prof, c) =>
+            colunas.map((prof, c) =>
               slot.intervalo ? null : (
                 <div
                   key={`${slot.hora}-${prof}`}
@@ -331,7 +343,7 @@ export default function Agenda({ onNovo }: Props) {
           <div
             className="flex items-center justify-center border-b border-[#E5DCC3] bg-[#EDE5D2] text-xs font-medium text-[#A99E85]"
             style={{
-              gridColumn: `2 / ${PROFISSIONAIS.length + 2}`,
+              gridColumn: `2 / ${colunas.length + 2}`,
               gridRow: `${SLOTS.findIndex((s) => s.intervalo) + 2} / span 2`,
             }}
           >
@@ -342,13 +354,14 @@ export default function Agenda({ onNovo }: Props) {
           {doDia.map((ag) => {
             const linha = linhaDe(ag.horario)
             if (linha < 2) return null
+            const coluna = colunas.indexOf(ag.profissional)
+            if (coluna < 0) return null
             const duracao = duracaoDo(ag.servico)
             const spanMax = SLOTS.length + 2 - linha
             const span = Math.max(
               1,
               Math.min(Math.ceil(duracao / 30), spanMax),
             )
-            const coluna = PROFISSIONAIS.indexOf(ag.profissional) + 2
             return (
               <button
                 key={ag.id}
@@ -359,7 +372,7 @@ export default function Agenda({ onNovo }: Props) {
                 }}
                 className={`z-10 m-[2px] flex flex-col items-center justify-center overflow-hidden rounded-md border px-1.5 text-center transition-colors ${estiloStatus(ag.status)}`}
                 style={{
-                  gridColumn: coluna,
+                  gridColumn: coluna + 2,
                   gridRow: `${linha} / span ${span}`,
                 }}
               >
@@ -378,6 +391,7 @@ export default function Agenda({ onNovo }: Props) {
       {selecionado && (
         <DetalheAgendamento
           ag={selecionado}
+          duracaoDo={duracaoDo}
           mudarStatus={mudarStatus}
           remover={remover}
           onFechar={() => setSelecionado(null)}

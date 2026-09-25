@@ -3,6 +3,7 @@
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
+import { useProfissionais } from '@/modules/profissionais/store'
 
 function formatarBRL(valor: number): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -63,6 +64,7 @@ function CaixaVazia({ texto }: { texto: string }) {
 
 export default function Dashboard({ onNovo }: { onNovo: () => void }) {
   const { porData } = useAgenda()
+  const { profissionais } = useProfissionais()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
 
@@ -168,8 +170,41 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
           <Cartao titulo="Estoque baixo" contador="0">
             <CaixaVazia texto="Nenhum produto abaixo do mínimo." />
           </Cartao>
-          <Cartao titulo="Resumo de profissionais" contador="">
-            <CaixaVazia texto="Nenhum profissional cadastrado." />
+          <Cartao
+            titulo="Resumo de profissionais"
+            contador={String(profissionais.length)}
+          >
+            {profissionais.length === 0 ? (
+              <CaixaVazia texto="Nenhum profissional cadastrado." />
+            ) : (
+              <ul className="divide-y divide-[#EFE7D3]">
+                {profissionais.map((prof) => {
+                  const hoje = agendaHoje.filter(
+                    (ag) =>
+                      ag.profissional === prof.nome &&
+                      ag.status !== 'cancelado',
+                  ).length
+                  return (
+                    <li
+                      key={prof.id}
+                      className="flex items-center justify-between gap-2 py-2.5"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E9DDC0] text-[11px] font-bold text-[#8A6A14]">
+                          {prof.nome.slice(0, 2).toUpperCase()}
+                        </span>
+                        <p className="truncate text-sm font-bold text-[#1C1A15]">
+                          {prof.nome}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-medium text-[#8A8171]">
+                        {hoje} hoje
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </Cartao>
 
           <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">

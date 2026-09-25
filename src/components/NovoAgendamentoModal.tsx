@@ -1,15 +1,11 @@
 import { useEffect, useState } from 'react'
-import {
-  HORARIOS,
-  PROFISSIONAIS,
-  SERVICOS,
-  hojeISO,
-} from '@/modules/agenda/catalogo'
+import { HORARIOS, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useClientes } from '@/modules/clientes/store'
+import { useProfissionais } from '@/modules/profissionais/store'
+import { useServicos } from '@/modules/servicos/store'
 
 type Props = {
-  aberto: boolean
   dataInicial?: string
   horarioInicial?: string
   profissionalInicial?: string
@@ -23,7 +19,6 @@ const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
 export default function NovoAgendamentoModal({
-  aberto,
   dataInicial,
   horarioInicial,
   profissionalInicial,
@@ -31,38 +26,26 @@ export default function NovoAgendamentoModal({
 }: Props) {
   const { adicionar, agendamentos } = useAgenda()
   const { clientes, porNome } = useClientes()
+  const { servicos } = useServicos()
+  const { profissionais } = useProfissionais()
   const [cliente, setCliente] = useState('')
   const [telefone, setTelefone] = useState('')
-  const [servico, setServico] = useState(SERVICOS[0].nome)
-  const [profissional, setProfissional] = useState(PROFISSIONAIS[0])
-  const [data, setData] = useState(hojeISO())
-  const [horario, setHorario] = useState('14:00')
+  const [servico, setServico] = useState(() => servicos[0]?.nome ?? '')
+  const [profissional, setProfissional] = useState(
+    () => profissionalInicial ?? profissionais[0]?.nome ?? '',
+  )
+  const [data, setData] = useState(() => dataInicial ?? hojeISO())
+  const [horario, setHorario] = useState(() => horarioInicial ?? '14:00')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
 
   useEffect(() => {
-    if (aberto) {
-      setCliente('')
-      setTelefone('')
-      setServico(SERVICOS[0].nome)
-      setProfissional(profissionalInicial ?? PROFISSIONAIS[0])
-      setData(dataInicial ?? hojeISO())
-      setHorario(horarioInicial ?? '14:00')
-      setObservacao('')
-      setErro('')
-    }
-  }, [aberto, dataInicial, horarioInicial, profissionalInicial])
-
-  useEffect(() => {
-    if (!aberto) return
     function aoTeclar(e: KeyboardEvent) {
       if (e.key === 'Escape') onFechar()
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
-  }, [aberto, onFechar])
-
-  if (!aberto) return null
+  }, [onFechar])
 
   function salvar() {
     if (cliente.trim().length < 2) {
@@ -75,6 +58,14 @@ export default function NovoAgendamentoModal({
     }
     if (!horario) {
       setErro('Escolha o horário.')
+      return
+    }
+    if (!servico) {
+      setErro('Cadastre um serviço no módulo Serviços antes de agendar.')
+      return
+    }
+    if (!profissional) {
+      setErro('Cadastre um profissional no módulo Profissionais antes de agendar.')
       return
     }
     const conflito = agendamentos.some(
@@ -176,8 +167,9 @@ export default function NovoAgendamentoModal({
               value={servico}
               onChange={(e) => setServico(e.target.value)}
             >
-              {SERVICOS.map((s) => (
-                <option key={s.nome} value={s.nome}>
+              {servicos.length === 0 && <option value="">Sem serviços</option>}
+              {servicos.map((s) => (
+                <option key={s.id} value={s.nome}>
                   {s.nome} — R$ {s.preco}
                 </option>
               ))}
@@ -193,9 +185,12 @@ export default function NovoAgendamentoModal({
               value={profissional}
               onChange={(e) => setProfissional(e.target.value)}
             >
-              {PROFISSIONAIS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+              {profissionais.length === 0 && (
+                <option value="">Sem profissionais</option>
+              )}
+              {profissionais.map((p) => (
+                <option key={p.id} value={p.nome}>
+                  {p.nome}
                 </option>
               ))}
             </select>

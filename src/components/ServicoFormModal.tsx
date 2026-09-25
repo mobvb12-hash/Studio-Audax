@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useClientes } from '@/modules/clientes/store'
-import type { Cliente } from '@/modules/clientes/types'
+import { useServicos } from '@/modules/servicos/store'
+import type { Servico } from '@/modules/servicos/types'
 
 type Props = {
-  cliente?: Cliente | null
+  servico?: Servico | null
   onFechar: () => void
 }
 
@@ -13,15 +13,18 @@ const campo =
 const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
-export default function ClienteFormModal({ cliente, onFechar }: Props) {
-  const { adicionar, atualizar } = useClientes()
-  const [nome, setNome] = useState(() => cliente?.nome ?? '')
-  const [telefone, setTelefone] = useState(() => cliente?.telefone ?? '')
-  const [email, setEmail] = useState(() => cliente?.email ?? '')
-  const [observacao, setObservacao] = useState(() => cliente?.observacao ?? '')
+export default function ServicoFormModal({ servico, onFechar }: Props) {
+  const { adicionar, atualizar } = useServicos()
+  const [nome, setNome] = useState(() => servico?.nome ?? '')
+  const [preco, setPreco] = useState(() =>
+    servico ? String(servico.preco).replace('.', ',') : '',
+  )
+  const [duracao, setDuracao] = useState(() =>
+    servico ? String(servico.duracaoMin) : '',
+  )
   const [erro, setErro] = useState('')
 
-  const editando = Boolean(cliente)
+  const editando = Boolean(servico)
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -33,20 +36,21 @@ export default function ClienteFormModal({ cliente, onFechar }: Props) {
 
   function salvar() {
     if (nome.trim().length < 2) {
-      setErro('Informe o nome do cliente.')
+      setErro('Informe o nome do serviço.')
       return
     }
-    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setErro('Informe um e-mail válido ou deixe em branco.')
+    const precoNum = Number(preco.replace(/\./g, '').replace(',', '.'))
+    if (!Number.isFinite(precoNum) || precoNum < 0) {
+      setErro('Informe um preço válido (ex.: 70 ou 70,00).')
       return
     }
-    const dados = {
-      nome,
-      telefone,
-      email,
-      observacao,
+    const duracaoNum = Number(duracao)
+    if (!Number.isInteger(duracaoNum) || duracaoNum < 5) {
+      setErro('Informe a duração em minutos (mínimo 5).')
+      return
     }
-    if (cliente) atualizar(cliente.id, dados)
+    const dados = { nome, preco: precoNum, duracaoMin: duracaoNum }
+    if (servico) atualizar(servico.id, dados)
     else adicionar(dados)
     onFechar()
   }
@@ -63,10 +67,10 @@ export default function ClienteFormModal({ cliente, onFechar }: Props) {
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-[#1C1A15]">
-              {editando ? 'Editar cliente' : 'Novo cliente'}
+              {editando ? 'Editar serviço' : 'Novo serviço'}
             </h2>
             <p className="mt-1 text-[13px] text-[#8A8171]">
-              Salvo neste navegador (localStorage) até o backend chegar.
+              Preço e duração alimentam a Agenda automaticamente.
             </p>
           </div>
           <button
@@ -81,52 +85,41 @@ export default function ClienteFormModal({ cliente, onFechar }: Props) {
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className={rotulo} htmlFor="cli-nome">
+            <label className={rotulo} htmlFor="srv-nome">
               Nome *
             </label>
             <input
-              id="cli-nome"
+              id="srv-nome"
               className={campo}
-              placeholder="Ex.: Lucas Mendes"
+              placeholder="Ex.: Corte Degradê"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
             />
           </div>
           <div>
-            <label className={rotulo} htmlFor="cli-tel">
-              Telefone / WhatsApp
+            <label className={rotulo} htmlFor="srv-preco">
+              Preço (R$) *
             </label>
             <input
-              id="cli-tel"
+              id="srv-preco"
               className={campo}
-              placeholder="(11) 99999-9999"
-              value={telefone}
-              onChange={(e) => setTelefone(e.target.value)}
+              inputMode="decimal"
+              placeholder="Ex.: 70,00"
+              value={preco}
+              onChange={(e) => setPreco(e.target.value)}
             />
           </div>
           <div>
-            <label className={rotulo} htmlFor="cli-email">
-              E-mail
+            <label className={rotulo} htmlFor="srv-duracao">
+              Duração (min) *
             </label>
             <input
-              id="cli-email"
-              type="email"
+              id="srv-duracao"
               className={campo}
-              placeholder="cliente@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={rotulo} htmlFor="cli-obs">
-              Observação
-            </label>
-            <textarea
-              id="cli-obs"
-              className={`${campo} min-h-[64px] resize-y`}
-              placeholder="Ex.: alergia a produtos com amônia..."
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
+              inputMode="numeric"
+              placeholder="Ex.: 40"
+              value={duracao}
+              onChange={(e) => setDuracao(e.target.value)}
             />
           </div>
         </div>
@@ -150,7 +143,7 @@ export default function ClienteFormModal({ cliente, onFechar }: Props) {
             onClick={salvar}
             className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
           >
-            {editando ? 'Salvar alterações' : 'Cadastrar cliente'}
+            {editando ? 'Salvar alterações' : 'Cadastrar serviço'}
           </button>
         </div>
       </div>
