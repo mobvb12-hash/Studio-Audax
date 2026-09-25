@@ -12,6 +12,7 @@ type Props = {
   aberto: boolean
   dataInicial?: string
   horarioInicial?: string
+  profissionalInicial?: string
   onFechar: () => void
 }
 
@@ -25,6 +26,7 @@ export default function NovoAgendamentoModal({
   aberto,
   dataInicial,
   horarioInicial,
+  profissionalInicial,
   onFechar,
 }: Props) {
   const { adicionar, agendamentos } = useAgenda()
@@ -43,13 +45,13 @@ export default function NovoAgendamentoModal({
       setCliente('')
       setTelefone('')
       setServico(SERVICOS[0].nome)
-      setProfissional(PROFISSIONAIS[0])
+      setProfissional(profissionalInicial ?? PROFISSIONAIS[0])
       setData(dataInicial ?? hojeISO())
       setHorario(horarioInicial ?? '14:00')
       setObservacao('')
       setErro('')
     }
-  }, [aberto, dataInicial, horarioInicial])
+  }, [aberto, dataInicial, horarioInicial, profissionalInicial])
 
   useEffect(() => {
     if (!aberto) return

@@ -3,7 +3,7 @@ import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { ClientesProvider } from '@/modules/clientes/store'
-import Agenda from '@/pages/Agenda'
+import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
 import Clientes from '@/pages/Clientes'
 import Dashboard from '@/pages/Dashboard'
 
@@ -43,19 +43,26 @@ function ModuloFuturo({ pagina }: { pagina: PaginaId }) {
 function Conteudo() {
   const [pagina, setPagina] = useState<PaginaId>('painel')
   const [modalAberto, setModalAberto] = useState(false)
+  const [inicial, setInicial] = useState<SlotAgendamento | null>(null)
+
+  function abrirNovo(slot?: SlotAgendamento) {
+    setInicial(slot ?? null)
+    setModalAberto(true)
+  }
 
   return (
     <AppLayout paginaAtual={pagina} onNavegar={setPagina}>
-      {pagina === 'painel' && (
-        <Dashboard onNovo={() => setModalAberto(true)} />
-      )}
-      {pagina === 'agenda' && <Agenda onNovo={() => setModalAberto(true)} />}
+      {pagina === 'painel' && <Dashboard onNovo={() => abrirNovo()} />}
+      {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
       {pagina === 'clientes' && <Clientes />}
-      {pagina !== 'painel' && pagina !== 'agenda' && (
+      {pagina !== 'painel' && pagina !== 'agenda' && pagina !== 'clientes' && (
         <ModuloFuturo pagina={pagina} />
       )}
       <NovoAgendamentoModal
         aberto={modalAberto}
+        dataInicial={inicial?.data}
+        horarioInicial={inicial?.horario}
+        profissionalInicial={inicial?.profissional}
         onFechar={() => setModalAberto(false)}
       />
     </AppLayout>
