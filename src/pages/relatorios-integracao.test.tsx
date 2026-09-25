@@ -5,6 +5,7 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
@@ -34,8 +35,10 @@ function montar(children: React.ReactNode) {
           <AgendaProvider>
             <CaixaProvider>
               <ComissoesProvider>
-                <Captura />
-                {children}
+                <ClubeProvider>
+                  <Captura />
+                  {children}
+                </ClubeProvider>
               </ComissoesProvider>
             </CaixaProvider>
           </AgendaProvider>

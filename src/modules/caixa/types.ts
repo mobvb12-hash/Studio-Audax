@@ -9,7 +9,7 @@ export type FormaPagamento =
   | 'outro'
 
 export type TipoLancamento = 'receita' | 'despesa'
-export type OrigemLancamento = 'atendimento' | 'produto' | 'despesa'
+export type OrigemLancamento = 'atendimento' | 'produto' | 'clube' | 'despesa'
 
 /** Item de uma venda do PDV (vários produtos = um único lançamento) */
 export type ItemVenda = {
@@ -41,6 +41,8 @@ export type Lancamento = {
   servico?: string
   /** Liga o recebimento ao agendamento — impede pagamento duplicado */
   agendamentoId?: string
+  /** Liga o recebimento à assinatura do Audax Club */
+  assinaturaId?: string
   produto?: string
   quantidade?: number
   /** Itens detalhados (vendas do PDV com vários produtos) */
@@ -55,6 +57,7 @@ export type Lancamento = {
 export type ResumoFechamento = {
   receitasAtendimentos: number
   receitasProdutos: number
+  receitasClube: number
   totalRecebido: number
   descontos: number
   despesas: number
@@ -119,6 +122,18 @@ export type NovaVendaInput = {
   cliente?: string
   clienteId?: string
   profissional?: string
+  observacao?: string
+}
+
+/** Recebimento de assinatura do Audax Club (pagamento/renovação) */
+export type NovaReceitaClubeInput = {
+  data: string
+  descricao: string
+  valor: number
+  formaPagamento: FormaPagamento
+  cliente?: string
+  clienteId?: string
+  assinaturaId?: string
   observacao?: string
 }
 

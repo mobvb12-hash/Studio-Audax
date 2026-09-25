@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
@@ -11,6 +12,7 @@ import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda from './Agenda'
 import Caixa from './Caixa'
 import Clientes from './Clientes'
+import Clube from './Clube'
 import Comissoes from './Comissoes'
 import Dashboard from './Dashboard'
 import PDV from './PDV'
@@ -104,7 +106,9 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
               <AgendaProvider>
                 <CaixaProvider>
                   <ComissoesProvider>
-                    <Dashboard onNovo={() => undefined} />
+                    <ClubeProvider>
+                      <Dashboard onNovo={() => undefined} />
+                    </ClubeProvider>
                   </ComissoesProvider>
                 </CaixaProvider>
               </AgendaProvider>
@@ -182,7 +186,9 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
               <AgendaProvider>
                 <CaixaProvider>
                   <ComissoesProvider>
-                    <PDV />
+                    <ClubeProvider>
+                      <PDV />
+                    </ClubeProvider>
                   </ComissoesProvider>
                 </CaixaProvider>
               </AgendaProvider>
@@ -244,6 +250,26 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     ).toBeTruthy()
     expect(screen.getByText('Formas de pagamento')).toBeTruthy()
     expect(screen.getByText('Comissões do período')).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('Audax Club renderiza cabeçalho, KPIs, filtros e estado vazio', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ClientesProvider>
+        <CaixaProvider>
+          <ClubeProvider>
+            <Clube />
+          </ClubeProvider>
+        </CaixaProvider>
+      </ClientesProvider>,
+    )
+    expect(screen.getByRole('heading', { name: 'Audax Club' })).toBeTruthy()
+    expect(screen.getByText('+ Nova assinatura')).toBeTruthy()
+    expect(screen.getByText('Assinaturas')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Todas' })).toBeTruthy()
+    expect(screen.getByText('Nenhuma assinatura cadastrada.')).toBeTruthy()
     expect(erros).not.toHaveBeenCalled()
     erros.mockRestore()
   })

@@ -8,6 +8,13 @@ import {
 } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useComissoes } from '@/modules/comissoes/store'
+import {
+  assinaturaVigente,
+  statusAssinatura,
+  STATUS_ROTULO,
+  valorDescontoAssinante,
+} from '@/modules/clube/regras'
+import { useClube } from '@/modules/clube/store'
 import { useEstoque } from '@/modules/estoque/store'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -45,6 +52,7 @@ export default function PDV() {
   const { clientes } = useClientes()
   const { profissionais } = useProfissionais()
   const { configDe } = useComissoes()
+  const { assinaturaDoCliente } = useClube()
 
   const [aba, setAba] = useState<AbaPdv>('venda')
   const [produtoSel, setProdutoSel] = useState('')
@@ -70,10 +78,20 @@ export default function PDV() {
     (soma, i) => soma + i.quantidade * i.preco,
     0,
   )
+  // Assinante vigente do Audax Club: 10% automáticos sobre o subtotal
+  const assinatura = clienteId ? assinaturaDoCliente(clienteId) : undefined
+  const assinanteVigente = Boolean(
+    assinatura && assinaturaVigente(assinatura, hoje),
+  )
+  const descontoAssinante = valorDescontoAssinante(subtotal, assinanteVigente)
   const descontoNum = parseMoeda(descontoTexto) || 0
+  const limiteDesconto = Math.max(0, subtotal - descontoAssinante)
   const descontoValido =
-    Number.isFinite(descontoNum) && descontoNum >= 0 && descontoNum <= subtotal
-  const total = Math.max(0, Math.round((subtotal - descontoNum) * 100) / 100)
+    Number.isFinite(descontoNum) && descontoNum >= 0 && descontoNum <= limiteDesconto
+  const total = Math.max(
+    0,
+    Math.round((subtotal - descontoAssinante - descontoNum) * 100) / 100,
+  )
 
   const vendas = lancamentos
     .filter((l) => l.origem === 'produto')
@@ -203,6 +221,7 @@ export default function PDV() {
       }
     }
     const cliente = clientes.find((c) => c.id === clienteId)
+    const descontoTotal = Math.round((descontoAssinante + descontoNum) * 100) / 100
     finalizandoRef.current = true
     try {
       const venda = registrarVenda({
@@ -213,7 +232,7 @@ export default function PDV() {
           quantidade: i.quantidade,
           preco: i.preco,
         })),
-        desconto: descontoNum,
+        desconto: descontoTotal,
         formaPagamento: forma,
         cliente: cliente?.nome,
         clienteId: cliente?.id,
@@ -426,6 +445,16 @@ export default function PDV() {
                     {formatarBRL(subtotal)}
                   </span>
                 </div>
+                {descontoAssinante > 0 && (
+                  <div className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-[#4A4436]">
+                      Desconto assinante Audax Club (10%)
+                    </span>
+                    <span className="font-semibold text-[#6B8E5A]">
+                      − {formatarBRL(descontoAssinante)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-3 py-2 text-sm">
                   <label className="text-[#4A4436]" htmlFor="pdv-desconto">
                     Desconto (R$)
@@ -469,6 +498,18 @@ export default function PDV() {
                       </option>
                     ))}
                   </select>
+                  {assinatura && assinanteVigente && (
+                    <p className="mt-1.5 text-xs font-medium text-[#3F6B33]">
+                      ✓ Assinante {STATUS_ROTULO[statusAssinatura(assinatura, hoje)]}{' '}
+                      — desconto de 10% aplicado.
+                    </p>
+                  )}
+                  {assinatura && !assinanteVigente && (
+                    <p className="mt-1.5 text-xs font-medium text-orange-700">
+                      Assinatura {STATUS_ROTULO[statusAssinatura(assinatura, hoje)].toLowerCase()}{' '}
+                      — sem desconto de assinante.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className={rotulo} htmlFor="pdv-profissional">

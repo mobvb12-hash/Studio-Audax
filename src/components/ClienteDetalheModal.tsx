@@ -67,9 +67,10 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
   )
 
   const pagamentosAtendimentos = recebido.filter(
-    (l) => l.origem !== 'produto',
+    (l) => l.origem === 'atendimento',
   )
   const comprasProdutos = recebido.filter((l) => l.origem === 'produto')
+  const pagamentosClube = recebido.filter((l) => l.origem === 'clube')
 
   const totalGasto = recebido.reduce((soma, l) => soma + l.valorLiquido, 0)
   const concluidos = historico.filter((ag) => ag.status === 'concluido').length
@@ -290,6 +291,35 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
           ) : (
             <ul className="divide-y divide-[#EFE7D3]">
               {comprasProdutos.map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[#1C1A15]">
+                      {l.descricao}
+                    </p>
+                    <p className="text-xs text-[#8A8171]">
+                      {formatarDataLonga(l.data)} · {l.hora}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-[#8A6A14]">
+                    {formatarBRL(l.valorLiquido)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            Audax Club (assinaturas)
+          </p>
+          {pagamentosClube.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
+              Nenhum pagamento de assinatura.
+            </div>
+          ) : (
+            <ul className="divide-y divide-[#EFE7D3]">
+              {pagamentosClube.map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-[#1C1A15]">

@@ -14,6 +14,7 @@ import {
   type FormaPagamento,
   type Lancamento,
   type NovaDespesaInput,
+  type NovaReceitaClubeInput,
   type NovaVendaInput,
   type NovoPagamentoInput,
   type NovaVendaProdutoInput,
@@ -74,6 +75,8 @@ export type CaixaContexto = {
   venderProduto: (input: NovaVendaProdutoInput) => Lancamento
   /** Venda do PDV: vários produtos → UMA única movimentação no Caixa */
   registrarVenda: (input: NovaVendaInput) => Lancamento
+  /** Recebimento de assinatura do Audax Club (origem "clube") */
+  registrarReceitaClube: (input: NovaReceitaClubeInput) => Lancamento
   adicionarDespesa: (input: NovaDespesaInput) => Lancamento
   estornar: (id: string) => void
   fecharCaixa: (data: string) => Fechamento
@@ -145,6 +148,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
 
       let receitasAtendimentos = 0
       let receitasProdutos = 0
+      let receitasClube = 0
       let descontos = 0
       let despesas = 0
       let qtdAtendimentos = 0
@@ -163,6 +167,8 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         } else if (l.origem === 'produto') {
           receitasProdutos += l.valorLiquido
           qtdProdutos += 1
+        } else if (l.origem === 'clube') {
+          receitasClube += l.valorLiquido
         }
         if (l.profissional) {
           const atual = profissionais.get(l.profissional) ?? {
@@ -175,10 +181,11 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const totalRecebido = receitasAtendimentos + receitasProdutos
+      const totalRecebido = receitasAtendimentos + receitasProdutos + receitasClube
       return {
         receitasAtendimentos: arredondar(receitasAtendimentos),
         receitasProdutos: arredondar(receitasProdutos),
+        receitasClube: arredondar(receitasClube),
         totalRecebido: arredondar(totalRecebido),
         descontos: arredondar(descontos),
         despesas: arredondar(despesas),
@@ -389,6 +396,40 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [bloquearSeFechado],
   )
 
+  const registrarReceitaClube = useCallback(
+    (input: NovaReceitaClubeInput): Lancamento => {
+      if (!input.descricao.trim()) throw new Error('Informe a descrição.')
+      if (!Number.isFinite(input.valor) || input.valor <= 0) {
+        throw new Error('O valor do pagamento deve ser maior que zero.')
+      }
+      if (!FORMAS_PAGAMENTO.includes(input.formaPagamento)) {
+        throw new Error('Selecione a forma de pagamento.')
+      }
+      bloquearSeFechado(input.data)
+
+      const novo: Lancamento = {
+        id: gerarId(),
+        tipo: 'receita',
+        origem: 'clube',
+        data: input.data,
+        hora: agoraHora(),
+        descricao: input.descricao.trim(),
+        valor: arredondar(input.valor),
+        desconto: 0,
+        valorLiquido: arredondar(input.valor),
+        formaPagamento: input.formaPagamento,
+        cliente: input.cliente?.trim() || undefined,
+        clienteId: input.clienteId,
+        assinaturaId: input.assinaturaId,
+        observacao: input.observacao?.trim() || undefined,
+        criadoEm: new Date().toISOString(),
+      }
+      setLancamentos((atual) => [...atual, novo])
+      return novo
+    },
+    [bloquearSeFechado],
+  )
+
   const adicionarDespesa = useCallback(
     (input: NovaDespesaInput): Lancamento => {
       if (!input.descricao.trim()) throw new Error('Informe a descrição.')
@@ -535,6 +576,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       registrarPagamento,
       venderProduto,
       registrarVenda,
+      registrarReceitaClube,
       adicionarDespesa,
       estornar,
       fecharCaixa,
@@ -555,6 +597,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       registrarPagamento,
       venderProduto,
       registrarVenda,
+      registrarReceitaClube,
       adicionarDespesa,
       estornar,
       fecharCaixa,

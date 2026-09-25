@@ -6,6 +6,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { EstoqueProvider, useEstoque } from '@/modules/estoque/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
@@ -42,8 +43,10 @@ function env(children: ReactNode) {
             <AgendaProvider>
               <CaixaProvider>
                 <ComissoesProvider>
-                  <Captura />
-                  {children}
+                  <ClubeProvider>
+                    <Captura />
+                    {children}
+                  </ClubeProvider>
                 </ComissoesProvider>
               </CaixaProvider>
             </AgendaProvider>

@@ -4,6 +4,7 @@ import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
@@ -12,6 +13,7 @@ import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
 import Caixa from '@/pages/Caixa'
 import Clientes from '@/pages/Clientes'
+import Clube from '@/pages/Clube'
 import Comissoes from '@/pages/Comissoes'
 import Dashboard from '@/pages/Dashboard'
 import PDV from '@/pages/PDV'
@@ -65,6 +67,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'relatorios',
   'pdv',
   'estoque',
+  'clube',
 ]
 
 function Conteudo() {
@@ -101,6 +104,7 @@ function Conteudo() {
       {pagina === 'relatorios' && <Relatorios />}
       {pagina === 'pdv' && <PDV />}
       {pagina === 'estoque' && <Produtos />}
+      {pagina === 'clube' && <Clube />}
       {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
       {modalAberto && (
         <NovoAgendamentoModal
@@ -124,7 +128,9 @@ function App() {
               <AgendaProvider>
                 <CaixaProvider>
                   <ComissoesProvider>
-                    <Conteudo />
+                    <ClubeProvider>
+                      <Conteudo />
+                    </ClubeProvider>
                   </ComissoesProvider>
                 </CaixaProvider>
               </AgendaProvider>

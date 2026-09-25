@@ -287,6 +287,10 @@ export default function Relatorios() {
                 valor={formatarBRL(resumo.receitaProdutos)}
               />
               <CelulaKpi
+                rotulo="Receita de assinaturas"
+                valor={formatarBRL(resumo.receitaClube)}
+              />
+              <CelulaKpi
                 rotulo="Receita total"
                 valor={formatarBRL(resumo.receitaTotal)}
               />
@@ -333,6 +337,10 @@ export default function Relatorios() {
                 <LinhaDetalhe
                   rotulo="Produtos (líquido)"
                   valor={formatarBRL(fat.produtos)}
+                />
+                <LinhaDetalhe
+                  rotulo="Assinaturas (líquido)"
+                  valor={formatarBRL(fat.clube)}
                 />
                 <LinhaDetalhe
                   rotulo="Estornos (fora da receita)"

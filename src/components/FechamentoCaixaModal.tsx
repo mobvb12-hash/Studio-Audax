@@ -81,6 +81,10 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
             rotulo={`Vendas de produto (${resumo.qtdProdutos})`}
             valor={formatarBRL(resumo.receitasProdutos)}
           />
+          <Linha
+            rotulo="Assinaturas do clube"
+            valor={formatarBRL(resumo.receitasClube)}
+          />
           <Linha rotulo="Descontos" valor={formatarBRL(resumo.descontos)} />
           <Linha rotulo="Total recebido" valor={formatarBRL(resumo.totalRecebido)} />
           <Linha rotulo="Despesas" valor={formatarBRL(resumo.despesas)} />

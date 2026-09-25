@@ -1,5 +1,5 @@
 // Painel — layout igual ao print, agora ligado à agenda real (localStorage).
-// Financeiro/estoque/profissionais/clube continuam zerados até seus módulos.
+// Financeiro/estoque/profissionais ligados aos seus módulos; Audax Club real.
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
@@ -8,6 +8,8 @@ import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import { periodoMes } from '@/modules/comissoes/periodo'
 import { linhasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
 import { useComissoes } from '@/modules/comissoes/store'
+import { pagamentosNoMes, situacoesAssinaturas } from '@/modules/clube/regras'
+import { useClube } from '@/modules/clube/store'
 import { produtosComEstoqueBaixo } from '@/modules/estoque/indicadores'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -84,6 +86,7 @@ export default function Dashboard({
   const { lancamentos, resumoDoDia, diaFechado } = useCaixa()
   const { configDe } = useComissoes()
   const { produtos } = useProdutos()
+  const { assinaturas, pagamentos } = useClube()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
 
@@ -115,6 +118,16 @@ export default function Dashboard({
   const estoqueBaixo = produtosComEstoqueBaixo(produtos)
   const estoqueZerado = estoqueBaixo.filter((p) => p.estoque <= 0)
 
+  // Audax Club real: status derivado do vencimento
+  const situacoes = situacoesAssinaturas(assinaturas, hojeISO())
+  const receitaPrevista = assinaturas
+    .filter((a) => !a.cancelada)
+    .reduce((soma, a) => soma + a.valorMensal, 0)
+  const estornados = new Set(
+    lancamentos.filter((l) => l.estornado).map((l) => l.id),
+  )
+  const pagamentosClubeMes = pagamentosNoMes(pagamentos, mesAtual, estornados)
+
   const kpis = [
     {
       rotulo: 'Receita do mês',
@@ -130,7 +143,7 @@ export default function Dashboard({
     },
     { rotulo: 'Ticket médio', valor: formatarBRL(ticketMedio) },
     { rotulo: 'Hoje', valor: String(totalHoje), sub: 'agend.' },
-    { rotulo: 'Assinaturas ativas', valor: '0' },
+    { rotulo: 'Assinaturas ativas', valor: String(situacoes.ativas) },
   ]
 
   return (
@@ -371,14 +384,16 @@ export default function Dashboard({
               <h2 className="text-[15px] font-bold text-[#1C1A15]">
                 Assinaturas
               </h2>
-              <span className="text-[13px] text-[#8A8171]">0 ativas</span>
+              <span className="text-[13px] text-[#8A8171]">
+                {situacoes.ativas} ativa(s)
+              </span>
             </div>
             <div className="mt-4 flex items-center justify-between py-2 text-sm">
               <span className="font-medium text-[#1C1A15]">
                 Receita recorrente prevista/mês
               </span>
               <span className="font-semibold text-[#1C1A15]">
-                {formatarBRL(0)}
+                {formatarBRL(receitaPrevista)}
               </span>
             </div>
             <div className="flex items-center justify-between border-t border-[#E9DDC0] py-2 text-sm">
@@ -386,8 +401,27 @@ export default function Dashboard({
                 Pagamentos do clube este mês
               </span>
               <span className="font-semibold text-[#1C1A15]">
-                {formatarBRL(0)}
+                {formatarBRL(pagamentosClubeMes)}
               </span>
+            </div>
+            <div className="mt-3 border-t border-[#E9DDC0] pt-3">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                Situações de vencimento
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="rounded-full border border-[#BFE0B2] bg-[#E9F5E4] px-2.5 py-1 text-xs font-medium text-[#3F6B33]">
+                  {situacoes.ativas} ativas
+                </span>
+                <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+                  {situacoes.proximas} próxima(s)
+                </span>
+                <span className="rounded-full border border-orange-300 bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700">
+                  {situacoes.atrasadas} atrasada(s)
+                </span>
+                <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
+                  {situacoes.vencidas} vencida(s)
+                </span>
+              </div>
             </div>
           </section>
         </div>

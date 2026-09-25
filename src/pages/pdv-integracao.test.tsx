@@ -7,6 +7,7 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
 import { linhasDetalhadasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
 import { EstoqueProvider } from '@/modules/estoque/store'
@@ -50,8 +51,10 @@ function env(children: ReactNode) {
               <AgendaProvider>
                 <CaixaProvider>
                   <ComissoesProvider>
-                    <Captura />
-                    {children}
+                    <ClubeProvider>
+                      <Captura />
+                      {children}
+                    </ClubeProvider>
                   </ComissoesProvider>
                 </CaixaProvider>
               </AgendaProvider>

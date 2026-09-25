@@ -35,6 +35,7 @@ function soma(lista: Lancamento[]): number {
 export type ResumoFinanceiro = {
   receitaServicos: number
   receitaProdutos: number
+  receitaClube: number
   receitaTotal: number
   despesas: number
   estornos: number
@@ -52,10 +53,12 @@ export function resumoFinanceiro(
   const receitas = receitasValidas(base)
   const atendimentos = receitas.filter((l) => l.origem === 'atendimento')
   const produtos = receitas.filter((l) => l.origem === 'produto')
+  const clube = receitas.filter((l) => l.origem === 'clube')
 
   const receitaServicos = soma(atendimentos)
   const receitaProdutos = soma(produtos)
-  const receitaTotal = arredondar(receitaServicos + receitaProdutos)
+  const receitaClube = soma(clube)
+  const receitaTotal = arredondar(receitaServicos + receitaProdutos + receitaClube)
   const despesas = soma(
     base.filter((l) => l.tipo === 'despesa' && !l.estornado),
   )
@@ -67,6 +70,7 @@ export function resumoFinanceiro(
   return {
     receitaServicos,
     receitaProdutos,
+    receitaClube,
     receitaTotal,
     despesas,
     estornos,
@@ -90,6 +94,7 @@ export type Faturamento = {
   bruto: number
   servicos: number
   produtos: number
+  clube: number
   descontos: number
   estornos: number
   despesas: number
@@ -107,23 +112,30 @@ export function faturamento(
 
   const bruto = arredondar(
     receitas
-      .filter((l) => l.origem === 'atendimento' || l.origem === 'produto')
+      .filter(
+        (l) =>
+          l.origem === 'atendimento' || l.origem === 'produto' || l.origem === 'clube',
+      )
       .reduce((total, l) => total + l.valor, 0),
   )
   const descontos = arredondar(
     receitas
-      .filter((l) => l.origem === 'atendimento' || l.origem === 'produto')
+      .filter(
+        (l) =>
+          l.origem === 'atendimento' || l.origem === 'produto' || l.origem === 'clube',
+      )
       .reduce((total, l) => total + l.desconto, 0),
   )
   const servicos = soma(receitas.filter((l) => l.origem === 'atendimento'))
   const produtos = soma(receitas.filter((l) => l.origem === 'produto'))
+  const clube = soma(receitas.filter((l) => l.origem === 'clube'))
   const estornos = soma(
     base.filter((l) => l.tipo === 'receita' && l.estornado),
   )
   const despesas = soma(
     base.filter((l) => l.tipo === 'despesa' && !l.estornado),
   )
-  const liquido = arredondar(servicos + produtos)
+  const liquido = arredondar(servicos + produtos + clube)
 
   const porDia = new Map<string, EvolucaoDia>()
   for (const l of base) {
@@ -144,6 +156,7 @@ export function faturamento(
     bruto,
     servicos,
     produtos,
+    clube,
     descontos,
     estornos,
     despesas,
@@ -170,7 +183,8 @@ export function formasPagamento(
   periodo: Periodo,
 ): { linhas: FormaLinha[]; total: number; temDados: boolean } {
   const receitas = receitasValidas(doPeriodo(lancamentos, periodo)).filter(
-    (l) => l.origem === 'atendimento' || l.origem === 'produto',
+    (l) =>
+      l.origem === 'atendimento' || l.origem === 'produto' || l.origem === 'clube',
   )
   const total = soma(receitas)
 

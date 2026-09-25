@@ -4,6 +4,7 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
@@ -66,8 +67,10 @@ describe('Dashboard ↔ Caixa — números idênticos', () => {
               <AgendaProvider>
                 <CaixaProvider>
                   <ComissoesProvider>
-                    <Semente />
-                    <Dashboard onNovo={() => undefined} />
+                    <ClubeProvider>
+                      <Semente />
+                      <Dashboard onNovo={() => undefined} />
+                    </ClubeProvider>
                   </ComissoesProvider>
                 </CaixaProvider>
               </AgendaProvider>
