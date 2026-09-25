@@ -9,6 +9,7 @@ import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
 import { linhasDetalhadasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
+import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider, useProdutos } from '@/modules/produtos/store'
 import { ProfissionaisProvider, useProfissionais } from '@/modules/profissionais/store'
 import { periodoSemana } from '@/modules/relatorios/periodo'
@@ -44,16 +45,18 @@ function env(children: ReactNode) {
     <ClientesProvider>
       <ProfissionaisProvider>
         <ProdutosProvider>
-          <ServicosProvider>
-            <AgendaProvider>
-              <CaixaProvider>
-                <ComissoesProvider>
-                  <Captura />
-                  {children}
-                </ComissoesProvider>
-              </CaixaProvider>
-            </AgendaProvider>
-          </ServicosProvider>
+          <EstoqueProvider>
+            <ServicosProvider>
+              <AgendaProvider>
+                <CaixaProvider>
+                  <ComissoesProvider>
+                    <Captura />
+                    {children}
+                  </ComissoesProvider>
+                </CaixaProvider>
+              </AgendaProvider>
+            </ServicosProvider>
+          </EstoqueProvider>
         </ProdutosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>,
@@ -146,8 +149,12 @@ describe('PDV ↔ Caixa — auditoria numérica', () => {
         email: '',
         observacao: '',
       })
-      ctxProdutos.adicionar({ nome: 'Creme capilar', preco: 30 })
-      ctxProdutos.adicionar({ nome: 'Pomada modeladora', preco: 50 })
+      ctxProdutos.adicionar({ nome: 'Creme capilar', preco: 30, estoque: 10 })
+      ctxProdutos.adicionar({
+        nome: 'Pomada modeladora',
+        preco: 50,
+        estoque: 10,
+      })
     })
     const creme = ctxProdutos.produtos.find((p) => p.nome === 'Creme capilar')!
     const pomada = ctxProdutos.produtos.find(
@@ -192,6 +199,16 @@ describe('PDV ↔ Caixa — auditoria numérica', () => {
     const diego = resumo.porProfissional.find((p) => p.nome === 'Diego')
     expect(diego?.valor).toBe(100)
     expect(diego?.qtd).toBe(1)
+
+    // Estoque: baixa automática de 2 Creme + 1 Pomada (10 → 8 e 10 → 9)
+    const cremeDepois = ctxProdutos.produtos.find(
+      (p) => p.nome === 'Creme capilar',
+    )!
+    const pomadaDepois = ctxProdutos.produtos.find(
+      (p) => p.nome === 'Pomada modeladora',
+    )!
+    expect(cremeDepois.estoque).toBe(8)
+    expect(pomadaDepois.estoque).toBe(9)
   })
 })
 

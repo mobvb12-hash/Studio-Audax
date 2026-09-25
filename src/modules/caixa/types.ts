@@ -13,6 +13,7 @@ export type OrigemLancamento = 'atendimento' | 'produto' | 'despesa'
 
 /** Item de uma venda do PDV (vários produtos = um único lançamento) */
 export type ItemVenda = {
+  produtoId?: string
   produto: string
   quantidade: number
   preco: number

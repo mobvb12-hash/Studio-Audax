@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { FormaPagamento } from '@/modules/caixa/types'
+import { useEstoque } from '@/modules/estoque/store'
+import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
-import { parseMoeda } from '@/lib/moeda'
+import { formatarBRL, parseMoeda } from '@/lib/moeda'
 
 type Props = {
   /** Dia do caixa em que a venda é lançada (YYYY-MM-DD) */
@@ -19,9 +21,11 @@ const rotulo =
 
 export default function VendaProdutoModal({ data, onFechar }: Props) {
   const { venderProduto, diaFechado } = useCaixa()
+  const { produtos } = useProdutos()
+  const { saidaPorVenda } = useEstoque()
   const { profissionais } = useProfissionais()
 
-  const [produto, setProduto] = useState('')
+  const [produtoId, setProdutoId] = useState('')
   const [quantidade, setQuantidade] = useState('1')
   const [preco, setPreco] = useState('')
   const [desconto, setDesconto] = useState('0')
@@ -29,6 +33,10 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
   const [forma, setForma] = useState<FormaPagamento>('dinheiro')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
+
+  // Venda só de produto cadastrado, ativo e com estoque
+  const produtosVendaveis = produtos.filter((p) => p.ativo && p.estoque > 0)
+  const prodSel = produtos.find((p) => p.id === produtoId)
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -50,10 +58,20 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       setErro(`O caixa de ${data} está fechado. Reabra o caixa para lançar.`)
       return
     }
+    if (!prodSel) {
+      setErro('Selecione um produto do cadastro.')
+      return
+    }
+    if (prodSel.estoque < qtdNum) {
+      setErro(
+        `Estoque insuficiente para "${prodSel.nome}": disponível ${prodSel.estoque}, solicitado ${qtdNum}.`,
+      )
+      return
+    }
     try {
-      venderProduto({
+      const lancamento = venderProduto({
         data,
-        produto,
+        produto: prodSel.nome,
         quantidade: qtdNum,
         preco: precoNum,
         desconto: descontoNum,
@@ -61,6 +79,15 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
         profissional,
         observacao,
       })
+      // Baixa automática de estoque
+      saidaPorVenda(lancamento.id, data, [
+        {
+          produtoId: prodSel.id,
+          produto: prodSel.nome,
+          quantidade: qtdNum,
+          preco: precoNum,
+        },
+      ])
       onFechar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
@@ -100,13 +127,36 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
             <label className={rotulo} htmlFor="vnd-produto">
               Produto *
             </label>
-            <input
+            <select
               id="vnd-produto"
               className={campo}
-              placeholder="Ex.: Pomada"
-              value={produto}
-              onChange={(e) => setProduto(e.target.value)}
-            />
+              value={produtoId}
+              onChange={(e) => {
+                const p = produtos.find((x) => x.id === e.target.value)
+                setProdutoId(e.target.value)
+                setErro('')
+                if (p && p.preco > 0) {
+                  setPreco(String(p.preco.toFixed(2)).replace('.', ','))
+                }
+              }}
+            >
+              <option value="">Selecione um produto...</option>
+              {produtosVendaveis.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} · {formatarBRL(p.preco)} · estoque {p.estoque}
+                </option>
+              ))}
+            </select>
+            {produtosVendaveis.length === 0 && (
+              <p className="mt-1 text-xs text-[#A99E85]">
+                Nenhum produto ativo com estoque. Cadastre em Produtos / Estoque.
+              </p>
+            )}
+            {prodSel && (
+              <p className="mt-1 text-xs text-[#8A8171]">
+                Estoque disponível: {prodSel.estoque}
+              </p>
+            )}
           </div>
           <div>
             <label className={rotulo} htmlFor="vnd-qtd">

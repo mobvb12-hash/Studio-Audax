@@ -6,6 +6,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { formatarBRL } from '@/lib/moeda'
 import Comissoes from './Comissoes'
@@ -29,14 +30,16 @@ function montar(children: React.ReactNode) {
   return render(
     <ClientesProvider>
       <ProfissionaisProvider>
-        <AgendaProvider>
-          <CaixaProvider>
-            <ComissoesProvider>
-              <Captura />
-              {children}
-            </ComissoesProvider>
-          </CaixaProvider>
-        </AgendaProvider>
+        <ProdutosProvider>
+          <AgendaProvider>
+            <CaixaProvider>
+              <ComissoesProvider>
+                <Captura />
+                {children}
+              </ComissoesProvider>
+            </CaixaProvider>
+          </AgendaProvider>
+        </ProdutosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>,
   )

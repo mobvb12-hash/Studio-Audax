@@ -4,6 +4,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
+import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
@@ -26,9 +27,13 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
   it('Caixa renderiza cabeçalho, KPIs e cartões', () => {
     const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(
-      <CaixaProvider>
-        <Caixa />
-      </CaixaProvider>,
+      <ProdutosProvider>
+        <EstoqueProvider>
+          <CaixaProvider>
+            <Caixa />
+          </CaixaProvider>
+        </EstoqueProvider>
+      </ProdutosProvider>,
     )
     expect(screen.getByRole('heading', { name: 'Caixa' })).toBeTruthy()
     expect(screen.getByText('Recebido no dia')).toBeTruthy()
@@ -94,15 +99,17 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     render(
       <ClientesProvider>
         <ProfissionaisProvider>
-          <ServicosProvider>
-            <AgendaProvider>
-              <CaixaProvider>
-                <ComissoesProvider>
-                  <Dashboard onNovo={() => undefined} />
-                </ComissoesProvider>
-              </CaixaProvider>
-            </AgendaProvider>
-          </ServicosProvider>
+          <ProdutosProvider>
+            <ServicosProvider>
+              <AgendaProvider>
+                <CaixaProvider>
+                  <ComissoesProvider>
+                    <Dashboard onNovo={() => undefined} />
+                  </ComissoesProvider>
+                </CaixaProvider>
+              </AgendaProvider>
+            </ServicosProvider>
+          </ProdutosProvider>
         </ProfissionaisProvider>
       </ClientesProvider>,
     )
@@ -171,13 +178,15 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
       <ClientesProvider>
         <ProfissionaisProvider>
           <ProdutosProvider>
-            <AgendaProvider>
-              <CaixaProvider>
-                <ComissoesProvider>
-                  <PDV />
-                </ComissoesProvider>
-              </CaixaProvider>
-            </AgendaProvider>
+            <EstoqueProvider>
+              <AgendaProvider>
+                <CaixaProvider>
+                  <ComissoesProvider>
+                    <PDV />
+                  </ComissoesProvider>
+                </CaixaProvider>
+              </AgendaProvider>
+            </EstoqueProvider>
           </ProdutosProvider>
         </ProfissionaisProvider>
       </ClientesProvider>,
@@ -197,7 +206,9 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(
       <ProdutosProvider>
-        <Produtos />
+        <EstoqueProvider>
+          <Produtos />
+        </EstoqueProvider>
       </ProdutosProvider>,
     )
     expect(screen.getByRole('heading', { name: 'Produtos' })).toBeTruthy()
@@ -212,13 +223,15 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     render(
       <ClientesProvider>
         <ProfissionaisProvider>
-          <AgendaProvider>
-            <CaixaProvider>
-              <ComissoesProvider>
-                <Relatorios />
-              </ComissoesProvider>
-            </CaixaProvider>
-          </AgendaProvider>
+          <ProdutosProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <ComissoesProvider>
+                  <Relatorios />
+                </ComissoesProvider>
+              </CaixaProvider>
+            </AgendaProvider>
+          </ProdutosProvider>
         </ProfissionaisProvider>
       </ClientesProvider>,
     )

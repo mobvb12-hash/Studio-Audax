@@ -7,6 +7,7 @@ import { formatarDataLonga, hojeISO, somarDias } from '@/modules/agenda/catalogo
 import { useCaixa } from '@/modules/caixa/store'
 import type { Lancamento } from '@/modules/caixa/types'
 import { FORMAS_ROTULO } from '@/modules/caixa/types'
+import { useEstoque } from '@/modules/estoque/store'
 import { formatarBRL } from '@/lib/moeda'
 
 function formatarHora(iso: string): string {
@@ -105,6 +106,7 @@ export default function Caixa() {
     estornar,
     reabrirCaixa,
   } = useCaixa()
+  const { reverterVenda } = useEstoque()
 
   const [data, setData] = useState(hojeISO())
   const [vendaAberta, setVendaAberta] = useState(false)
@@ -421,6 +423,11 @@ export default function Caixa() {
           perigo
           onConfirmar={() => {
             estornar(estornando.id)
+            // Venda de produto: devolve estoque (movimentação "Estorno").
+            // A movimentação original nunca é apagada; a venda fica no histórico.
+            if (estornando.origem === 'produto') {
+              reverterVenda(estornando)
+            }
             setEstornando(null)
           }}
           onFechar={() => setEstornando(null)}

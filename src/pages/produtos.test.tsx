@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import Produtos from './Produtos'
 
@@ -10,7 +11,9 @@ beforeEach(() => {
 function montar() {
   return render(
     <ProdutosProvider>
-      <Produtos />
+      <EstoqueProvider>
+        <Produtos />
+      </EstoqueProvider>
     </ProdutosProvider>,
   )
 }

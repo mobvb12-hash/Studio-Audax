@@ -8,6 +8,7 @@ import {
 } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useComissoes } from '@/modules/comissoes/store'
+import { useEstoque } from '@/modules/estoque/store'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL, parseMoeda } from '@/lib/moeda'
@@ -19,6 +20,8 @@ type ItemCarrinho = {
   produto: string
   quantidade: number
   preco: number
+  /** estoque disponível no momento em que o item entrou no carrinho */
+  estoque: number
 }
 
 const campo =
@@ -38,6 +41,7 @@ function abaClasse(ativa: boolean): string {
 export default function PDV() {
   const { lancamentos, registrarVenda, diaFechado } = useCaixa()
   const { produtos } = useProdutos()
+  const { saidaPorVenda } = useEstoque()
   const { clientes } = useClientes()
   const { profissionais } = useProfissionais()
   const { configDe } = useComissoes()
@@ -56,7 +60,8 @@ export default function PDV() {
 
   const hoje = hojeISO()
   const caixaFechado = diaFechado(hoje)
-  const produtosAtivos = produtos.filter((p) => p.ativo)
+  // PDV só vende o que existe: ativo e com estoque
+  const produtosVendaveis = produtos.filter((p) => p.ativo && p.estoque > 0)
   const profissionaisAtivos = profissionais.filter(
     (p) => configDe(p.id).ativo,
   )
@@ -89,23 +94,41 @@ export default function PDV() {
       setErro('O preço do produto deve ser maior que zero.')
       return
     }
+    if (prod.estoque <= 0) {
+      setErro(`"${prod.nome}" está sem estoque — não é possível vender.`)
+      return
+    }
     const q = Number(qtdTexto)
     if (!Number.isInteger(q) || q < 1) {
       setErro('Quantidade deve ser um número inteiro maior que zero.')
       return
     }
+    // Validação contra o estoque atual (nunca negativo, nunca acima do disponível)
+    const existente = carrinho.find((i) => i.produtoId === prod.id)
+    const soma = (existente?.quantidade ?? 0) + q
+    if (soma > prod.estoque) {
+      setErro(
+        existente
+          ? `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, no carrinho ${existente.quantidade} + ${q}.`
+          : `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, solicitado ${q}.`,
+      )
+      return
+    }
     setCarrinho((atual) => {
-      const existente = atual.find((i) => i.produtoId === prod.id)
-      if (existente) {
+      if (atual.some((i) => i.produtoId === prod.id)) {
         return atual.map((i) =>
-          i.produtoId === prod.id
-            ? { ...i, quantidade: i.quantidade + q }
-            : i,
+          i.produtoId === prod.id ? { ...i, quantidade: i.quantidade + q } : i,
         )
       }
       return [
         ...atual,
-        { produtoId: prod.id, produto: prod.nome, quantidade: q, preco: prod.preco },
+        {
+          produtoId: prod.id,
+          produto: prod.nome,
+          quantidade: q,
+          preco: prod.preco,
+          estoque: prod.estoque,
+        },
       ]
     })
     setErro('')
@@ -116,6 +139,13 @@ export default function PDV() {
     const q = Number(texto)
     if (!Number.isInteger(q) || q < 1) {
       setErro('Quantidade deve ser um número inteiro maior que zero.')
+      return
+    }
+    const item = carrinho.find((i) => i.produtoId === produtoId)
+    if (item && q > item.estoque) {
+      setErro(
+        `Estoque insuficiente para "${item.produto}": disponível ${item.estoque}, solicitado ${q}.`,
+      )
       return
     }
     setCarrinho((atual) =>
@@ -158,12 +188,27 @@ export default function PDV() {
       setErro('O caixa de hoje está fechado. Reabra o caixa para registrar vendas.')
       return
     }
+    // Validação de estoque de TODOS os itens — atômico, antes de qualquer efeito
+    for (const item of carrinho) {
+      const prod = produtos.find((p) => p.id === item.produtoId)
+      if (!prod) {
+        setErro(`Produto "${item.produto}" não encontrado.`)
+        return
+      }
+      if (prod.estoque < item.quantidade) {
+        setErro(
+          `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, solicitado ${item.quantidade}. Nenhuma venda foi registrada.`,
+        )
+        return
+      }
+    }
     const cliente = clientes.find((c) => c.id === clienteId)
     finalizandoRef.current = true
     try {
       const venda = registrarVenda({
         data: hoje,
         itens: carrinho.map((i) => ({
+          produtoId: i.produtoId,
           produto: i.produto,
           quantidade: i.quantidade,
           preco: i.preco,
@@ -174,6 +219,8 @@ export default function PDV() {
         clienteId: cliente?.id,
         profissional: profissional || undefined,
       })
+      // Baixa automática de estoque — uma movimentação por produto da venda
+      saidaPorVenda(venda.id, venda.data, venda.itens ?? [])
       setCarrinho([])
       setDescontoTexto('0')
       setClienteId('')
@@ -182,7 +229,9 @@ export default function PDV() {
       setProdutoSel('')
       setQtdTexto('1')
       setErro('')
-      setSucesso(`Venda de ${formatarBRL(venda.valorLiquido)} registrada no caixa.`)
+      setSucesso(
+        `Venda de ${formatarBRL(venda.valorLiquido)} registrada no caixa e estoque baixado.`,
+      )
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível finalizar a venda.')
     } finally {
@@ -246,9 +295,9 @@ export default function PDV() {
                     onChange={(e) => setProdutoSel(e.target.value)}
                   >
                     <option value="">Selecione um produto...</option>
-                    {produtosAtivos.map((p) => (
+                    {produtosVendaveis.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.nome} · {formatarBRL(p.preco)}
+                        {p.nome} · {formatarBRL(p.preco)} · estoque {p.estoque}
                       </option>
                     ))}
                   </select>
@@ -289,6 +338,9 @@ export default function PDV() {
                         <th className="px-2 py-2 font-semibold">Produto</th>
                         <th className="px-2 py-2 text-right font-semibold">
                           Qtd
+                        </th>
+                        <th className="px-2 py-2 text-right font-semibold">
+                          Estoque
                         </th>
                         <th className="px-2 py-2 text-right font-semibold">
                           Unitário
@@ -333,6 +385,9 @@ export default function PDV() {
                                 +
                               </button>
                             </div>
+                          </td>
+                          <td className="px-2 py-2 text-right text-[#8A8171]">
+                            {i.estoque}
                           </td>
                           <td className="px-2 py-2 text-right text-[#4A4436]">
                             {formatarBRL(i.preco)}

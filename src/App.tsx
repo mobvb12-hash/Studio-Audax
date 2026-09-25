@@ -5,6 +5,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
+import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
@@ -78,7 +79,19 @@ function Conteudo() {
 
   return (
     <AppLayout paginaAtual={pagina} onNavegar={setPagina}>
-      {pagina === 'painel' && <Dashboard onNovo={() => abrirNovo()} />}
+      {pagina === 'painel' && (
+        <Dashboard
+          onNovo={() => abrirNovo()}
+          onIrParaEstoque={() => {
+            try {
+              sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')
+            } catch {
+              // sessionStorage indisponível: tela abre sem o filtro
+            }
+            setPagina('estoque')
+          }}
+        />
+      )}
       {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
       {pagina === 'caixa' && <Caixa />}
       {pagina === 'clientes' && <Clientes />}
@@ -106,15 +119,17 @@ function App() {
     <ClientesProvider>
       <ProfissionaisProvider>
         <ProdutosProvider>
-          <ServicosProvider>
-            <AgendaProvider>
-              <CaixaProvider>
-                <ComissoesProvider>
-                  <Conteudo />
-                </ComissoesProvider>
-              </CaixaProvider>
-            </AgendaProvider>
-          </ServicosProvider>
+          <EstoqueProvider>
+            <ServicosProvider>
+              <AgendaProvider>
+                <CaixaProvider>
+                  <ComissoesProvider>
+                    <Conteudo />
+                  </ComissoesProvider>
+                </CaixaProvider>
+              </AgendaProvider>
+            </ServicosProvider>
+          </EstoqueProvider>
         </ProdutosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>

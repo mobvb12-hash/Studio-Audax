@@ -5,6 +5,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import Dashboard from './Dashboard'
@@ -60,16 +61,18 @@ describe('Dashboard ↔ Caixa — números idênticos', () => {
     render(
       <ClientesProvider>
         <ProfissionaisProvider>
-          <ServicosProvider>
-            <AgendaProvider>
-              <CaixaProvider>
-                <ComissoesProvider>
-                  <Semente />
-                  <Dashboard onNovo={() => undefined} />
-                </ComissoesProvider>
-              </CaixaProvider>
-            </AgendaProvider>
-          </ServicosProvider>
+          <ProdutosProvider>
+            <ServicosProvider>
+              <AgendaProvider>
+                <CaixaProvider>
+                  <ComissoesProvider>
+                    <Semente />
+                    <Dashboard onNovo={() => undefined} />
+                  </ComissoesProvider>
+                </CaixaProvider>
+              </AgendaProvider>
+            </ServicosProvider>
+          </ProdutosProvider>
         </ProfissionaisProvider>
       </ClientesProvider>,
     )

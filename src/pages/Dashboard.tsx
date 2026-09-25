@@ -8,6 +8,8 @@ import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import { periodoMes } from '@/modules/comissoes/periodo'
 import { linhasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
 import { useComissoes } from '@/modules/comissoes/store'
+import { produtosComEstoqueBaixo } from '@/modules/estoque/indicadores'
+import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL } from '@/lib/moeda'
 import Avatar from '@/components/Avatar'
@@ -69,11 +71,19 @@ function CaixaVazia({ texto }: { texto: string }) {
   )
 }
 
-export default function Dashboard({ onNovo }: { onNovo: () => void }) {
+export default function Dashboard({
+  onNovo,
+  onIrParaEstoque,
+}: {
+  onNovo: () => void
+  /** Navega para a tela de Produtos/Estoque já filtrada em estoque baixo */
+  onIrParaEstoque?: () => void
+}) {
   const { porData } = useAgenda()
   const { profissionais } = useProfissionais()
   const { lancamentos, resumoDoDia, diaFechado } = useCaixa()
   const { configDe } = useComissoes()
+  const { produtos } = useProdutos()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
 
@@ -100,6 +110,10 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
   ).comissao
 
   const resumoHoje = resumoDoDia(hojeISO())
+
+  // Estoque real: ativo e com atual <= mínimo (inclui zerados)
+  const estoqueBaixo = produtosComEstoqueBaixo(produtos)
+  const estoqueZerado = estoqueBaixo.filter((p) => p.estoque <= 0)
 
   const kpis = [
     {
@@ -270,8 +284,47 @@ export default function Dashboard({ onNovo }: { onNovo: () => void }) {
               </div>
             )}
           </Cartao>
-          <Cartao titulo="Estoque baixo" contador="0">
-            <CaixaVazia texto="Nenhum produto abaixo do mínimo." />
+          <Cartao
+            titulo="Estoque baixo"
+            contador={String(estoqueBaixo.length)}
+          >
+            {estoqueBaixo.length === 0 ? (
+              <CaixaVazia texto="Nenhum produto abaixo do mínimo." />
+            ) : (
+              <>
+                <ul className="divide-y divide-[#EFE7D3]">
+                  {estoqueBaixo.slice(0, 5).map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 py-2 text-sm"
+                    >
+                      <span className="truncate text-[#1C1A15]">{p.nome}</span>
+                      <span
+                        className={`shrink-0 font-semibold ${
+                          p.estoque <= 0
+                            ? 'text-red-700'
+                            : 'text-[#8A6A14]'
+                        }`}
+                      >
+                        {p.estoque} un.
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[11px] text-[#8A8171]">
+                  {estoqueZerado.length} com estoque zerado
+                </p>
+                {onIrParaEstoque && (
+                  <button
+                    type="button"
+                    onClick={onIrParaEstoque}
+                    className="mt-3 w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-medium text-[#4A4436] hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
+                  >
+                    Ver estoque →
+                  </button>
+                )}
+              </>
+            )}
           </Cartao>
           <Cartao
             titulo="Resumo de profissionais"

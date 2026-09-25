@@ -6,6 +6,8 @@
 import type { Lancamento } from '@/modules/caixa/types'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { FormaPagamento } from '@/modules/caixa/types'
+import { statusEstoque, type StatusEstoque } from '@/modules/estoque/indicadores'
+import type { Produto } from '@/modules/produtos/types'
 import { arredondar, dentroDoPeriodo } from '@/modules/comissoes/producao'
 import type { FechamentoComissao, Periodo } from '@/modules/comissoes/types'
 
@@ -351,6 +353,92 @@ export function clientesDoPeriodo(
     ticketMedio: linhas.length > 0 ? arredondar(totalGasto / linhas.length) : 0,
     linhas,
     temDados: linhas.length > 0 || novos > 0,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Produtos — vendas no período + situação atual do estoque            */
+/* ------------------------------------------------------------------ */
+
+export type ProdutoLinha = {
+  id: string
+  nome: string
+  categoria: string
+  qtdVendida: number
+  receita: number
+  estoqueAtual: number
+  status: StatusEstoque
+  ativo: boolean
+}
+
+export type ProdutosRelatorio = {
+  linhas: ProdutoLinha[]
+  qtdTotalVendida: number
+  receitaTotal: number
+  baixos: number
+  temDados: boolean
+}
+
+export function produtosDoPeriodo(
+  lancamentos: Lancamento[],
+  produtos: Produto[],
+  periodo: Periodo,
+): ProdutosRelatorio {
+  const vendas = receitasValidas(doPeriodo(lancamentos, periodo)).filter(
+    (l) => l.origem === 'produto',
+  )
+
+  // Vendas por produto: usa os itens quando existem (PDV), senão o
+  // lançamento inteiro (venda avulsa antiga).
+  const mapa = new Map<string, { qtd: number; receita: number }>()
+  function somar(chave: string | undefined, qtd: number, receita: number) {
+    if (!chave) return
+    const atual = mapa.get(chave) ?? { qtd: 0, receita: 0 }
+    atual.qtd += qtd
+    atual.receita += receita
+    mapa.set(chave, atual)
+  }
+  for (const l of vendas) {
+    if (l.itens && l.itens.length > 0) {
+      for (const item of l.itens) {
+        somar(
+          item.produtoId || normalizar(item.produto),
+          item.quantidade,
+          item.quantidade * item.preco,
+        )
+      }
+    } else {
+      somar(normalizar(l.produto ?? ''), l.quantidade ?? 0, l.valorLiquido)
+    }
+  }
+
+  const linhas = produtos
+    .map((p): ProdutoLinha => {
+      const v = mapa.get(p.id) ?? mapa.get(normalizar(p.nome)) ?? { qtd: 0, receita: 0 }
+      return {
+        id: p.id,
+        nome: p.nome,
+        categoria: p.categoria,
+        qtdVendida: v.qtd,
+        receita: arredondar(v.receita),
+        estoqueAtual: p.estoque,
+        status: statusEstoque(p),
+        ativo: p.ativo,
+      }
+    })
+    .sort(
+      (a, b) => b.qtdVendida - a.qtdVendida || a.nome.localeCompare(b.nome, 'pt-BR'),
+    )
+
+  const qtdTotalVendida = linhas.reduce((total, l) => total + l.qtdVendida, 0)
+  const receitaTotal = arredondar(linhas.reduce((total, l) => total + l.receita, 0))
+
+  return {
+    linhas,
+    qtdTotalVendida,
+    receitaTotal,
+    baixos: linhas.filter((l) => l.ativo && l.status !== 'normal').length,
+    temDados: linhas.length > 0,
   }
 }
 

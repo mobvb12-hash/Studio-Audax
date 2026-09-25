@@ -4,6 +4,8 @@ import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
 import { useComissoes } from '@/modules/comissoes/store'
 import { linhasDetalhadasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
+import { ROTULO_STATUS, type StatusEstoque } from '@/modules/estoque/indicadores'
+import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Periodo } from '@/modules/comissoes/types'
 import {
@@ -12,6 +14,7 @@ import {
   faturamento,
   fechamentosDoPeriodo,
   formasPagamento,
+  produtosDoPeriodo,
   resumoFinanceiro,
   servicosDoPeriodo,
 } from '@/modules/relatorios/calculos'
@@ -54,6 +57,12 @@ function Vazio({ texto }: { texto: string }) {
       {texto}
     </div>
   )
+}
+
+function classeStatus(status: StatusEstoque): string {
+  if (status === 'zerado') return 'text-red-700'
+  if (status === 'baixo') return 'text-[#8A6A14]'
+  return 'text-[#4A4436]'
 }
 
 function Secao({
@@ -153,6 +162,7 @@ export default function Relatorios() {
   const { lancamentos } = useCaixa()
   const { profissionais } = useProfissionais()
   const { clientes } = useClientes()
+  const { produtos } = useProdutos()
   const { configDe, fechamentos } = useComissoes()
 
   const [tipo, setTipo] = useState<TipoPeriodo>('mes')
@@ -191,6 +201,10 @@ export default function Relatorios() {
   const cli = useMemo(
     () => clientesDoPeriodo(lancamentos, clientes, periodo),
     [lancamentos, clientes, periodo],
+  )
+  const prods = useMemo(
+    () => produtosDoPeriodo(lancamentos, produtos, periodo),
+    [lancamentos, produtos, periodo],
   )
   const comisTotais = useMemo(() => totaisDoPeriodo(profLinhas), [profLinhas])
   const comisFech = useMemo(
@@ -518,6 +532,78 @@ export default function Relatorios() {
                 </table>
               </div>
             </div>
+          )}
+        </Secao>
+
+        {/* Produtos */}
+        <Secao titulo="Produtos">
+          {!prods.temDados ? (
+            <Vazio texto="Nenhum produto cadastrado." />
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
+                  Vendidos no período: {prods.qtdTotalVendida} un.
+                </span>
+                <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-3 py-1.5 text-xs font-medium text-[#8A6A14]">
+                  Receita de produtos: {formatarBRL(prods.receitaTotal)}
+                </span>
+                <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
+                  Estoque baixo/zerado: {prods.baixos}
+                </span>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                      <th className="px-3 py-2 font-semibold">Produto</th>
+                      <th className="px-3 py-2 font-semibold">Categoria</th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        Vendidos
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        Receita
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        Estoque atual
+                      </th>
+                      <th className="px-3 py-2 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EFE7D3]">
+                    {prods.linhas.map((p) => (
+                      <tr key={p.id} className={p.ativo ? '' : 'opacity-60'}>
+                        <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                          {p.nome}
+                          {!p.ativo && (
+                            <span className="ml-1.5 text-xs text-[#A99E85]">
+                              inativo
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-[#4A4436]">
+                          {p.categoria || '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[#4A4436]">
+                          {p.qtdVendida}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[#4A4436]">
+                          {formatarBRL(p.receita)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
+                          {p.estoqueAtual}
+                        </td>
+                        <td
+                          className={`px-3 py-2 font-medium ${classeStatus(p.status)}`}
+                        >
+                          {ROTULO_STATUS[p.status]}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </Secao>
 

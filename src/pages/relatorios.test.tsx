@@ -6,6 +6,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import {
   periodoMes,
@@ -33,16 +34,18 @@ function montar() {
   return render(
     <ClientesProvider>
       <ProfissionaisProvider>
-        <AgendaProvider>
-          <CaixaProvider>
-            <ComissoesProvider>
-              <Captura />
-              <div data-testid="relatorios">
-                <Relatorios />
-              </div>
-            </ComissoesProvider>
-          </CaixaProvider>
-        </AgendaProvider>
+        <ProdutosProvider>
+          <AgendaProvider>
+            <CaixaProvider>
+              <ComissoesProvider>
+                <Captura />
+                <div data-testid="relatorios">
+                  <Relatorios />
+                </div>
+              </ComissoesProvider>
+            </CaixaProvider>
+          </AgendaProvider>
+        </ProdutosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>,
   )

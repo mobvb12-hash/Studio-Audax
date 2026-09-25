@@ -6,6 +6,7 @@ import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
+import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider, useProdutos } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import PDV from './PDV'
@@ -34,26 +35,32 @@ function montar() {
     <ClientesProvider>
       <ProfissionaisProvider>
         <ProdutosProvider>
-          <AgendaProvider>
-            <CaixaProvider>
-              <ComissoesProvider>
-                <Captura />
-                <div data-testid="pdv">
-                  <PDV />
-                </div>
-              </ComissoesProvider>
-            </CaixaProvider>
-          </AgendaProvider>
+          <EstoqueProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <ComissoesProvider>
+                  <Captura />
+                  <div data-testid="pdv">
+                    <PDV />
+                  </div>
+                </ComissoesProvider>
+              </CaixaProvider>
+            </AgendaProvider>
+          </EstoqueProvider>
         </ProdutosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>,
   )
 }
 
-function criarProduto(nome: string, preco: number): string {
+function criarProduto(
+  nome: string,
+  preco: number,
+  estoque: number = 10,
+): string {
   let id = ''
   act(() => {
-    id = ctxProdutos.adicionar({ nome, preco }).id
+    id = ctxProdutos.adicionar({ nome, preco, estoque }).id
   })
   return id
 }
@@ -149,6 +156,7 @@ describe('PDV — venda completa', () => {
     expect(venda.profissional).toBe('Diego')
     expect(venda.itens).toHaveLength(1)
     expect(venda.itens?.[0]).toEqual({
+      produtoId: id,
       produto: 'Creme capilar',
       quantidade: 2,
       preco: 30,
@@ -277,16 +285,20 @@ describe('PDV — validações', () => {
     expect(ctxCaixa.lancamentos).toHaveLength(0)
   })
 
-  it('produto sem estoque não aparece: inativo sai da lista do PDV', () => {
+  it('produto sem estoque não aparece: inativo e zerado saem da lista do PDV', () => {
     montar()
     const ativo = criarProduto('Creme capilar', 30)
     const inativo = criarProduto('Pomada modeladora', 50)
+    criarProduto('Sérum seco', 20, 0)
     act(() => {
       ctxProdutos.alternarAtivo(inativo)
     })
     expect(screen.getByRole('option', { name: /Creme capilar/ })).toBeTruthy()
     expect(
       screen.queryByRole('option', { name: /Pomada modeladora/ }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('option', { name: /Sérum seco/ }),
     ).toBeNull()
     expect(
       screen.getByRole('option', { name: 'Selecione um produto...' }),

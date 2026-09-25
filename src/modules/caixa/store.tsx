@@ -375,6 +375,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         produto: nomes.join(', '),
         quantidade: qtdTotal,
         itens: input.itens.map((i) => ({
+          produtoId: i.produtoId,
           produto: i.produto.trim(),
           quantidade: i.quantidade,
           preco: arredondar(i.preco),
