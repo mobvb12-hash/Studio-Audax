@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
+import ConfirmarModal from '@/components/ConfirmarModal'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -10,11 +11,12 @@ export default function Profissionais() {
   const { agendamentos } = useAgenda()
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Profissional | null>(null)
+  const [excluindo, setExcluindo] = useState<Profissional | null>(null)
 
   const contagem = useMemo(() => {
     const mapa = new Map<string, number>()
     for (const ag of agendamentos) {
-      if (ag.status === 'cancelado') continue
+      if (ag.status === 'cancelado' || ag.status === 'nao_compareceu') continue
       mapa.set(ag.profissional, (mapa.get(ag.profissional) ?? 0) + 1)
     }
     return mapa
@@ -81,7 +83,7 @@ export default function Profissionais() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => remover(prof.id)}
+                  onClick={() => setExcluindo(prof)}
                   className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
                   aria-label={`Excluir ${prof.nome}`}
                 >
@@ -97,6 +99,20 @@ export default function Profissionais() {
         <ProfissionalFormModal
           profissional={editando}
           onFechar={() => setModalAberto(false)}
+        />
+      )}
+
+      {excluindo && (
+        <ConfirmarModal
+          titulo="Excluir profissional"
+          texto={`Excluir “${excluindo.nome}”? Os agendamentos e recebimentos já feitos são preservados no histórico.`}
+          rotuloConfirmar="Sim, excluir"
+          perigo
+          onConfirmar={() => {
+            remover(excluindo.id)
+            setExcluindo(null)
+          }}
+          onFechar={() => setExcluindo(null)}
         />
       )}
     </div>

@@ -157,6 +157,16 @@ describe('Caixa — produtos e despesas', () => {
         data: DIA,
         produto: 'Pomada',
         quantidade: 1,
+        preco: 0,
+        desconto: 0,
+        formaPagamento: 'dinheiro',
+      }),
+    ).toThrow(/preço/i)
+    expect(() =>
+      ctx.venderProduto({
+        data: DIA,
+        produto: 'Pomada',
+        quantidade: 1,
         preco: 10,
         desconto: 50,
         formaPagamento: 'dinheiro',

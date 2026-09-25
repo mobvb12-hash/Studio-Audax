@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
+import ConfirmarModal from '@/components/ConfirmarModal'
 import { formatarDataLonga } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useClientes } from '@/modules/clientes/store'
@@ -23,11 +24,12 @@ export default function Clientes() {
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [historicoDo, setHistoricoDo] = useState<Cliente | null>(null)
+  const [excluindo, setExcluindo] = useState<Cliente | null>(null)
 
   const historico = useMemo(() => {
     const mapa = new Map<string, { total: number; ultimo: string }>()
     for (const ag of agendamentos) {
-      if (ag.status === 'cancelado') continue
+      if (ag.status === 'cancelado' || ag.status === 'nao_compareceu') continue
       const chave = normalizar(ag.cliente)
       if (!chave) continue
       const atual = mapa.get(chave) ?? { total: 0, ultimo: '' }
@@ -39,6 +41,7 @@ export default function Clientes() {
   }, [agendamentos])
 
   const filtrados = useMemo(() => {
+    if (!busca.trim()) return clientes
     const termo = normalizar(busca)
     const digitos = busca.replace(/\D/g, '')
     return clientes.filter((cliente) => {
@@ -154,7 +157,7 @@ export default function Clientes() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => remover(cliente.id)}
+                    onClick={() => setExcluindo(cliente)}
                     className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
                     aria-label={`Excluir ${cliente.nome}`}
                   >
@@ -178,6 +181,20 @@ export default function Clientes() {
         <ClienteDetalheModal
           cliente={historicoDo}
           onFechar={() => setHistoricoDo(null)}
+        />
+      )}
+
+      {excluindo && (
+        <ConfirmarModal
+          titulo="Excluir cliente"
+          texto={`Excluir “${excluindo.nome}”? Os agendamentos e recebimentos já feitos do cliente são preservados no histórico.`}
+          rotuloConfirmar="Sim, excluir"
+          perigo
+          onConfirmar={() => {
+            remover(excluindo.id)
+            setExcluindo(null)
+          }}
+          onFechar={() => setExcluindo(null)}
         />
       )}
     </div>

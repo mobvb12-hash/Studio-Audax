@@ -98,6 +98,7 @@ function DetalheAgendamento({
   const duracao = duracaoDo(ag.servico)
   const bloqueado = ag.status === 'cancelado' || ag.status === 'nao_compareceu'
   const emAberto = ag.status === 'pendente' || ag.status === 'confirmado'
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
@@ -224,17 +225,38 @@ function DetalheAgendamento({
                   Cancelar
                 </button>
               )}
-              {!pago && (
+              {!pago && !confirmandoExclusao && (
                 <button
                   type="button"
-                  onClick={() => {
-                    remover(ag.id)
-                    onFechar()
-                  }}
+                  onClick={() => setConfirmandoExclusao(true)}
                   className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
                 >
                   Excluir
                 </button>
+              )}
+              {!pago && confirmandoExclusao && (
+                <>
+                  <span className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    Excluir este agendamento? Esta ação não pode ser desfeita.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      remover(ag.id)
+                      onFechar()
+                    }}
+                    className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                  >
+                    Sim, excluir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoExclusao(false)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium hover:bg-[#F3ECDA]"
+                  >
+                    Voltar
+                  </button>
+                </>
               )}
             </>
           )}

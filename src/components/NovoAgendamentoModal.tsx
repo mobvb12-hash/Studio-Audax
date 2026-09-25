@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { HORARIOS, hojeISO } from '@/modules/agenda/catalogo'
+import { verificarConflito } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
 import { useClientes } from '@/modules/clientes/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -68,15 +69,22 @@ export default function NovoAgendamentoModal({
       setErro('Cadastre um profissional no módulo Profissionais antes de agendar.')
       return
     }
-    const conflito = agendamentos.some(
-      (ag) =>
-        ag.data === data &&
-        ag.horario === horario &&
-        ag.profissional === profissional &&
-        ag.status !== 'cancelado',
+    const duracaoDo = (nome: string) =>
+      servicos.find((s) => s.nome === nome)?.duracaoMin ?? 30
+    const conflito = verificarConflito(
+      agendamentos,
+      {
+        data,
+        horario,
+        profissional,
+        duracaoMin: duracaoDo(servico),
+      },
+      duracaoDo,
     )
-    if (conflito) {
-      setErro('Este profissional já tem agendamento neste horário.')
+    if (conflito.conflito) {
+      setErro(
+        `Conflito: ${conflito.agendamento.cliente} ocupa ${conflito.agendamento.horario}–${conflito.fimExistente} com ${profissional} (duração de ${duracaoDo(conflito.agendamento.servico)} min).`,
+      )
       return
     }
     adicionar({

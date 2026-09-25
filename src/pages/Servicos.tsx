@@ -1,17 +1,16 @@
 import { useMemo, useState } from 'react'
+import ConfirmarModal from '@/components/ConfirmarModal'
 import ServicoFormModal from '@/components/ServicoFormModal'
 import { useServicos } from '@/modules/servicos/store'
 import type { Servico } from '@/modules/servicos/types'
-
-function formatarBRL(valor: number): string {
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
+import { formatarBRL } from '@/lib/moeda'
 
 export default function Servicos() {
   const { servicos, remover } = useServicos()
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Servico | null>(null)
+  const [excluindo, setExcluindo] = useState<Servico | null>(null)
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -98,7 +97,7 @@ export default function Servicos() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => remover(servico.id)}
+                  onClick={() => setExcluindo(servico)}
                   className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
                   aria-label={`Excluir ${servico.nome}`}
                 >
@@ -114,6 +113,20 @@ export default function Servicos() {
         <ServicoFormModal
           servico={editando}
           onFechar={() => setModalAberto(false)}
+        />
+      )}
+
+      {excluindo && (
+        <ConfirmarModal
+          titulo="Excluir serviço"
+          texto={`Excluir “${excluindo.nome}”? Agendamentos e pagamentos já feitos com este serviço são preservados.`}
+          rotuloConfirmar="Sim, excluir"
+          perigo
+          onConfirmar={() => {
+            remover(excluindo.id)
+            setExcluindo(null)
+          }}
+          onFechar={() => setExcluindo(null)}
         />
       )}
     </div>

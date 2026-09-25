@@ -277,8 +277,8 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       if (!Number.isInteger(input.quantidade) || input.quantidade < 1) {
         throw new Error('Quantidade deve ser um número inteiro maior que zero.')
       }
-      if (!Number.isFinite(input.preco) || input.preco < 0) {
-        throw new Error('Preço inválido.')
+      if (!Number.isFinite(input.preco) || input.preco <= 0) {
+        throw new Error('O preço deve ser maior que zero.')
       }
       const bruto = input.quantidade * input.preco
       if (!Number.isFinite(input.desconto) || input.desconto < 0) {

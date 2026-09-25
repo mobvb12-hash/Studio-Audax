@@ -34,7 +34,11 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
   const [desconto, setDesconto] = useState('0')
   const [forma, setForma] = useState<FormaPagamento>('dinheiro')
   const [observacao, setObservacao] = useState('')
-  const [erro, setErro] = useState('')
+  const [erro, setErro] = useState(() =>
+    diaFechado(agendamento.data)
+      ? `O caixa de ${agendamento.data} está fechado. Reabra o caixa (com motivo) para registrar.`
+      : '',
+  )
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
