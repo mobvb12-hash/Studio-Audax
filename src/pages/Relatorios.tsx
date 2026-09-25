@@ -1,17 +1,22 @@
 import { useMemo, useState } from 'react'
 import { formatarBRL } from '@/lib/moeda'
 import { useAgenda } from '@/modules/agenda/store'
+import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
+import { useClube } from '@/modules/clube/store'
 import { useComissoes } from '@/modules/comissoes/store'
-import { dentroDoPeriodo } from '@/modules/comissoes/producao'
 import { linhasDetalhadasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
+import { montarPerfis, resumoSegmentos } from '@/modules/crm/regras'
+import { SEGMENTOS_ORDEM, SEGMENTOS_ROTULO } from '@/modules/crm/types'
 import { ROTULO_STATUS, type StatusEstoque } from '@/modules/estoque/indicadores'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Periodo } from '@/modules/comissoes/types'
 import {
+  agendaDoPeriodo,
   clientesDoPeriodo,
+  clubeDoPeriodo,
   despesasDoPeriodo,
   faturamento,
   fechamentosDoPeriodo,
@@ -19,8 +24,10 @@ import {
   produtosDoPeriodo,
   resumoFinanceiro,
   servicosDoPeriodo,
+  variacaoPercentual,
 } from '@/modules/relatorios/calculos'
 import {
+  periodoAnterior,
   periodoHoje,
   periodoMes,
   periodoMesAnterior,
@@ -167,6 +174,7 @@ export default function Relatorios() {
   const { produtos } = useProdutos()
   const { configDe, fechamentos } = useComissoes()
   const { agendamentos } = useAgenda()
+  const { assinaturas, pagamentos } = useClube()
 
   const [tipo, setTipo] = useState<TipoPeriodo>('mes')
   const [custom, setCustom] = useState<Periodo>(() => periodoMes())
@@ -221,23 +229,43 @@ export default function Relatorios() {
 
   const temProducao = resumo.qtdAtendimentosPagos > 0
 
-  const agenda = useMemo(() => {
-    const lista = agendamentos.filter((ag) => dentroDoPeriodo(ag.data, periodo))
-    return {
-      total: lista.length,
-      emAberto: lista.filter(
-        (ag) => ag.status === 'pendente' || ag.status === 'confirmado',
-      ).length,
-      concluidos: lista.filter((ag) => ag.status === 'concluido').length,
-      cancelados: lista.filter((ag) => ag.status === 'cancelado').length,
-      naoCompareceu: lista.filter((ag) => ag.status === 'nao_compareceu')
-        .length,
-      remarcacoes: lista.reduce(
-        (total, ag) => total + (ag.remarcacoes?.length ?? 0),
-        0,
-      ),
-    }
-  }, [agendamentos, periodo])
+  const agenda = useMemo(
+    () => agendaDoPeriodo(agendamentos, periodo),
+    [agendamentos, periodo],
+  )
+
+  const estornados = useMemo(
+    () => new Set(lancamentos.filter((l) => l.estornado).map((l) => l.id)),
+    [lancamentos],
+  )
+
+  const clubeRel = useMemo(
+    () => clubeDoPeriodo(assinaturas, pagamentos, periodo, estornados, hojeISO()),
+    [assinaturas, pagamentos, periodo, estornados],
+  )
+
+  const perfisCrm = useMemo(
+    () => montarPerfis(clientes, agendamentos, lancamentos),
+    [clientes, agendamentos, lancamentos],
+  )
+  const resumoCrm = useMemo(
+    () => resumoSegmentos(perfisCrm),
+    [perfisCrm],
+  )
+
+  // Comparação só entra quando a janela anterior tem dados reais
+  const anterior = useMemo(() => periodoAnterior(periodo), [periodo])
+  const fatAnterior = useMemo(
+    () => faturamento(lancamentos, anterior),
+    [lancamentos, anterior],
+  )
+  const resumoAnterior = useMemo(
+    () => resumoFinanceiro(lancamentos, anterior),
+    [lancamentos, anterior],
+  )
+  const variacao = fatAnterior.temDados
+    ? variacaoPercentual(fat.liquido, fatAnterior.liquido)
+    : null
 
   function aplicarCustom(campo: 'inicio' | 'fim', valor: string) {
     if (!valor) return
@@ -386,6 +414,40 @@ export default function Relatorios() {
                   <BarraEvolucao dias={fat.evolucao} />
                 )}
               </div>
+            </div>
+          )}
+          {fat.temDados && fatAnterior.temDados && (
+            <div className="mt-4 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] p-3">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                Comparação com o período anterior
+              </p>
+              <p className="mt-1 text-xs text-[#8A8171]">
+                {rotuloPeriodo(anterior)}
+              </p>
+              <div className="mt-1">
+                <LinhaDetalhe
+                  rotulo="Receita líquida no anterior"
+                  valor={formatarBRL(fatAnterior.liquido)}
+                />
+                <LinhaDetalhe
+                  rotulo="Atendimentos pagos no anterior"
+                  valor={String(resumoAnterior.qtdAtendimentosPagos)}
+                />
+              </div>
+              {variacao !== null && (
+                <p
+                  className={`mt-2 text-sm font-semibold ${
+                    variacao > 0
+                      ? 'text-[#6B8E5A]'
+                      : variacao < 0
+                        ? 'text-red-700'
+                        : 'text-[#4A4436]'
+                  }`}
+                >
+                  Receita: {variacao > 0 ? '+' : ''}
+                  {variacao}% vs. anterior
+                </p>
+              )}
             </div>
           )}
         </Secao>
@@ -761,6 +823,58 @@ export default function Relatorios() {
           )}
         </Secao>
 
+        {/* Audax Club */}
+        <Secao titulo="Audax Club">
+          {!clubeRel.temDados ? (
+            <Vazio texto="Nenhuma assinatura do Audax Club." />
+          ) : (
+            <>
+              <div className="overflow-x-auto border-y border-[#E5DCC3]">
+                <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
+                  <CelulaKpi
+                    rotulo="Assinaturas ativas"
+                    valor={String(clubeRel.situacoes.ativas)}
+                  />
+                  <CelulaKpi
+                    rotulo="Próximas do vencimento"
+                    valor={String(clubeRel.situacoes.proximas)}
+                  />
+                  <CelulaKpi
+                    rotulo="Atrasadas"
+                    valor={String(clubeRel.situacoes.atrasadas)}
+                  />
+                  <CelulaKpi
+                    rotulo="Vencidas"
+                    valor={String(clubeRel.situacoes.vencidas)}
+                  />
+                  <CelulaKpi
+                    rotulo="Canceladas"
+                    valor={String(clubeRel.situacoes.canceladas)}
+                  />
+                  <CelulaKpi
+                    rotulo="Receita prevista/mês"
+                    valor={formatarBRL(clubeRel.receitaPrevista)}
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <LinhaDetalhe
+                  rotulo="Assinaturas cadastradas"
+                  valor={String(clubeRel.total)}
+                />
+                <LinhaDetalhe
+                  rotulo="Pagamentos no período"
+                  valor={`${clubeRel.pagamentos} · ${formatarBRL(clubeRel.pagamentosValor)}`}
+                />
+                <LinhaDetalhe
+                  rotulo="Receita de assinaturas no caixa"
+                  valor={formatarBRL(resumo.receitaClube)}
+                />
+              </div>
+            </>
+          )}
+        </Secao>
+
         {/* Comissões do período */}
         <Secao titulo="Comissões do período">
           {!temProducao && comisFech.lista.length === 0 ? (
@@ -877,6 +991,51 @@ export default function Relatorios() {
               />
             </div>
           </div>
+        </Secao>
+      </div>
+
+      {/* CRM — segmentos atuais (independem do período) */}
+      <div className="mt-4">
+        <Secao titulo="CRM">
+          {perfisCrm.length === 0 ? (
+            <Vazio texto="Nenhum cliente cadastrado." />
+          ) : (
+            <>
+              <p className="text-[13px] text-[#4A4436]">
+                Classificação atual dos clientes — não muda com o período
+                selecionado.
+              </p>
+              <div className="mt-3 overflow-x-auto border-y border-[#E5DCC3]">
+                <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
+                  {SEGMENTOS_ORDEM.map((segmento) => (
+                    <CelulaKpi
+                      key={segmento}
+                      rotulo={`${SEGMENTOS_ROTULO[segmento]} (CRM)`}
+                      valor={String(resumoCrm[segmento])}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4">
+                <LinhaDetalhe
+                  rotulo="Clientes analisados (CRM)"
+                  valor={String(perfisCrm.length)}
+                />
+                <LinhaDetalhe
+                  rotulo="Atendimentos realizados (CRM)"
+                  valor={String(
+                    perfisCrm.reduce((t, p) => t + p.totalAtendimentos, 0),
+                  )}
+                />
+                <LinhaDetalhe
+                  rotulo="Total gasto pelos clientes (CRM)"
+                  valor={formatarBRL(
+                    perfisCrm.reduce((t, p) => t + p.totalGasto, 0),
+                  )}
+                />
+              </div>
+            </>
+          )}
         </Secao>
       </div>
     </div>

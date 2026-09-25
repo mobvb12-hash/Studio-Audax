@@ -158,10 +158,12 @@ function envRelatorios() {
           <AgendaProvider>
             <CaixaProvider>
               <ComissoesProvider>
-                <Captura />
-                <div data-testid="relatorios">
-                  <Relatorios />
-                </div>
+                <ClubeProvider>
+                  <Captura />
+                  <div data-testid="relatorios">
+                    <Relatorios />
+                  </div>
+                </ClubeProvider>
               </ComissoesProvider>
             </CaixaProvider>
           </AgendaProvider>

@@ -94,6 +94,7 @@ function Conteudo() {
       {pagina === 'painel' && (
         <Dashboard
           onNovo={() => abrirNovo()}
+          onIrPara={setPagina}
           onIrParaEstoque={() => {
             try {
               sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')

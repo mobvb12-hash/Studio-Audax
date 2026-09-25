@@ -30,3 +30,19 @@ export function periodoMesAnterior(): Periodo {
   const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0)
   return { inicio: iso(inicio), fim: iso(fim) }
 }
+
+/**
+ * Janela de mesmo tamanho imediatamente anterior ao período informado.
+ * Usada só para comparação — quando a janela anterior não tem dados,
+ * a comparação fica oculta.
+ */
+export function periodoAnterior(periodo: Periodo): Periodo {
+  const inicio = new Date(`${periodo.inicio}T12:00:00`)
+  const fim = new Date(`${periodo.fim}T12:00:00`)
+  const dias = Math.round((fim.getTime() - inicio.getTime()) / 86400000) + 1
+  const novoFim = new Date(inicio)
+  novoFim.setDate(novoFim.getDate() - 1)
+  const novoInicio = new Date(novoFim)
+  novoInicio.setDate(novoInicio.getDate() - (dias - 1))
+  return { inicio: iso(novoInicio), fim: iso(novoFim) }
+}

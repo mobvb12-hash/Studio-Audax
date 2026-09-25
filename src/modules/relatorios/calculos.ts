@@ -6,6 +6,12 @@
 import type { Lancamento } from '@/modules/caixa/types'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { FormaPagamento } from '@/modules/caixa/types'
+import type { Agendamento } from '@/modules/agenda/types'
+import type {
+  AssinaturaClube,
+  PagamentoClube,
+} from '@/modules/clube/types'
+import { situacoesAssinaturas, type SituacoesClube } from '@/modules/clube/regras'
 import { statusEstoque, type StatusEstoque } from '@/modules/estoque/indicadores'
 import type { Produto } from '@/modules/produtos/types'
 import { arredondar, dentroDoPeriodo } from '@/modules/comissoes/producao'
@@ -474,6 +480,103 @@ export function fechamentosDoPeriodo(
     lista,
     totalFechado: arredondar(lista.reduce((t, f) => t + f.comissao, 0)),
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Agenda — contagem de status no período                              */
+/* ------------------------------------------------------------------ */
+
+export type AgendaPeriodo = {
+  total: number
+  emAberto: number
+  concluidos: number
+  cancelados: number
+  naoCompareceu: number
+  remarcacoes: number
+  temDados: boolean
+}
+
+export function agendaDoPeriodo(
+  agendamentos: Agendamento[],
+  periodo: Periodo,
+): AgendaPeriodo {
+  const lista = agendamentos.filter((ag) => dentroDoPeriodo(ag.data, periodo))
+  return {
+    total: lista.length,
+    emAberto: lista.filter(
+      (ag) => ag.status === 'pendente' || ag.status === 'confirmado',
+    ).length,
+    concluidos: lista.filter((ag) => ag.status === 'concluido').length,
+    cancelados: lista.filter((ag) => ag.status === 'cancelado').length,
+    naoCompareceu: lista.filter((ag) => ag.status === 'nao_compareceu').length,
+    remarcacoes: lista.reduce(
+      (total, ag) => total + (ag.remarcacoes?.length ?? 0),
+      0,
+    ),
+    temDados: lista.length > 0,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Audax Club — assinaturas e pagamentos no período                    */
+/* ------------------------------------------------------------------ */
+
+export type ClubePeriodo = {
+  total: number
+  situacoes: SituacoesClube
+  pagamentos: number
+  pagamentosValor: number
+  receitaPrevista: number
+  temDados: boolean
+}
+
+/**
+ * Pagamentos estornados no Caixa ficam fora — mesmo critério de
+ * pagamentosNoMes/clube. A receita exibida no relatório continua sendo a do
+ * Caixa (resumo.receitaClube); aqui só contamos os registros do Clube.
+ */
+export function clubeDoPeriodo(
+  assinaturas: AssinaturaClube[],
+  pagamentos: PagamentoClube[],
+  periodo: Periodo,
+  estornados: Set<string>,
+  hoje: string,
+): ClubePeriodo {
+  const doPeriodoLista = pagamentos.filter(
+    (p) =>
+      dentroDoPeriodo(p.data, periodo) &&
+      (!p.caixaLancamentoId || !estornados.has(p.caixaLancamentoId)),
+  )
+  const receitaPrevista = assinaturas
+    .filter((a) => !a.cancelada)
+    .reduce((soma, a) => soma + a.valorMensal, 0)
+
+  return {
+    total: assinaturas.length,
+    situacoes: situacoesAssinaturas(assinaturas, hoje),
+    pagamentos: doPeriodoLista.length,
+    pagamentosValor: arredondar(
+      doPeriodoLista.reduce((soma, p) => soma + p.valor, 0),
+    ),
+    receitaPrevista: arredondar(receitaPrevista),
+    temDados: assinaturas.length > 0 || doPeriodoLista.length > 0,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Comparação entre períodos                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Variação percentual (atual vs. anterior). null quando o período anterior
+ * não tem base para comparação (zero) — nesse caso a UI não mostra %.
+ */
+export function variacaoPercentual(
+  atual: number,
+  anterior: number,
+): number | null {
+  if (!Number.isFinite(anterior) || anterior === 0) return null
+  return Math.round(((atual - anterior) / Math.abs(anterior)) * 1000) / 10
 }
 
 function normalizar(texto: string): string {

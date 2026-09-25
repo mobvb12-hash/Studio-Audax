@@ -248,3 +248,64 @@ export function validarProposta(
 export function duracaoBase(servico: string): number {
   return SERVICOS.find((s) => s.nome === servico)?.duracaoMin ?? 30
 }
+
+/* ------------------------------------------------------------------ */
+/* Disponibilidade — horários livres de um dia                         */
+/* ------------------------------------------------------------------ */
+
+export type Disponibilidade = {
+  /** Slots do expediente (fora do almoço) com ao menos 1 profissional livre */
+  horarios: string[]
+  /** Total de vagas somando profissionais livres por slot */
+  vagas: number
+}
+
+/**
+ * Horários disponíveis de um dia: slots do expediente sem almoço onde
+ * pelo menos um profissional está livre (sem agendamento que ocupe o slot
+ * e sem bloqueio cobrindo). Cancelados e não comparecidos não ocupam.
+ * Só usa dados reais — sem metas ou estimativas.
+ */
+export function horariosDisponiveis(
+  data: string,
+  expediente: Expediente,
+  bloqueios: Bloqueio[],
+  agendamentosDoDia: Agendamento[],
+  profissionais: string[],
+  duracaoDo: (servico: string) => number,
+): Disponibilidade {
+  const horarios: string[] = []
+  let vagas = 0
+  if (profissionais.length === 0) return { horarios, vagas }
+
+  for (const slot of slotsDoExpediente(expediente)) {
+    if (slot.intervalo) continue
+    const slotInicio = paraMinutos(slot.hora)
+    const slotFim = slotInicio + 30
+
+    const livres = profissionais.filter((profissional) => {
+      const ocupado = agendamentosDoDia.some((ag) => {
+        if (ag.profissional !== profissional) return false
+        if (ag.status === 'cancelado' || ag.status === 'nao_compareceu')
+          return false
+        const inicio = paraMinutos(ag.horario)
+        const fim =
+          inicio + Math.max(5, ag.duracaoMin ?? duracaoDo(ag.servico))
+        return inicio < slotFim && slotInicio < fim
+      })
+      if (ocupado) return false
+      return !bloqueioCobre(bloqueios, {
+        data,
+        horario: slot.hora,
+        duracaoMin: 30,
+        profissional,
+      })
+    })
+
+    if (livres.length > 0) {
+      horarios.push(slot.hora)
+      vagas += livres.length
+    }
+  }
+  return { horarios, vagas }
+}

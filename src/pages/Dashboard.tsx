@@ -1,6 +1,7 @@
 // Painel — layout igual ao print, agora ligado à agenda real (localStorage).
 // Financeiro/estoque/profissionais ligados aos seus módulos; Audax Club real.
 import { hojeISO } from '@/modules/agenda/catalogo'
+import { duracaoBase, horariosDisponiveis } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
@@ -15,6 +16,16 @@ import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL } from '@/lib/moeda'
 import Avatar from '@/components/Avatar'
+import type { PaginaId } from '@/layouts/AppLayout'
+
+const ACESSOS: { id: PaginaId; rotulo: string }[] = [
+  { id: 'agenda', rotulo: 'Agenda' },
+  { id: 'caixa', rotulo: 'Caixa' },
+  { id: 'comissoes', rotulo: 'Comissões' },
+  { id: 'clube', rotulo: 'Clube de assinaturas' },
+  { id: 'relatorios', rotulo: 'Relatórios' },
+  { id: 'estoque', rotulo: 'Produtos / Estoque' },
+]
 
 function dataHoje(): string {
   const texto = new Date().toLocaleDateString('pt-BR', {
@@ -76,12 +87,15 @@ function CaixaVazia({ texto }: { texto: string }) {
 export default function Dashboard({
   onNovo,
   onIrParaEstoque,
+  onIrPara,
 }: {
   onNovo: () => void
   /** Navega para a tela de Produtos/Estoque já filtrada em estoque baixo */
   onIrParaEstoque?: () => void
+  /** Navegação rápida para os módulos de gestão */
+  onIrPara?: (pagina: PaginaId) => void
 }) {
-  const { porData } = useAgenda()
+  const { porData, expediente, bloqueios } = useAgenda()
   const { profissionais } = useProfissionais()
   const { lancamentos, resumoDoDia, diaFechado } = useCaixa()
   const { configDe } = useComissoes()
@@ -89,6 +103,16 @@ export default function Dashboard({
   const { assinaturas, pagamentos } = useClube()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
+
+  // Alerta real de horários livres hoje (expediente − agendamentos − bloqueios)
+  const disponibilidade = horariosDisponiveis(
+    hojeISO(),
+    expediente,
+    bloqueios,
+    agendaHoje,
+    profissionais.map((p) => p.nome),
+    duracaoBase,
+  )
 
   const mesAtual = hojeISO().slice(0, 7)
   const doMes = lancamentos.filter(
@@ -195,6 +219,24 @@ export default function Dashboard({
         </div>
       </div>
 
+      {onIrPara && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            Acessos rápidos
+          </span>
+          {ACESSOS.map((acesso) => (
+            <button
+              key={acesso.id}
+              type="button"
+              onClick={() => onIrPara(acesso.id)}
+              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm font-medium text-[#4A4436] transition-colors hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
+            >
+              {acesso.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-4">
           <Cartao titulo="Agenda de hoje" contador={String(totalHoje)}>
@@ -224,6 +266,20 @@ export default function Dashboard({
                 ))}
               </ul>
             )}
+            <div className="mt-3 flex items-center justify-between border-t border-[#E9DDC0] pt-3 text-sm">
+              <span className="font-medium text-[#1C1A15]">
+                Horários disponíveis hoje
+              </span>
+              <span className="font-semibold text-[#8A6A14]">
+                {disponibilidade.horarios.length} horário(s) ·{' '}
+                {disponibilidade.vagas} vaga(s)
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-[#8A8171]">
+              {disponibilidade.horarios.length === 0
+                ? 'Sem vagas no expediente de hoje.'
+                : `Próximos: ${disponibilidade.horarios.slice(0, 4).join(', ')}`}
+            </p>
           </Cartao>
           <Cartao titulo="Fila de espera agora" contador="0">
             <CaixaVazia texto="Ninguém na fila." />

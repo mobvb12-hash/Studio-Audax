@@ -5,6 +5,7 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
@@ -41,10 +42,12 @@ function montar() {
           <AgendaProvider>
             <CaixaProvider>
               <ComissoesProvider>
-                <Captura />
-                <div data-testid="relatorios">
-                  <Relatorios />
-                </div>
+                <ClubeProvider>
+                  <Captura />
+                  <div data-testid="relatorios">
+                    <Relatorios />
+                  </div>
+                </ClubeProvider>
               </ComissoesProvider>
             </CaixaProvider>
           </AgendaProvider>
