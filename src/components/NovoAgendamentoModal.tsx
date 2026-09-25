@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { HORARIOS, hojeISO } from '@/modules/agenda/catalogo'
+import { useEffect, useMemo, useState } from 'react'
+import { hojeISO } from '@/modules/agenda/catalogo'
+import { slotsDoExpediente } from '@/modules/agenda/regras'
 import { verificarConflito } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
 import { useClientes } from '@/modules/clientes/store'
@@ -29,7 +30,7 @@ export default function NovoAgendamentoModal({
   profissionalInicial,
   onFechar,
 }: Props) {
-  const { adicionar, agendamentos } = useAgenda()
+  const { adicionar, agendamentos, expediente } = useAgenda()
   const { clientes, porNome } = useClientes()
   const { servicos } = useServicos()
   const { profissionais } = useProfissionais()
@@ -45,6 +46,14 @@ export default function NovoAgendamentoModal({
   const [horario, setHorario] = useState(() => horarioInicial ?? '14:00')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
+
+  const horarios = useMemo(() => {
+    const slots = slotsDoExpediente(expediente).filter((s) => !s.intervalo)
+    if (horarioInicial && !slots.some((s) => s.hora === horarioInicial)) {
+      return [{ hora: horarioInicial, intervalo: false }, ...slots]
+    }
+    return slots
+  }, [expediente, horarioInicial])
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -108,15 +117,21 @@ export default function NovoAgendamentoModal({
       )
       return
     }
-    adicionar({
-      cliente,
-      telefone,
-      servico,
-      profissional,
-      data,
-      horario,
-      observacao,
-    })
+    try {
+      adicionar({
+        cliente,
+        telefone,
+        servico,
+        profissional,
+        data,
+        horario,
+        observacao,
+        duracaoMin: duracaoDo(servico),
+      })
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível salvar.')
+      return
+    }
     onFechar()
   }
 
@@ -243,18 +258,18 @@ export default function NovoAgendamentoModal({
               Horário *
             </label>
             <div className="flex flex-wrap gap-1.5">
-              {HORARIOS.map((h) => (
+              {horarios.map((h) => (
                 <button
-                  key={h}
+                  key={h.hora}
                   type="button"
-                  onClick={() => setHorario(h)}
+                  onClick={() => setHorario(h.hora)}
                   className={`rounded-md border px-2.5 py-1.5 text-[13px] font-medium ${
-                    horario === h
+                    horario === h.hora
                       ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
                       : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
                   }`}
                 >
-                  {h}
+                  {h.hora}
                 </button>
               ))}
             </div>

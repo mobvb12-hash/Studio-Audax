@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AgendaProvider, useAgenda } from './store'
@@ -188,5 +189,339 @@ describe('Agenda — store', () => {
 
     fireEvent.click(screen.getByText('renomear-profissional'))
     expect(lerLista()[0].profissional).toBe('Audax Barbearia')
+  })
+})
+
+const DIA = '2026-09-25'
+
+function TelaExtra() {
+  const {
+    agendamentos,
+    bloqueios,
+    expediente,
+    adicionar,
+    mudarStatus,
+    remarcar,
+    salvarExpediente,
+    criarBloqueio,
+    removerBloqueio,
+    renomearProfissional,
+  } = useAgenda()
+  const [saida, setSaida] = useState('')
+
+  function tentar(rotulo: string, fn: () => unknown) {
+    try {
+      fn()
+      setSaida(`${rotulo}:ok`)
+    } catch (e) {
+      setSaida(`${rotulo}:${e instanceof Error ? e.message : 'erro'}`)
+    }
+  }
+
+  const criar = (horario: string, cliente: string) =>
+    adicionar({
+      cliente,
+      telefone: '',
+      servico: 'Corte Degradê',
+      profissional: 'Audax',
+      data: DIA,
+      horario,
+      observacao: '',
+      duracaoMin: 40,
+    })
+
+  return (
+    <div>
+      <output data-testid="saida">{saida}</output>
+      <output data-testid="lista">{JSON.stringify(agendamentos)}</output>
+      <output data-testid="blks">{JSON.stringify(bloqueios)}</output>
+      <output data-testid="exp">{JSON.stringify(expediente)}</output>
+      <button
+        type="button"
+        onClick={() => tentar('fora', () => criar('07:00', 'Fora'))}
+      >
+        criar-fora
+      </button>
+      <button
+        type="button"
+        onClick={() => tentar('almoco', () => criar('12:00', 'Almoço'))}
+      >
+        criar-almoco
+      </button>
+      <button
+        type="button"
+        onClick={() => tentar('livre', () => criar('10:00', 'Ana Souza'))}
+      >
+        criar-livre
+      </button>
+      <button
+        type="button"
+        onClick={() => tentar('conflito', () => criar('10:00', 'Bruno Dias'))}
+      >
+        criar-conflito
+      </button>
+      <button
+        type="button"
+        onClick={() => tentar('criar-11', () => criar('11:00', 'Carla Lima'))}
+      >
+        criar-11
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (agendamentos[0]) mudarStatus(agendamentos[0].id, 'cancelado')
+        }}
+      >
+        cancelar-primeiro
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('remarcar', () =>
+            remarcar(agendamentos[0].id, {
+              data: DIA,
+              horario: '11:00',
+              profissional: 'Audax',
+            }),
+          )
+        }
+      >
+        remarcar-11
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('remarcar-ocupado', () =>
+            remarcar(agendamentos[0].id, {
+              data: DIA,
+              horario: '11:00',
+              profissional: 'Audax',
+            }),
+          )
+        }
+      >
+        remarcar-para-11
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('expediente', () =>
+            salvarExpediente({
+              inicio: '10:00',
+              fim: '09:00',
+              almocoInicio: '12:00',
+              almocoFim: '13:00',
+            }),
+          )
+        }
+      >
+        salvar-expediente-invalido
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('expediente', () =>
+            salvarExpediente({
+              inicio: '09:00',
+              fim: '17:00',
+              almocoInicio: '13:00',
+              almocoFim: '14:00',
+            }),
+          )
+        }
+      >
+        salvar-expediente
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('bloqueio', () =>
+            criarBloqueio({
+              profissional: 'Audax',
+              data: DIA,
+              inicio: '15:00',
+              fim: '17:00',
+              tipo: 'folga',
+              motivo: '',
+            }),
+          )
+        }
+      >
+        criar-bloqueio
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('bloqueio', () =>
+            criarBloqueio({
+              profissional: 'Audax',
+              data: DIA,
+              inicio: '15:00',
+              fim: '17:00',
+              tipo: 'outro',
+              motivo: '',
+            }),
+          )
+        }
+      >
+        criar-bloqueio-outro-sem-motivo
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (bloqueios[0]) removerBloqueio(bloqueios[0].id)
+        }}
+      >
+        remover-bloqueio
+      </button>
+      <button
+        type="button"
+        onClick={() => renomearProfissional('Audax', 'Barbudo')}
+      >
+        renomear-pro
+      </button>
+    </div>
+  )
+}
+
+function montarExtra() {
+  return render(
+    <AgendaProvider>
+      <TelaExtra />
+    </AgendaProvider>,
+  )
+}
+
+function lerExtra(): { lista: Agendamento[]; blks: unknown[]; exp: unknown } {
+  return {
+    lista: JSON.parse(screen.getByTestId('lista').textContent ?? '[]'),
+    blks: JSON.parse(screen.getByTestId('blks').textContent ?? '[]'),
+    exp: JSON.parse(screen.getByTestId('exp').textContent ?? '{}'),
+  }
+}
+
+describe('Agenda — validação de criação (expediente, almoço, conflito)', () => {
+  it('bloqueia fora do expediente e horário de almoço', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-fora'))
+    expect(screen.getByTestId('saida').textContent).toContain(
+      'fora do expediente',
+    )
+    fireEvent.click(screen.getByText('criar-almoco'))
+    expect(screen.getByTestId('saida').textContent).toContain('almoço')
+    expect(lerExtra().lista).toHaveLength(0)
+  })
+
+  it('bloqueia conflito no mesmo horário e profissional', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre'))
+    expect(screen.getByTestId('saida').textContent).toContain('livre:ok')
+    fireEvent.click(screen.getByText('criar-conflito'))
+    expect(screen.getByTestId('saida').textContent).toContain('Conflito:')
+    expect(lerExtra().lista).toHaveLength(1)
+  })
+
+  it('cancelar libera o horário para novo agendamento', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre'))
+    fireEvent.click(screen.getByText('cancelar-primeiro'))
+    fireEvent.click(screen.getByText('criar-conflito'))
+    expect(screen.getByTestId('saida').textContent).toContain('conflito:ok')
+    const lista = lerExtra().lista
+    expect(lista).toHaveLength(2)
+    expect(lista.filter((a) => a.status === 'cancelado')).toHaveLength(1)
+  })
+})
+
+describe('Agenda — bloqueios de agenda', () => {
+  it('cria bloqueio e grava no localStorage', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-bloqueio'))
+    expect(screen.getByTestId('saida').textContent).toContain('bloqueio:ok')
+    expect(lerExtra().blks).toHaveLength(1)
+
+    const noStorage = JSON.parse(
+      localStorage.getItem('studio-audax:bloqueios:v1') ?? '[]',
+    )
+    expect(noStorage).toHaveLength(1)
+    expect(noStorage[0].tipo).toBe('folga')
+    expect(noStorage[0].profissional).toBe('Audax')
+  })
+
+  it('renomear profissional propaga para os bloqueios e remover limpa', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-bloqueio'))
+    fireEvent.click(screen.getByText('renomear-pro'))
+    expect(lerExtra().blks[0]).toMatchObject({ profissional: 'Barbudo' })
+
+    fireEvent.click(screen.getByText('remover-bloqueio'))
+    expect(lerExtra().blks).toHaveLength(0)
+  })
+
+  it('bloqueio inválido lança erro', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-bloqueio-outro-sem-motivo'))
+    expect(screen.getByTestId('saida').textContent).toContain('motivo')
+    expect(lerExtra().blks).toHaveLength(0)
+  })
+})
+
+describe('Agenda — expediente configurável', () => {
+  it('valida e persiste o expediente', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('salvar-expediente-invalido'))
+    expect(screen.getByTestId('saida').textContent).toContain(
+      'depois do início',
+    )
+    expect(lerExtra().exp).toMatchObject({ inicio: '08:00' })
+
+    fireEvent.click(screen.getByText('salvar-expediente'))
+    expect(screen.getByTestId('saida').textContent).toContain('expediente:ok')
+    expect(lerExtra().exp).toMatchObject({
+      inicio: '09:00',
+      fim: '17:00',
+      almocoInicio: '13:00',
+      almocoFim: '14:00',
+    })
+    const noStorage = JSON.parse(
+      localStorage.getItem('studio-audax:expediente:v1') ?? '{}',
+    )
+    expect(noStorage).toMatchObject({ inicio: '09:00' })
+  })
+})
+
+describe('Agenda — remarcação', () => {
+  it('move mantendo id e status e registra o histórico', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre'))
+    const antes = lerExtra().lista[0]
+    expect(antes.horario).toBe('10:00')
+
+    fireEvent.click(screen.getByText('remarcar-11'))
+    expect(screen.getByTestId('saida').textContent).toContain('remarcar:ok')
+
+    const depois = lerExtra().lista
+    expect(depois).toHaveLength(1)
+    expect(depois[0].id).toBe(antes.id)
+    expect(depois[0].status).toBe('pendente')
+    expect(depois[0].horario).toBe('11:00')
+    expect(depois[0].remarcacoes).toHaveLength(1)
+    expect(depois[0].remarcacoes?.[0].de).toMatchObject({
+      data: DIA,
+      horario: '10:00',
+      profissional: 'Audax',
+    })
+  })
+
+  it('recusa remarcação para horário ocupado', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre'))
+    fireEvent.click(screen.getByText('criar-11'))
+    const id = lerExtra().lista[0].id
+    expect(lerExtra().lista[0].horario).toBe('10:00')
+
+    fireEvent.click(screen.getByText('remarcar-para-11'))
+    expect(screen.getByTestId('saida').textContent).toContain('Conflito:')
+    expect(lerExtra().lista.find((a) => a.id === id)?.horario).toBe('10:00')
   })
 })

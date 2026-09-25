@@ -63,3 +63,21 @@ export function formatarDataLonga(dataISO: string): string {
   })
   return texto.charAt(0).toUpperCase() + texto.slice(1)
 }
+
+/** Data curta dd/mm da semana (segunda-feira como início) */
+export function formatarDataCurta(dataISO: string): string {
+  const [, mes, dia] = dataISO.split('-')
+  return `${dia}/${mes}`
+}
+
+/** Segunda-feira da semana que contém a data informada */
+export function inicioSemana(dataISO: string): string {
+  const [ano, mes, dia] = dataISO.split('-').map(Number)
+  const base = new Date(ano, mes - 1, dia)
+  const diaSemana = (base.getDay() + 6) % 7 // 0 = segunda
+  base.setDate(base.getDate() - diaSemana)
+  const a = base.getFullYear()
+  const m = String(base.getMonth() + 1).padStart(2, '0')
+  const d = String(base.getDate()).padStart(2, '0')
+  return `${a}-${m}-${d}`
+}

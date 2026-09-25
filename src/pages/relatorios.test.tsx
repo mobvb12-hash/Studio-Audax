@@ -2,7 +2,7 @@ import { act, useEffect } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { hojeISO } from '@/modules/agenda/catalogo'
-import { AgendaProvider } from '@/modules/agenda/store'
+import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
@@ -17,15 +17,18 @@ import Relatorios from './Relatorios'
 let ctxCaixa: ReturnType<typeof useCaixa>
 let ctxClientes: ReturnType<typeof useClientes>
 let ctxComissoes: ReturnType<typeof useComissoes>
+let ctxAgenda: ReturnType<typeof useAgenda>
 
 function Captura() {
   const caixa = useCaixa()
   const clientes = useClientes()
   const comissoes = useComissoes()
+  const agenda = useAgenda()
   useEffect(() => {
     ctxCaixa = caixa
     ctxClientes = clientes
     ctxComissoes = comissoes
+    ctxAgenda = agenda
   })
   return null
 }
@@ -700,5 +703,48 @@ describe('Relatórios — estado vazio', () => {
     ).toBeTruthy()
     expect(textoRelatorio()).not.toMatch(/NaN|Infinity/)
     expect(textoRelatorio()).not.toContain('undefined')
+  })
+})
+
+describe('Relatórios — agendamentos do período', () => {
+  it('conta total, status e remarcações do filtro ativo', () => {
+    montar() // período padrão: mês atual
+
+    act(() => {
+      ctxAgenda.adicionar({
+        cliente: 'Ana Souza',
+        telefone: '',
+        servico: 'Corte Degradê',
+        profissional: 'Audax',
+        data: hojeISO(),
+        horario: '10:00',
+        observacao: '',
+      })
+      ctxAgenda.adicionar({
+        cliente: 'Bruno Dias',
+        telefone: '',
+        servico: 'Barba',
+        profissional: 'Diego',
+        data: hojeISO(),
+        horario: '11:00',
+        observacao: '',
+      })
+    })
+    act(() => {
+      ctxAgenda.mudarStatus(ctxAgenda.agendamentos[0].id, 'concluido')
+      ctxAgenda.mudarStatus(ctxAgenda.agendamentos[1].id, 'cancelado')
+      ctxAgenda.remarcar(ctxAgenda.agendamentos[0].id, {
+        data: hojeISO(),
+        horario: '14:00',
+        profissional: 'Audax',
+      })
+    })
+
+    expect(celulaKpi('Agendamentos')).toBe('2')
+    expect(celulaKpi('Em aberto')).toBe('0')
+    expect(celulaKpi('Concluídos')).toBe('1')
+    expect(celulaKpi('Cancelados')).toBe('1')
+    expect(celulaKpi('Não compareceu')).toBe('0')
+    expect(celulaKpi('Remarcações')).toBe('1')
   })
 })

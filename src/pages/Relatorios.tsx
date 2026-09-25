@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { formatarBRL } from '@/lib/moeda'
+import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
 import { useComissoes } from '@/modules/comissoes/store'
+import { dentroDoPeriodo } from '@/modules/comissoes/producao'
 import { linhasDetalhadasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
 import { ROTULO_STATUS, type StatusEstoque } from '@/modules/estoque/indicadores'
 import { useProdutos } from '@/modules/produtos/store'
@@ -164,6 +166,7 @@ export default function Relatorios() {
   const { clientes } = useClientes()
   const { produtos } = useProdutos()
   const { configDe, fechamentos } = useComissoes()
+  const { agendamentos } = useAgenda()
 
   const [tipo, setTipo] = useState<TipoPeriodo>('mes')
   const [custom, setCustom] = useState<Periodo>(() => periodoMes())
@@ -217,6 +220,24 @@ export default function Relatorios() {
   )
 
   const temProducao = resumo.qtdAtendimentosPagos > 0
+
+  const agenda = useMemo(() => {
+    const lista = agendamentos.filter((ag) => dentroDoPeriodo(ag.data, periodo))
+    return {
+      total: lista.length,
+      emAberto: lista.filter(
+        (ag) => ag.status === 'pendente' || ag.status === 'confirmado',
+      ).length,
+      concluidos: lista.filter((ag) => ag.status === 'concluido').length,
+      cancelados: lista.filter((ag) => ag.status === 'cancelado').length,
+      naoCompareceu: lista.filter((ag) => ag.status === 'nao_compareceu')
+        .length,
+      remarcacoes: lista.reduce(
+        (total, ag) => total + (ag.remarcacoes?.length ?? 0),
+        0,
+      ),
+    }
+  }, [agendamentos, periodo])
 
   function aplicarCustom(campo: 'inicio' | 'fim', valor: string) {
     if (!valor) return
@@ -822,6 +843,40 @@ export default function Relatorios() {
               )}
             </>
           )}
+        </Secao>
+      </div>
+
+      {/* Agendamentos do período */}
+      <div className="mt-4">
+        <Secao titulo="Agendamentos do período">
+          <div className="overflow-x-auto border-y border-[#E5DCC3]">
+            <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
+              <CelulaKpi
+                rotulo="Agendamentos"
+                valor={String(agenda.total)}
+              />
+              <CelulaKpi
+                rotulo="Em aberto"
+                valor={String(agenda.emAberto)}
+              />
+              <CelulaKpi
+                rotulo="Concluídos"
+                valor={String(agenda.concluidos)}
+              />
+              <CelulaKpi
+                rotulo="Cancelados"
+                valor={String(agenda.cancelados)}
+              />
+              <CelulaKpi
+                rotulo="Não compareceu"
+                valor={String(agenda.naoCompareceu)}
+              />
+              <CelulaKpi
+                rotulo="Remarcações"
+                valor={String(agenda.remarcacoes)}
+              />
+            </div>
+          </div>
         </Secao>
       </div>
     </div>
