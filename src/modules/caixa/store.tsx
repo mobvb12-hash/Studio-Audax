@@ -14,6 +14,7 @@ import {
   type FormaPagamento,
   type Lancamento,
   type NovaDespesaInput,
+  type NovaVendaInput,
   type NovoPagamentoInput,
   type NovaVendaProdutoInput,
   type ResumoFechamento,
@@ -71,6 +72,8 @@ export type CaixaContexto = {
   jaPago: (agendamentoId: string) => Lancamento | undefined
   registrarPagamento: (input: NovoPagamentoInput) => Lancamento
   venderProduto: (input: NovaVendaProdutoInput) => Lancamento
+  /** Venda do PDV: vários produtos → UMA única movimentação no Caixa */
+  registrarVenda: (input: NovaVendaInput) => Lancamento
   adicionarDespesa: (input: NovaDespesaInput) => Lancamento
   estornar: (id: string) => void
   fecharCaixa: (data: string) => Fechamento
@@ -319,6 +322,72 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [bloquearSeFechado],
   )
 
+  const registrarVenda = useCallback(
+    (input: NovaVendaInput): Lancamento => {
+      if (!input.itens || input.itens.length === 0) {
+        throw new Error('Adicione pelo menos um produto ao carrinho.')
+      }
+      let bruto = 0
+      let qtdTotal = 0
+      const nomes: string[] = []
+      for (const item of input.itens) {
+        const nome = item.produto.trim()
+        if (!nome) throw new Error('Produto sem nome no carrinho.')
+        if (!Number.isInteger(item.quantidade) || item.quantidade < 1) {
+          throw new Error(`Quantidade inválida para "${nome}".`)
+        }
+        if (!Number.isFinite(item.preco) || item.preco <= 0) {
+          throw new Error(`O preço de "${nome}" deve ser maior que zero.`)
+        }
+        bruto += item.quantidade * item.preco
+        qtdTotal += item.quantidade
+        nomes.push(nome)
+      }
+      bruto = arredondar(bruto)
+      if (!Number.isFinite(input.desconto) || input.desconto < 0) {
+        throw new Error('Desconto inválido.')
+      }
+      if (input.desconto > bruto) {
+        throw new Error('O desconto não pode ser maior que o total da venda.')
+      }
+      if (!FORMAS_PAGAMENTO.includes(input.formaPagamento)) {
+        throw new Error('Selecione a forma de pagamento.')
+      }
+      bloquearSeFechado(input.data)
+
+      const descricao = input.itens
+        .map((i) => `${i.quantidade}× ${i.produto.trim()}`)
+        .join(', ')
+      const novo: Lancamento = {
+        id: gerarId(),
+        tipo: 'receita',
+        origem: 'produto',
+        data: input.data,
+        hora: agoraHora(),
+        descricao,
+        valor: bruto,
+        desconto: arredondar(input.desconto),
+        valorLiquido: arredondar(bruto - input.desconto),
+        formaPagamento: input.formaPagamento,
+        cliente: input.cliente?.trim() || undefined,
+        clienteId: input.clienteId,
+        profissional: input.profissional?.trim() || undefined,
+        produto: nomes.join(', '),
+        quantidade: qtdTotal,
+        itens: input.itens.map((i) => ({
+          produto: i.produto.trim(),
+          quantidade: i.quantidade,
+          preco: arredondar(i.preco),
+        })),
+        observacao: input.observacao?.trim() || undefined,
+        criadoEm: new Date().toISOString(),
+      }
+      setLancamentos((atual) => [...atual, novo])
+      return novo
+    },
+    [bloquearSeFechado],
+  )
+
   const adicionarDespesa = useCallback(
     (input: NovaDespesaInput): Lancamento => {
       if (!input.descricao.trim()) throw new Error('Informe a descrição.')
@@ -464,6 +533,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       jaPago,
       registrarPagamento,
       venderProduto,
+      registrarVenda,
       adicionarDespesa,
       estornar,
       fecharCaixa,
@@ -483,6 +553,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       jaPago,
       registrarPagamento,
       venderProduto,
+      registrarVenda,
       adicionarDespesa,
       estornar,
       fecharCaixa,

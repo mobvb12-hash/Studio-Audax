@@ -5,12 +5,15 @@ import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda from './Agenda'
 import Caixa from './Caixa'
 import Clientes from './Clientes'
 import Comissoes from './Comissoes'
 import Dashboard from './Dashboard'
+import PDV from './PDV'
+import Produtos from './Produtos'
 import Profissionais from './Profissionais'
 import Relatorios from './Relatorios'
 import Servicos from './Servicos'
@@ -158,6 +161,48 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     expect(screen.getByRole('heading', { name: 'Profissionais' })).toBeTruthy()
     expect(screen.getByText('Audax')).toBeTruthy()
     expect(screen.getByText('Diego')).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('PDV renderiza abas, carrinho vazio e botão de finalizar', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ClientesProvider>
+        <ProfissionaisProvider>
+          <ProdutosProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <ComissoesProvider>
+                  <PDV />
+                </ComissoesProvider>
+              </CaixaProvider>
+            </AgendaProvider>
+          </ProdutosProvider>
+        </ProfissionaisProvider>
+      </ClientesProvider>,
+    )
+    expect(screen.getByRole('heading', { name: 'PDV' })).toBeTruthy()
+    expect(screen.getByText('Nova venda')).toBeTruthy()
+    expect(screen.getByText('Histórico de vendas')).toBeTruthy()
+    expect(screen.getByText('Carrinho vazio.')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Finalizar venda' }),
+    ).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('Produtos renderiza cabeçalho e estado vazio', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ProdutosProvider>
+        <Produtos />
+      </ProdutosProvider>,
+    )
+    expect(screen.getByRole('heading', { name: 'Produtos' })).toBeTruthy()
+    expect(screen.getByText('+ Novo produto')).toBeTruthy()
+    expect(screen.getByText(/Nenhum produto cadastrado/)).toBeTruthy()
     expect(erros).not.toHaveBeenCalled()
     erros.mockRestore()
   })

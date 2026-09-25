@@ -11,6 +11,13 @@ export type FormaPagamento =
 export type TipoLancamento = 'receita' | 'despesa'
 export type OrigemLancamento = 'atendimento' | 'produto' | 'despesa'
 
+/** Item de uma venda do PDV (vários produtos = um único lançamento) */
+export type ItemVenda = {
+  produto: string
+  quantidade: number
+  preco: number
+}
+
 export type Lancamento = {
   id: string
   tipo: TipoLancamento
@@ -35,6 +42,8 @@ export type Lancamento = {
   agendamentoId?: string
   produto?: string
   quantidade?: number
+  /** Itens detalhados (vendas do PDV com vários produtos) */
+  itens?: ItemVenda[]
   categoria?: string
   observacao?: string
   criadoEm: string
@@ -96,6 +105,18 @@ export type NovaVendaProdutoInput = {
   preco: number
   desconto: number
   formaPagamento: FormaPagamento
+  profissional?: string
+  observacao?: string
+}
+
+/** Venda do PDV — vários produtos, um único lançamento no Caixa */
+export type NovaVendaInput = {
+  data: string
+  itens: ItemVenda[]
+  desconto: number
+  formaPagamento: FormaPagamento
+  cliente?: string
+  clienteId?: string
   profissional?: string
   observacao?: string
 }

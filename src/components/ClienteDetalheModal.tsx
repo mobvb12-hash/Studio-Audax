@@ -66,6 +66,11 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
     [lancamentos, cliente.id, chave],
   )
 
+  const pagamentosAtendimentos = recebido.filter(
+    (l) => l.origem !== 'produto',
+  )
+  const comprasProdutos = recebido.filter((l) => l.origem === 'produto')
+
   const totalGasto = recebido.reduce((soma, l) => soma + l.valorLiquido, 0)
   const concluidos = historico.filter((ag) => ag.status === 'concluido').length
 
@@ -247,15 +252,44 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
 
         <div className="mt-4">
           <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-            Pagamentos
+            Pagamentos de atendimentos
           </p>
-          {recebido.length === 0 ? (
+          {pagamentosAtendimentos.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
               Nenhum recebimento registrado.
             </div>
           ) : (
             <ul className="divide-y divide-[#EFE7D3]">
-              {recebido.map((l) => (
+              {pagamentosAtendimentos.map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[#1C1A15]">
+                      {l.descricao}
+                    </p>
+                    <p className="text-xs text-[#8A8171]">
+                      {formatarDataLonga(l.data)} · {l.hora}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-[#8A6A14]">
+                    {formatarBRL(l.valorLiquido)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            Compras de produtos
+          </p>
+          {comprasProdutos.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
+              Nenhuma compra de produto registrada.
+            </div>
+          ) : (
+            <ul className="divide-y divide-[#EFE7D3]">
+              {comprasProdutos.map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-[#1C1A15]">

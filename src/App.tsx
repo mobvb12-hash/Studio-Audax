@@ -6,12 +6,15 @@ import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
 import Caixa from '@/pages/Caixa'
 import Clientes from '@/pages/Clientes'
 import Comissoes from '@/pages/Comissoes'
 import Dashboard from '@/pages/Dashboard'
+import PDV from '@/pages/PDV'
+import Produtos from '@/pages/Produtos'
 import Profissionais from '@/pages/Profissionais'
 import Relatorios from '@/pages/Relatorios'
 import Servicos from '@/pages/Servicos'
@@ -59,6 +62,8 @@ const IMPLEMENTADAS: PaginaId[] = [
   'profissionais',
   'comissoes',
   'relatorios',
+  'pdv',
+  'estoque',
 ]
 
 function Conteudo() {
@@ -81,6 +86,8 @@ function Conteudo() {
       {pagina === 'profissionais' && <Profissionais />}
       {pagina === 'comissoes' && <Comissoes />}
       {pagina === 'relatorios' && <Relatorios />}
+      {pagina === 'pdv' && <PDV />}
+      {pagina === 'estoque' && <Produtos />}
       {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
       {modalAberto && (
         <NovoAgendamentoModal
@@ -98,15 +105,17 @@ function App() {
   return (
     <ClientesProvider>
       <ProfissionaisProvider>
-        <ServicosProvider>
-          <AgendaProvider>
-            <CaixaProvider>
-              <ComissoesProvider>
-                <Conteudo />
-              </ComissoesProvider>
-            </CaixaProvider>
-          </AgendaProvider>
-        </ServicosProvider>
+        <ProdutosProvider>
+          <ServicosProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <ComissoesProvider>
+                  <Conteudo />
+                </ComissoesProvider>
+              </CaixaProvider>
+            </AgendaProvider>
+          </ServicosProvider>
+        </ProdutosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>
   )
