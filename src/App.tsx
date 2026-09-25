@@ -6,16 +6,21 @@ import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
+import { CrmProvider } from '@/modules/crm/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
+import { IaProvider } from '@/modules/ia/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
 import Caixa from '@/pages/Caixa'
 import Clientes from '@/pages/Clientes'
 import Clube from '@/pages/Clube'
 import Comissoes from '@/pages/Comissoes'
+import Crm from '@/pages/Crm'
 import Dashboard from '@/pages/Dashboard'
+import Ia from '@/pages/Ia'
 import PDV from '@/pages/PDV'
 import Produtos from '@/pages/Produtos'
 import Profissionais from '@/pages/Profissionais'
@@ -30,6 +35,7 @@ const ROTULOS: Record<PaginaId, string> = {
   caixa: 'Caixa',
   comandas: 'Comandas',
   clientes: 'Clientes',
+  crm: 'CRM',
   profissionais: 'Profissionais',
   comissoes: 'Comissões',
   servicos: 'Serviços',
@@ -38,6 +44,7 @@ const ROTULOS: Record<PaginaId, string> = {
   estoque: 'Produtos / Estoque',
   financeiro: 'Financeiro',
   relatorios: 'Relatórios',
+  ia: 'Central de IA',
   configuracoes: 'Configurações',
 }
 
@@ -61,6 +68,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'agenda',
   'caixa',
   'clientes',
+  'crm',
   'servicos',
   'profissionais',
   'comissoes',
@@ -68,6 +76,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'pdv',
   'estoque',
   'clube',
+  'ia',
 ]
 
 function Conteudo() {
@@ -98,6 +107,7 @@ function Conteudo() {
       {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
       {pagina === 'caixa' && <Caixa />}
       {pagina === 'clientes' && <Clientes />}
+      {pagina === 'crm' && <Crm />}
       {pagina === 'servicos' && <Servicos />}
       {pagina === 'profissionais' && <Profissionais />}
       {pagina === 'comissoes' && <Comissoes />}
@@ -105,6 +115,7 @@ function Conteudo() {
       {pagina === 'pdv' && <PDV />}
       {pagina === 'estoque' && <Produtos />}
       {pagina === 'clube' && <Clube />}
+      {pagina === 'ia' && <Ia />}
       {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
       {modalAberto && (
         <NovoAgendamentoModal
@@ -129,7 +140,13 @@ function App() {
                 <CaixaProvider>
                   <ComissoesProvider>
                     <ClubeProvider>
-                      <Conteudo />
+                      <CrmProvider>
+                        <WhatsProvider>
+                          <IaProvider>
+                            <Conteudo />
+                          </IaProvider>
+                        </WhatsProvider>
+                      </CrmProvider>
                     </ClubeProvider>
                   </ComissoesProvider>
                 </CaixaProvider>

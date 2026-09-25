@@ -9,6 +9,7 @@ export type PaginaId =
   | 'caixa'
   | 'comandas'
   | 'clientes'
+  | 'crm'
   | 'profissionais'
   | 'servicos'
   | 'comissoes'
@@ -17,6 +18,7 @@ export type PaginaId =
   | 'estoque'
   | 'financeiro'
   | 'relatorios'
+  | 'ia'
   | 'configuracoes'
 
 type AppLayoutProps = {
@@ -41,6 +43,7 @@ const SECOES: Secao[] = [
       { id: 'caixa', rotulo: 'Caixa' },
       { id: 'comandas', rotulo: 'Comandas' },
       { id: 'clientes', rotulo: 'Clientes' },
+      { id: 'crm', rotulo: 'CRM' },
     ],
   },
   {
@@ -54,6 +57,7 @@ const SECOES: Secao[] = [
       { id: 'estoque', rotulo: 'Produtos / Estoque' },
       { id: 'financeiro', rotulo: 'Financeiro' },
       { id: 'relatorios', rotulo: 'Relatórios' },
+      { id: 'ia', rotulo: 'Central de IA' },
       { id: 'configuracoes', rotulo: 'Configurações' },
     ],
   },
