@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { PERCENTUAL_PADRAO } from './types'
 import type {
   ConfigComissao,
@@ -23,18 +24,6 @@ const CHAVE_AUDITORIA = 'studio-audax:comissoes:auditoria:v1'
 
 function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function carregar<T>(chave: string, padrao: T): T {
-  try {
-    const bruto = localStorage.getItem(chave)
-    if (!bruto) return padrao
-    const valor = JSON.parse(bruto) as T
-    if (Array.isArray(valor)) return valor
-    return padrao
-  } catch {
-    return padrao
-  }
 }
 
 export type ComissoesContexto = {
@@ -55,37 +44,25 @@ const Contexto = createContext<ComissoesContexto | null>(null)
 
 export function ComissoesProvider({ children }: { children: ReactNode }) {
   const [configs, setConfigs] = useState<ConfigComissao[]>(() =>
-    carregar<ConfigComissao[]>(CHAVE_CONFIGS, []),
+    carregarJSON<ConfigComissao[]>(CHAVE_CONFIGS, [], Array.isArray),
   )
   const [fechamentos, setFechamentos] = useState<FechamentoComissao[]>(() =>
-    carregar<FechamentoComissao[]>(CHAVE_FECHAMENTOS, []),
+    carregarJSON<FechamentoComissao[]>(CHAVE_FECHAMENTOS, [], Array.isArray),
   )
   const [auditoria, setAuditoria] = useState<EventoAuditoriaComissao[]>(() =>
-    carregar<EventoAuditoriaComissao[]>(CHAVE_AUDITORIA, []),
+    carregarJSON<EventoAuditoriaComissao[]>(CHAVE_AUDITORIA, [], Array.isArray),
   )
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_CONFIGS, JSON.stringify(configs))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_CONFIGS, configs)
   }, [configs])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify(fechamentos))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_FECHAMENTOS, fechamentos)
   }, [fechamentos])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_AUDITORIA, JSON.stringify(auditoria))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_AUDITORIA, auditoria)
   }, [auditoria])
 
   const configDe = useCallback(

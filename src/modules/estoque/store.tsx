@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { useProdutos } from '@/modules/produtos/store'
 import type { Produto } from '@/modules/produtos/types'
 import type {
@@ -60,14 +61,7 @@ function inteiroPositivo(valor: number): boolean {
 }
 
 function carregar(): MovimentacaoEstoque[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return []
-    const lista = JSON.parse(bruto) as MovimentacaoEstoque[]
-    return Array.isArray(lista) ? lista : []
-  } catch {
-    return []
-  }
+  return carregarJSON<MovimentacaoEstoque[]>(CHAVE_STORAGE, [], Array.isArray)
 }
 
 type Pendencias = {
@@ -158,11 +152,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
   }, [movimentacoes])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(movimentacoes))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, movimentacoes)
   }, [movimentacoes])
 
   function criarMovimentacao(

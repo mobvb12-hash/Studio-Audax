@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import {
   FORMAS_PAGAMENTO,
   type EventoAuditoria,
@@ -27,18 +28,6 @@ const CHAVE_AUDITORIA = 'studio-audax:caixa:auditoria:v1'
 
 function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function carregar<T>(chave: string, padrao: T): T {
-  try {
-    const bruto = localStorage.getItem(chave)
-    if (!bruto) return padrao
-    const valor = JSON.parse(bruto) as T
-    if (Array.isArray(valor)) return valor
-    return padrao
-  } catch {
-    return padrao
-  }
 }
 
 function formaVazia(): Record<FormaPagamento, number> {
@@ -91,37 +80,25 @@ const Contexto = createContext<CaixaContexto | null>(null)
 
 export function CaixaProvider({ children }: { children: ReactNode }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>(() =>
-    carregar<Lancamento[]>(CHAVE_LANCAMENTOS, []),
+    carregarJSON<Lancamento[]>(CHAVE_LANCAMENTOS, [], Array.isArray),
   )
   const [fechamentos, setFechamentos] = useState<Fechamento[]>(() =>
-    carregar<Fechamento[]>(CHAVE_FECHAMENTOS, []),
+    carregarJSON<Fechamento[]>(CHAVE_FECHAMENTOS, [], Array.isArray),
   )
   const [auditoria, setAuditoria] = useState<EventoAuditoria[]>(() =>
-    carregar<EventoAuditoria[]>(CHAVE_AUDITORIA, []),
+    carregarJSON<EventoAuditoria[]>(CHAVE_AUDITORIA, [], Array.isArray),
   )
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_LANCAMENTOS, JSON.stringify(lancamentos))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_LANCAMENTOS, lancamentos)
   }, [lancamentos])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify(fechamentos))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_FECHAMENTOS, fechamentos)
   }, [fechamentos])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_AUDITORIA, JSON.stringify(auditoria))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_AUDITORIA, auditoria)
   }, [auditoria])
 
   const fechamentoAtivo = useCallback(

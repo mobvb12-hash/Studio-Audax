@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, type FormaPagamento } from '@/modules/caixa/types'
@@ -35,21 +36,19 @@ function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function estadoVazio(): EstadoClube {
-  return { assinaturas: [], pagamentos: [] }
+function ehEstadoClube(valor: unknown): boolean {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
 }
 
 function carregarEstado(): EstadoClube {
-  try {
-    const bruto = localStorage.getItem(CHAVE_CLUBE)
-    if (!bruto) return estadoVazio()
-    const valor = JSON.parse(bruto) as Partial<EstadoClube>
-    return {
-      assinaturas: Array.isArray(valor.assinaturas) ? valor.assinaturas : [],
-      pagamentos: Array.isArray(valor.pagamentos) ? valor.pagamentos : [],
-    }
-  } catch {
-    return estadoVazio()
+  const parcial = carregarJSON<Partial<EstadoClube>>(
+    CHAVE_CLUBE,
+    {},
+    ehEstadoClube,
+  )
+  return {
+    assinaturas: Array.isArray(parcial.assinaturas) ? parcial.assinaturas : [],
+    pagamentos: Array.isArray(parcial.pagamentos) ? parcial.pagamentos : [],
   }
 }
 
@@ -100,11 +99,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<EstadoClube>(carregarEstado)
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_CLUBE, JSON.stringify(estado))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_CLUBE, estado)
   }, [estado])
 
   const assinaturaDoCliente = useCallback(

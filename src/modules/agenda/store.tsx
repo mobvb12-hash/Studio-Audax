@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { useCaixa } from '@/modules/caixa/store'
 import {
   EXPEDIENTE_PADRAO,
@@ -61,34 +62,22 @@ function gerarId(): string {
 }
 
 function carregarLista<T>(chave: string): T[] {
-  try {
-    const bruto = localStorage.getItem(chave)
-    if (!bruto) return []
-    const lista = JSON.parse(bruto)
-    return Array.isArray(lista) ? (lista as T[]) : []
-  } catch {
-    return []
-  }
+  return carregarJSON<T[]>(chave, [], Array.isArray)
 }
 
-function carregarExpediente(): Expediente {
-  try {
-    const bruto = localStorage.getItem(CHAVE_EXPEDIENTE)
-    if (!bruto) return EXPEDIENTE_PADRAO
-    const salvo = JSON.parse(bruto) as Expediente
-    if (
-      salvo &&
+function ehExpediente(valor: unknown): boolean {
+  const salvo = valor as Expediente | null
+  return Boolean(
+    salvo &&
       typeof salvo.inicio === 'string' &&
       typeof salvo.fim === 'string' &&
       typeof salvo.almocoInicio === 'string' &&
-      typeof salvo.almocoFim === 'string'
-    ) {
-      return salvo
-    }
-    return EXPEDIENTE_PADRAO
-  } catch {
-    return EXPEDIENTE_PADRAO
-  }
+      typeof salvo.almocoFim === 'string',
+  )
+}
+
+function carregarExpediente(): Expediente {
+  return carregarJSON<Expediente>(CHAVE_EXPEDIENTE, EXPEDIENTE_PADRAO, ehExpediente)
 }
 
 function ordenar(lista: Agendamento[]): Agendamento[] {
@@ -126,27 +115,15 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(agendamentos))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, agendamentos)
   }, [agendamentos])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_BLOQUEIOS, JSON.stringify(bloqueios))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_BLOQUEIOS, bloqueios)
   }, [bloqueios])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_EXPEDIENTE, JSON.stringify(expediente))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_EXPEDIENTE, expediente)
   }, [expediente])
 
   const adicionar = useCallback(

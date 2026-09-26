@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AvisoPersistencia from '@/components/AvisoPersistencia'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
@@ -146,9 +147,10 @@ function App() {
                     <ClubeProvider>
                       <CrmProvider>
                         <WhatsProvider>
-                          <IaProvider>
-                            <Conteudo />
-                          </IaProvider>
+              <IaProvider>
+                <AvisoPersistencia />
+                <Conteudo />
+              </IaProvider>
                         </WhatsProvider>
                       </CrmProvider>
                     </ClubeProvider>
