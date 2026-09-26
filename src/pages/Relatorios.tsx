@@ -178,6 +178,7 @@ export default function Relatorios() {
 
   const [tipo, setTipo] = useState<TipoPeriodo>('mes')
   const [custom, setCustom] = useState<Periodo>(() => periodoMes())
+  const [profFiltro, setProfFiltro] = useState('todos')
 
   const periodo = useMemo<Periodo>(() => {
     if (tipo === 'hoje') return periodoHoje()
@@ -188,39 +189,90 @@ export default function Relatorios() {
     return custom
   }, [tipo, custom])
 
-  const resumo = useMemo(
-    () => resumoFinanceiro(lancamentos, periodo),
-    [lancamentos, periodo],
+  // Filtro por profissional: só restringe a entrada dos cálculos oficiais
+  // (nenhuma conta é reimplementada e nada é gravado/alterado nos stores)
+  const opcoesProf = useMemo(() => {
+    const nomes = new Set<string>()
+    profissionais.forEach((p) => nomes.add(p.nome))
+    lancamentos.forEach((l) => {
+      if (l.profissional) nomes.add(l.profissional)
+    })
+    agendamentos.forEach((a) => {
+      if (a.profissional) nomes.add(a.profissional)
+    })
+    fechamentos.forEach((f) => {
+      if (f.profissionalNome) nomes.add(f.profissionalNome)
+    })
+    if (profFiltro !== 'todos') nomes.add(profFiltro)
+    return Array.from(nomes).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [profissionais, lancamentos, agendamentos, fechamentos, profFiltro])
+
+  const lancamentosFiltrados = useMemo(
+    () =>
+      profFiltro === 'todos'
+        ? lancamentos
+        : lancamentos.filter((l) => l.profissional === profFiltro),
+    [lancamentos, profFiltro],
   )
-  const fat = useMemo(() => faturamento(lancamentos, periodo), [lancamentos, periodo])
+
+  const agendamentosFiltrados = useMemo(
+    () =>
+      profFiltro === 'todos'
+        ? agendamentos
+        : agendamentos.filter((a) => a.profissional === profFiltro),
+    [agendamentos, profFiltro],
+  )
+
+  const fechamentosFiltrados = useMemo(
+    () =>
+      profFiltro === 'todos'
+        ? fechamentos
+        : fechamentos.filter((f) => f.profissionalNome === profFiltro),
+    [fechamentos, profFiltro],
+  )
+
+  const resumo = useMemo(
+    () => resumoFinanceiro(lancamentosFiltrados, periodo),
+    [lancamentosFiltrados, periodo],
+  )
+  const fat = useMemo(
+    () => faturamento(lancamentosFiltrados, periodo),
+    [lancamentosFiltrados, periodo],
+  )
   const formas = useMemo(
-    () => formasPagamento(lancamentos, periodo),
-    [lancamentos, periodo],
+    () => formasPagamento(lancamentosFiltrados, periodo),
+    [lancamentosFiltrados, periodo],
   )
   const profLinhas = useMemo(
-    () => linhasDetalhadasDoPeriodo(lancamentos, profissionais, configDe, periodo),
-    [lancamentos, profissionais, configDe, periodo],
+    () =>
+      linhasDetalhadasDoPeriodo(
+        lancamentosFiltrados,
+        profissionais,
+        configDe,
+        periodo,
+      ),
+    [lancamentosFiltrados, profissionais, configDe, periodo],
   )
   const servicos = useMemo(
-    () => servicosDoPeriodo(lancamentos, periodo),
-    [lancamentos, periodo],
+    () => servicosDoPeriodo(lancamentosFiltrados, periodo),
+    [lancamentosFiltrados, periodo],
   )
   const despesas = useMemo(
-    () => despesasDoPeriodo(lancamentos, periodo),
-    [lancamentos, periodo],
+    () => despesasDoPeriodo(lancamentosFiltrados, periodo),
+    [lancamentosFiltrados, periodo],
   )
   const cli = useMemo(
-    () => clientesDoPeriodo(lancamentos, clientes, periodo),
-    [lancamentos, clientes, periodo],
+    () => clientesDoPeriodo(lancamentosFiltrados, clientes, periodo),
+    [lancamentosFiltrados, clientes, periodo],
   )
   const prods = useMemo(
-    () => produtosDoPeriodo(lancamentos, produtos, periodo),
-    [lancamentos, produtos, periodo],
+    () => produtosDoPeriodo(lancamentosFiltrados, produtos, periodo),
+    [lancamentosFiltrados, produtos, periodo],
   )
   const comisTotais = useMemo(() => totaisDoPeriodo(profLinhas), [profLinhas])
   const comisFech = useMemo(
-    () => fechamentosDoPeriodo(fechamentos, periodo),
-    [fechamentos, periodo],
+    () => fechamentosDoPeriodo(fechamentosFiltrados, periodo),
+    [fechamentosFiltrados, periodo],
   )
   const comisAbertas = Math.max(
     0,
@@ -230,10 +282,12 @@ export default function Relatorios() {
   const temProducao = resumo.qtdAtendimentosPagos > 0
 
   const agenda = useMemo(
-    () => agendaDoPeriodo(agendamentos, periodo),
-    [agendamentos, periodo],
+    () => agendaDoPeriodo(agendamentosFiltrados, periodo),
+    [agendamentosFiltrados, periodo],
   )
 
+  // Guarda dos estornos sempre em cima da lista completa: protege o
+  // Audax Club mesmo com o filtro de profissional ativo
   const estornados = useMemo(
     () => new Set(lancamentos.filter((l) => l.estornado).map((l) => l.id)),
     [lancamentos],
@@ -244,9 +298,16 @@ export default function Relatorios() {
     [assinaturas, pagamentos, periodo, estornados],
   )
 
+  // Receita de assinaturas no caixa é visão do Clube, não do profissional
+  const receitaClubeCaixa = useMemo(
+    () => resumoFinanceiro(lancamentos, periodo).receitaClube,
+    [lancamentos, periodo],
+  )
+
   const perfisCrm = useMemo(
-    () => montarPerfis(clientes, agendamentos, lancamentos),
-    [clientes, agendamentos, lancamentos],
+    () =>
+      montarPerfis(clientes, agendamentosFiltrados, lancamentosFiltrados),
+    [clientes, agendamentosFiltrados, lancamentosFiltrados],
   )
   const resumoCrm = useMemo(
     () => resumoSegmentos(perfisCrm),
@@ -256,12 +317,12 @@ export default function Relatorios() {
   // Comparação só entra quando a janela anterior tem dados reais
   const anterior = useMemo(() => periodoAnterior(periodo), [periodo])
   const fatAnterior = useMemo(
-    () => faturamento(lancamentos, anterior),
-    [lancamentos, anterior],
+    () => faturamento(lancamentosFiltrados, anterior),
+    [lancamentosFiltrados, anterior],
   )
   const resumoAnterior = useMemo(
-    () => resumoFinanceiro(lancamentos, anterior),
-    [lancamentos, anterior],
+    () => resumoFinanceiro(lancamentosFiltrados, anterior),
+    [lancamentosFiltrados, anterior],
   )
   const variacao = fatAnterior.temDados
     ? variacaoPercentual(fat.liquido, fatAnterior.liquido)
@@ -283,11 +344,12 @@ export default function Relatorios() {
             {rotuloPeriodo(periodo)} · {resumo.qtdAtendimentosPagos}{' '}
             atendimento(s) pago(s) · {formas.linhas.length} forma(s) de
             pagamento
+            {profFiltro !== 'todos' ? ` · Profissional: ${profFiltro}` : ''}
           </p>
         </div>
       </div>
 
-      {/* Filtro único de período — alimenta todos os relatórios */}
+      {/* Filtros de período e profissional — alimentam todos os relatórios */}
       <div className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4">
         {(Object.keys(ROTULO_TIPO) as TipoPeriodo[]).map((id) => (
           <button
@@ -318,6 +380,19 @@ export default function Relatorios() {
             />
           </div>
         )}
+        <select
+          aria-label="Profissional"
+          value={profFiltro}
+          onChange={(e) => setProfFiltro(e.target.value)}
+          className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+        >
+          <option value="todos">Todos os profissionais</option>
+          {opcoesProf.map((nome) => (
+            <option key={nome} value={nome}>
+              {nome}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Resumo financeiro */}
@@ -868,9 +943,15 @@ export default function Relatorios() {
                 />
                 <LinhaDetalhe
                   rotulo="Receita de assinaturas no caixa"
-                  valor={formatarBRL(resumo.receitaClube)}
+                  valor={formatarBRL(receitaClubeCaixa)}
                 />
               </div>
+              {profFiltro !== 'todos' && (
+                <p className="mt-3 text-[13px] text-[#4A4436]">
+                  Visão geral da barbearia — assinaturas do Audax Club não são
+                  filtradas por profissional.
+                </p>
+              )}
             </>
           )}
         </Secao>
@@ -1002,8 +1083,9 @@ export default function Relatorios() {
           ) : (
             <>
               <p className="text-[13px] text-[#4A4436]">
-                Classificação atual dos clientes — não muda com o período
-                selecionado.
+                {profFiltro === 'todos'
+                  ? 'Classificação atual dos clientes — não muda com o período selecionado.'
+                  : `Classificação dos clientes atendidos por ${profFiltro} — não muda com o período selecionado.`}
               </p>
               <div className="mt-3 overflow-x-auto border-y border-[#E5DCC3]">
                 <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
