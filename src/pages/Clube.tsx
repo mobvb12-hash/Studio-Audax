@@ -58,6 +58,7 @@ export default function Clube() {
   const [busca, setBusca] = useState('')
   const [novoAberto, setNovoAberto] = useState(false)
   const [detalheId, setDetalheId] = useState<string | null>(null)
+  const [edicaoId, setEdicaoId] = useState<string | null>(null)
 
   const situacoes = situacoesAssinaturas(assinaturas, hoje)
   const receitaPrevista = assinaturas
@@ -85,6 +86,9 @@ export default function Clube() {
 
   const detalhe = detalheId
     ? assinaturas.find((a) => a.id === detalheId)
+    : undefined
+  const emEdicao = edicaoId
+    ? assinaturas.find((a) => a.id === edicaoId)
     : undefined
 
   const kpis = [
@@ -208,13 +212,24 @@ export default function Clube() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setDetalheId(a.id)}
-                          className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#4A4436] hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
-                        >
-                          Detalhes
-                        </button>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setDetalheId(a.id)}
+                            className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#4A4436] hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
+                          >
+                            Detalhes
+                          </button>
+                          {!a.cancelada && (
+                            <button
+                              type="button"
+                              onClick={() => setEdicaoId(a.id)}
+                              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#4A4436] hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
+                            >
+                              Editar
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -226,6 +241,12 @@ export default function Clube() {
       </section>
 
       {novoAberto && <AssinaturaFormModal onFechar={() => setNovoAberto(false)} />}
+      {emEdicao && (
+        <AssinaturaFormModal
+          assinatura={emEdicao}
+          onFechar={() => setEdicaoId(null)}
+        />
+      )}
       {detalhe && (
         <AssinaturaDetalheModal
           assinatura={detalhe}

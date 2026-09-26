@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useClube } from '@/modules/clube/store'
 import { proximoVencimentoAposPagamento } from '@/modules/clube/regras'
@@ -43,6 +43,8 @@ export default function PagamentoAssinaturaModal({
   )
   const [forma, setForma] = useState<FormaPagamento | ''>('')
   const [erro, setErro] = useState('')
+  /** Anti duplo clique: um submit por vez até dar erro/sucesso */
+  const salvandoRef = useRef(false)
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -58,10 +60,12 @@ export default function PagamentoAssinaturaModal({
   )
 
   function confirmar() {
+    if (salvandoRef.current) return
     if (!forma) {
       setErro('Selecione a forma de pagamento.')
       return
     }
+    salvandoRef.current = true
     try {
       registrarPagamento({
         assinaturaId: assinatura.id,
@@ -72,6 +76,7 @@ export default function PagamentoAssinaturaModal({
       aoPagar?.()
       onFechar()
     } catch (e) {
+      salvandoRef.current = false
       setErro(
         e instanceof Error
           ? e.message

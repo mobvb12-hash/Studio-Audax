@@ -251,6 +251,89 @@ describe('Audax Club — página', () => {
     expect(screen.queryByText('Ana Souza')).toBeNull()
   })
 
+  it('edita assinatura pela lista: plano e mensalidade refletem na tela', () => {
+    montar()
+    const id = criarCliente('Lucas Mendes')
+    criarAssinatura(id, 'Lucas Mendes')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    expect(screen.getByText('Editar assinatura')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Plano *'), {
+      target: { value: 'barba' },
+    })
+    fireEvent.change(screen.getByLabelText('Mensalidade (R$) *'), {
+      target: { value: '149,90' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+
+    expect(screen.queryByText('Editar assinatura')).toBeNull()
+    expect(screen.getByText('Barba')).toBeTruthy()
+    expect(screen.queryByText('Cabelo + Barba')).toBeNull()
+    expect(valorKpi('Receita prevista/mês')).toBe(formatarBRL(149.9))
+
+    expect(ctxClube.assinaturas[0].plano).toBe('barba')
+    expect(ctxClube.assinaturas[0].valorMensal).toBe(149.9)
+    // datas não mudam na edição
+    expect(ctxClube.assinaturas[0].proximoVencimento).toBe(
+      addMonthsISO(DIA, 1),
+    )
+    expect(ctxClube.assinaturas[0].clienteId).toBe(id)
+  })
+
+  it('bloqueia pagamento duplicado da mesma cobrança exibindo o aviso', () => {
+    // ciclo atual já coberto por um pagamento gravado (histórico persistido)
+    const vencimento = addMonthsISO(DIA, 1)
+    localStorage.setItem(
+      'studio-audax:clube:v1',
+      JSON.stringify({
+        assinaturas: [
+          {
+            id: 'a1',
+            clienteId: 'cli-1',
+            cliente: 'Lucas Mendes',
+            plano: 'cabelo',
+            valorMensal: 89.9,
+            dataAssinatura: DIA,
+            proximoVencimento: vencimento,
+            cancelada: false,
+            criadoEm: DIA,
+          },
+        ],
+        pagamentos: [
+          {
+            id: 'p1',
+            assinaturaId: 'a1',
+            clienteId: 'cli-1',
+            data: DIA,
+            valor: 89.9,
+            formaPagamento: 'pix',
+            vencimentoCoberto: vencimento,
+            criadoEm: DIA,
+          },
+        ],
+      }),
+    )
+    montar()
+
+    fireEvent.click(screen.getByText('Detalhes'))
+    expect(screen.getByText('Pagamentos (1)')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Registrar pagamento' }))
+    fireEvent.change(screen.getByLabelText('Forma de pagamento *'), {
+      target: { value: 'pix' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar pagamento' }))
+
+    expect(screen.getByText(/já foi paga/)).toBeTruthy()
+    expect(screen.queryByText('Pagamento registrado e ciclo renovado.')).toBeNull()
+    // nada foi duplicado: mesmo 1 pagamento e vencimento intacto
+    expect(ctxClube.pagamentos).toHaveLength(1)
+    expect(ctxClube.assinaturas[0].proximoVencimento).toBe(vencimento)
+    expect(
+      screen.getByRole('button', { name: 'Confirmar pagamento' }),
+    ).toBeTruthy()
+  })
+
   it('renderiza a página sem erros de console', () => {
     const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
     montar()

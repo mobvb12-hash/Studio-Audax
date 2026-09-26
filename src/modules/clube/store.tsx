@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
@@ -40,6 +41,24 @@ function ehEstadoClube(valor: unknown): boolean {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
 }
 
+/**
+ * A cobrança do ciclo (vencimento) já foi paga: pela pendência do lote
+ * atual (duplo clique) ou pelo histórico gravado. Pagamentos legados sem
+ * `vencimentoCoberto` não bloqueiam nada.
+ */
+function cicloJaPago(
+  pagamentos: PagamentoClube[],
+  pendenciasDoLote: Set<string> | null,
+  assinaturaId: string,
+  vencimento: string,
+): boolean {
+  const chave = `${assinaturaId}:${vencimento}`
+  if (pendenciasDoLote?.has(chave)) return true
+  return pagamentos.some(
+    (p) => p.assinaturaId === assinaturaId && p.vencimentoCoberto === vencimento,
+  )
+}
+
 function carregarEstado(): EstadoClube {
   const parcial = carregarJSON<Partial<EstadoClube>>(
     CHAVE_CLUBE,
@@ -69,6 +88,14 @@ export type PagamentoAssinaturaInput = {
   formaPagamento: FormaPagamento
 }
 
+export type AtualizarAssinaturaInput = {
+  clienteId?: string
+  cliente?: string
+  /** string para passar direto da UI; validada com ehPlanoClube */
+  plano?: string
+  valorMensal?: number
+}
+
 export type ResultadoPagamento = {
   assinatura: AssinaturaClube
   pagamento: PagamentoClube
@@ -84,6 +111,15 @@ export type ClubeContexto = {
   pagamentosDaAssinatura: (assinaturaId: string) => PagamentoClube[]
   /** Nova assinatura — recusa duplicidade (1 assinatura não cancelada por cliente) */
   assinar: (input: NovaAssinaturaInput) => AssinaturaClube
+  /**
+   * Edita dados cadastrais da assinatura (cliente, plano, mensalidade).
+   * Datas e histórico nunca mudam por aqui: vencimento é gerido por
+   * criação, pagamentos e cancelamento.
+   */
+  atualizar: (
+    assinaturaId: string,
+    input: AtualizarAssinaturaInput,
+  ) => AssinaturaClube
   /** Cancela sem apagar: assinatura e pagamentos permanecem no histórico */
   cancelar: (assinaturaId: string, motivo?: string) => void
   /** Registro de pagamento que renova o ciclo (+1 mês) e entra no Caixa */
@@ -97,6 +133,18 @@ const Contexto = createContext<ClubeContexto | null>(null)
 export function ClubeProvider({ children }: { children: ReactNode }) {
   const { registrarReceitaClube } = useCaixa()
   const [estado, setEstado] = useState<EstadoClube>(carregarEstado)
+
+  /**
+   * Cobranças pagas no lote de estado atual (duplo clique/submit): duas
+   * chamadas antes do re-render enxergam o mesmo snapshot, então registramos
+   * aqui o que já foi coberto para nunca duplicar o mesmo ciclo.
+   */
+  const ciclosPagos = useRef<Set<string> | null>(null)
+
+  useEffect(() => {
+    // Estado já reflete as cobranças: volta ao histórico gravado.
+    ciclosPagos.current = null
+  }, [estado])
 
   useEffect(() => {
     salvarJSON(CHAVE_CLUBE, estado)
@@ -159,6 +207,47 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
     [podeAssinar],
   )
 
+  const atualizar = useCallback(
+    (assinaturaId: string, input: AtualizarAssinaturaInput): AssinaturaClube => {
+      const alvo = estado.assinaturas.find((a) => a.id === assinaturaId)
+      if (!alvo) throw new Error('Assinatura não encontrada.')
+      if (alvo.cancelada) {
+        throw new Error('Assinatura cancelada não pode ser editada.')
+      }
+      const plano = input.plano ?? alvo.plano
+      if (!ehPlanoClube(plano)) throw new Error('Selecione o plano.')
+      const valorMensal = input.valorMensal ?? alvo.valorMensal
+      if (!Number.isFinite(valorMensal) || valorMensal <= 0) {
+        throw new Error('O valor da mensalidade deve ser maior que zero.')
+      }
+      const clienteId = (input.clienteId ?? alvo.clienteId).trim()
+      const cliente = (input.cliente ?? alvo.cliente).trim()
+      if (!clienteId) throw new Error('Selecione o cliente.')
+      if (!cliente) throw new Error('Cliente sem identificação.')
+      if (clienteId !== alvo.clienteId && !podeAssinar(clienteId)) {
+        throw new Error(
+          'Este cliente já tem uma assinatura em andamento. Cancele a anterior antes de criar outra.',
+        )
+      }
+
+      const atualizada: AssinaturaClube = {
+        ...alvo,
+        clienteId,
+        cliente,
+        plano: plano as AssinaturaClube['plano'],
+        valorMensal: Math.round(valorMensal * 100) / 100,
+      }
+      setEstado((atual) => ({
+        ...atual,
+        assinaturas: atual.assinaturas.map((a) =>
+          a.id === assinaturaId ? atualizada : a,
+        ),
+      }))
+      return atualizada
+    },
+    [estado.assinaturas, podeAssinar],
+  )
+
   const cancelar = useCallback(
     (assinaturaId: string, motivo?: string) => {
       const alvo = estado.assinaturas.find((a) => a.id === assinaturaId)
@@ -197,6 +286,20 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       if (!FORMAS_PAGAMENTO.includes(input.formaPagamento)) {
         throw new Error('Selecione a forma de pagamento.')
       }
+      // Cobrança do ciclo atual já paga: recusa duplicidade — tanto no mesmo
+      // lote (pendência) quanto pelo histórico já gravado.
+      if (
+        cicloJaPago(
+          estado.pagamentos,
+          ciclosPagos.current,
+          ass.id,
+          ass.proximoVencimento,
+        )
+      ) {
+        throw new Error(
+          'Esta cobrança já foi paga. O próximo ciclo só pode ser pago após a renovação.',
+        )
+      }
 
       // Caixa primeiro (lançamento do dia) — lança erro de caixa fechado
       // antes de qualquer mudança nas assinaturas.
@@ -218,8 +321,11 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
         valor: Math.round(input.valor * 100) / 100,
         formaPagamento: input.formaPagamento,
         caixaLancamentoId: lancamento.id,
+        vencimentoCoberto: ass.proximoVencimento,
         criadoEm: new Date().toISOString(),
       }
+      if (!ciclosPagos.current) ciclosPagos.current = new Set()
+      ciclosPagos.current.add(`${ass.id}:${ass.proximoVencimento}`)
       const atualizada: AssinaturaClube = {
         ...ass,
         proximoVencimento: proximoVencimentoAposPagamento(
@@ -235,7 +341,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       }))
       return { assinatura: atualizada, pagamento }
     },
-    [estado.assinaturas, registrarReceitaClube],
+    [estado.assinaturas, estado.pagamentos, registrarReceitaClube],
   )
 
   const renomearCliente = useCallback((antigo: string, novo: string) => {
@@ -257,6 +363,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       podeAssinar,
       pagamentosDaAssinatura,
       assinar,
+      atualizar,
       cancelar,
       registrarPagamento,
       renomearCliente,
@@ -268,6 +375,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       podeAssinar,
       pagamentosDaAssinatura,
       assinar,
+      atualizar,
       cancelar,
       registrarPagamento,
       renomearCliente,

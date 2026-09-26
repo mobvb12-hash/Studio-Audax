@@ -3,11 +3,17 @@ import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useClientes } from '@/modules/clientes/store'
 import { useClube } from '@/modules/clube/store'
 import { addMonthsISO, dataISOValida } from '@/modules/clube/regras'
-import { PLANOS_CLUBE, type PlanoClube } from '@/modules/clube/types'
+import {
+  PLANOS_CLUBE,
+  type AssinaturaClube,
+  type PlanoClube,
+} from '@/modules/clube/types'
 import { parseMoeda } from '@/lib/moeda'
 
 type Props = {
   onFechar: () => void
+  /** Presente = modo edição (cliente, plano e mensalidade; datas não mudam) */
+  assinatura?: AssinaturaClube | null
 }
 
 const campo =
@@ -16,14 +22,28 @@ const campo =
 const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
-export default function AssinaturaFormModal({ onFechar }: Props) {
-  const { clientes } = useClientes()
-  const { assinar, podeAssinar } = useClube()
+function valorTextoFormatado(valor: number): string {
+  return valor.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
 
-  const [clienteId, setClienteId] = useState('')
-  const [plano, setPlano] = useState<PlanoClube | ''>('')
-  const [valorTexto, setValorTexto] = useState('')
-  const [data, setData] = useState(() => hojeISO())
+export default function AssinaturaFormModal({ onFechar, assinatura }: Props) {
+  const { clientes } = useClientes()
+  const { assinar, atualizar, podeAssinar } = useClube()
+  const editando = Boolean(assinatura)
+
+  const [clienteId, setClienteId] = useState(() => assinatura?.clienteId ?? '')
+  const [plano, setPlano] = useState<PlanoClube | ''>(
+    () => assinatura?.plano ?? '',
+  )
+  const [valorTexto, setValorTexto] = useState(() =>
+    assinatura ? valorTextoFormatado(assinatura.valorMensal) : '',
+  )
+  const [data, setData] = useState(
+    () => assinatura?.dataAssinatura ?? hojeISO(),
+  )
   const [erro, setErro] = useState('')
 
   useEffect(() => {
@@ -35,12 +55,21 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
   }, [onFechar])
 
   const disponiveis = useMemo(
-    () => clientes.filter((c) => c.ativo && podeAssinar(c.id)),
-    [clientes, podeAssinar],
+    () =>
+      clientes.filter(
+        (c) =>
+          // Em edição o próprio cliente permanece selecionável
+          (editando && c.id === assinatura?.clienteId) ||
+          (c.ativo && podeAssinar(c.id)),
+      ),
+    [clientes, podeAssinar, editando, assinatura],
   )
 
-  const vencimentoPrevisto =
-    dataISOValida(data) ? addMonthsISO(data, 1) : '—'
+  const vencimentoPrevisto = editando
+    ? assinatura!.proximoVencimento
+    : dataISOValida(data)
+      ? addMonthsISO(data, 1)
+      : '—'
 
   function confirmar() {
     const cliente = clientes.find((c) => c.id === clienteId)
@@ -53,17 +82,30 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
       return
     }
     try {
-      assinar({
-        clienteId: cliente.id,
-        cliente: cliente.nome,
-        plano,
-        valorMensal: parseMoeda(valorTexto),
-        dataAssinatura: data,
-      })
+      if (editando && assinatura) {
+        atualizar(assinatura.id, {
+          clienteId: cliente.id,
+          cliente: cliente.nome,
+          plano,
+          valorMensal: parseMoeda(valorTexto),
+        })
+      } else {
+        assinar({
+          clienteId: cliente.id,
+          cliente: cliente.nome,
+          plano,
+          valorMensal: parseMoeda(valorTexto),
+          dataAssinatura: data,
+        })
+      }
       onFechar()
     } catch (e) {
       setErro(
-        e instanceof Error ? e.message : 'Não foi possível criar a assinatura.',
+        e instanceof Error
+          ? e.message
+          : editando
+            ? 'Não foi possível salvar as alterações.'
+            : 'Não foi possível criar a assinatura.',
       )
     }
   }
@@ -80,11 +122,12 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-[#1C1A15]">
-              Nova assinatura
+              {editando ? 'Editar assinatura' : 'Nova assinatura'}
             </h2>
             <p className="mt-1 text-[13px] text-[#8A8171]">
-              Audax Club · assinante vigente ganha 10% de desconto em produtos
-              no PDV.
+              {editando
+                ? 'Audax Club · cliente, plano e mensalidade. Datas e histórico não mudam.'
+                : 'Audax Club · assinante vigente ganha 10% de desconto em produtos no PDV.'}
             </p>
           </div>
           <button
@@ -160,9 +203,12 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
               </label>
               <input
                 id="ass-data"
-                type="date"
-                className={campo}
-                value={data}
+                type={editando ? 'text' : 'date'}
+                className={`${campo} ${editando ? 'bg-[#F3ECDA] text-[#8A8171]' : ''}`}
+                value={
+                  editando ? formatarDataLonga(assinatura!.dataAssinatura) : data
+                }
+                readOnly={editando}
                 onChange={(e) => setData(e.target.value)}
               />
             </div>
@@ -204,7 +250,7 @@ export default function AssinaturaFormModal({ onFechar }: Props) {
             disabled={disponiveis.length === 0}
             className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:bg-[#C9BC94]"
           >
-            Criar assinatura
+            {editando ? 'Salvar alterações' : 'Criar assinatura'}
           </button>
         </div>
       </div>

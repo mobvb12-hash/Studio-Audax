@@ -39,6 +39,11 @@ export type PagamentoClube = {
   formaPagamento: FormaPagamento
   /** Liga o pagamento ao lançamento recebido no Caixa do dia */
   caixaLancamentoId?: string
+  /**
+   * Vencimento do ciclo coberto por este pagamento — recusa a mesma cobrança
+   * duas vezes. Pagamentos antigos (sem o campo) não bloqueiam nada.
+   */
+  vencimentoCoberto?: string
   criadoEm: string
 }
 

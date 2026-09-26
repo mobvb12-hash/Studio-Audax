@@ -5,9 +5,10 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { addMonthsISO, dataISOValida } from './regras'
 import { ClubeProvider, useClube } from './store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
-import type { AssinaturaClube } from './types'
+import { PLANOS_ROTULO, type AssinaturaClube, type PlanoClube } from './types'
 
 const DIA = hojeISO()
+const CHAVE_CLUBE = 'studio-audax:clube:v1'
 
 let ctxClube: ReturnType<typeof useClube>
 let ctxCaixa: ReturnType<typeof useCaixa>
@@ -147,6 +148,111 @@ describe('Audax Club — assinaturas', () => {
   })
 })
 
+describe('Audax Club — planos do clube', () => {
+  it('cria assinatura em cada um dos 3 planos (Cabelo, Barba, Cabelo + Barba)', () => {
+    montar()
+    const planos: { id: PlanoClube; nome: string }[] = [
+      { id: 'cabelo', nome: 'Cabelo' },
+      { id: 'barba', nome: 'Barba' },
+      { id: 'cabelo_barba', nome: 'Cabelo + Barba' },
+    ]
+    planos.forEach((plano, indice) => {
+      const r: { nova?: AssinaturaClube } = {}
+      act(() => {
+        r.nova = ctxClube.assinar({
+          clienteId: `cli-${indice}`,
+          cliente: `Cliente ${indice}`,
+          plano: plano.id,
+          valorMensal: 50 + indice,
+          dataAssinatura: DIA,
+        })
+      })
+      expect(r.nova?.plano).toBe(plano.id)
+      expect(PLANOS_ROTULO[r.nova!.plano]).toBe(plano.nome)
+      expect(r.nova?.proximoVencimento).toBe(addMonthsISO(DIA, 1))
+      expect(r.nova?.cancelada).toBe(false)
+    })
+    expect(ctxClube.assinaturas).toHaveLength(3)
+  })
+})
+
+describe('Audax Club — edição de assinatura', () => {
+  it('edita cliente, plano e mensalidade sem mexer em datas nem histórico', () => {
+    montar()
+    const ass = criarAssinatura()
+    act(() => {
+      ctxClube.registrarPagamento({
+        assinaturaId: ass.id,
+        data: DIA,
+        valor: 99.9,
+        formaPagamento: 'pix',
+      })
+    })
+    const vencPosPagamento = ctxClube.assinaturas[0].proximoVencimento
+
+    let atualizada!: AssinaturaClube
+    act(() => {
+      atualizada = ctxClube.atualizar(ass.id, {
+        plano: 'barba',
+        valorMensal: 59.9,
+      })
+    })
+    expect(atualizada.plano).toBe('barba')
+    expect(atualizada.valorMensal).toBe(59.9)
+    // datas e histórico intactos: vencimento só muda em pagamento/cancelamento
+    expect(atualizada.proximoVencimento).toBe(vencPosPagamento)
+    expect(atualizada.dataAssinatura).toBe(ass.dataAssinatura)
+    expect(atualizada.id).toBe(ass.id)
+    expect(ctxClube.pagamentos).toHaveLength(1)
+
+    // trocar de cliente: permitido apenas para quem não tem assinatura
+    act(() => {
+      atualizada = ctxClube.atualizar(ass.id, {
+        clienteId: 'cli-9',
+        cliente: 'Novo Cliente',
+      })
+    })
+    expect(atualizada.clienteId).toBe('cli-9')
+    expect(atualizada.cliente).toBe('Novo Cliente')
+    expect(ctxClube.podeAssinar('cli-1')).toBe(true)
+  })
+
+  it('valida assinatura, plano, valor e vínculo de cliente na edição', () => {
+    montar()
+    const ass = criarAssinatura()
+    act(() => {
+      ctxClube.assinar({
+        clienteId: 'cli-2',
+        cliente: 'Bruno Lima',
+        plano: 'cabelo',
+        valorMensal: 50,
+        dataAssinatura: DIA,
+      })
+    })
+    // cliente que já tem assinatura em andamento não pode receber outra
+    expect(() =>
+      ctxClube.atualizar(ass.id, { clienteId: 'cli-2', cliente: 'Bruno Lima' }),
+    ).toThrow('em andamento')
+    expect(() => ctxClube.atualizar(ass.id, { plano: 'invalido' })).toThrow(
+      'Selecione o plano.',
+    )
+    expect(() => ctxClube.atualizar(ass.id, { valorMensal: 0 })).toThrow(
+      'maior que zero',
+    )
+    expect(() =>
+      ctxClube.atualizar('nao-existe', { valorMensal: 10 }),
+    ).toThrow('não encontrada')
+    // nada mudou no vínculo original
+    expect(ctxClube.assinaturas[0].clienteId).toBe('cli-1')
+
+    act(() => ctxClube.cancelar(ass.id))
+    expect(() => ctxClube.atualizar(ass.id, { valorMensal: 10 })).toThrow(
+      'cancelada',
+    )
+    expect(ctxClube.assinaturas).toHaveLength(2)
+  })
+})
+
 describe('Audax Club — pagamentos e renovação', () => {
   it('pagamento gera receita no Caixa, renova o ciclo e liga tudo', () => {
     montar()
@@ -249,6 +355,127 @@ describe('Audax Club — pagamentos e renovação', () => {
       }),
     ).toThrow('cancelada')
     expect(ctxCaixa.lancamentos).toHaveLength(0)
+  })
+})
+
+describe('Audax Club — pagamento duplicado da mesma cobrança', () => {
+  it('recusa a mesma cobrança duas vezes no mesmo lote (duplo clique)', () => {
+    montar()
+    const ass = criarAssinatura()
+    act(() => {
+      ctxClube.registrarPagamento({
+        assinaturaId: ass.id,
+        data: DIA,
+        valor: 99.9,
+        formaPagamento: 'pix',
+      })
+      // segundo clique antes do re-render: mesmo ciclo, sem efeito algum
+      expect(() =>
+        ctxClube.registrarPagamento({
+          assinaturaId: ass.id,
+          data: DIA,
+          valor: 99.9,
+          formaPagamento: 'pix',
+        }),
+      ).toThrow('já foi paga')
+    })
+    expect(ctxClube.pagamentos).toHaveLength(1)
+    expect(ctxCaixa.lancamentos.filter((l) => l.origem === 'clube')).toHaveLength(1)
+    expect(ctxClube.assinaturas[0].proximoVencimento).toBe(
+      addMonthsISO(addMonthsISO(DIA, 1), 1),
+    )
+  })
+
+  it('recusa pelo histórico persistido (cobrança do ciclo já gravada)', () => {
+    const vencimento = addMonthsISO(DIA, 1)
+    localStorage.setItem(
+      CHAVE_CLUBE,
+      JSON.stringify({
+        assinaturas: [
+          {
+            id: 'a1',
+            clienteId: 'cli-1',
+            cliente: 'Lucas Mendes',
+            plano: 'cabelo',
+            valorMensal: 89.9,
+            dataAssinatura: DIA,
+            proximoVencimento: vencimento,
+            cancelada: false,
+            criadoEm: DIA,
+          },
+        ],
+        pagamentos: [
+          {
+            id: 'p1',
+            assinaturaId: 'a1',
+            clienteId: 'cli-1',
+            data: DIA,
+            valor: 89.9,
+            formaPagamento: 'pix',
+            vencimentoCoberto: vencimento,
+            criadoEm: DIA,
+          },
+        ],
+      }),
+    )
+    montar()
+    expect(() =>
+      ctxClube.registrarPagamento({
+        assinaturaId: 'a1',
+        data: DIA,
+        valor: 89.9,
+        formaPagamento: 'pix',
+      }),
+    ).toThrow('já foi paga')
+    expect(ctxClube.pagamentos).toHaveLength(1)
+    expect(ctxCaixa.lancamentos).toHaveLength(0)
+    expect(ctxClube.assinaturas[0].proximoVencimento).toBe(vencimento)
+  })
+
+  it('pagamento legado sem vencimentoCoberto não bloqueia (dados preservados)', () => {
+    const vencimento = addMonthsISO(DIA, 1)
+    localStorage.setItem(
+      CHAVE_CLUBE,
+      JSON.stringify({
+        assinaturas: [
+          {
+            id: 'a1',
+            clienteId: 'cli-1',
+            cliente: 'Lucas Mendes',
+            plano: 'cabelo',
+            valorMensal: 89.9,
+            dataAssinatura: DIA,
+            proximoVencimento: vencimento,
+            cancelada: false,
+            criadoEm: DIA,
+          },
+        ],
+        pagamentos: [
+          {
+            id: 'p-antigo',
+            assinaturaId: 'a1',
+            clienteId: 'cli-1',
+            data: DIA,
+            valor: 89.9,
+            formaPagamento: 'pix',
+            criadoEm: DIA,
+          },
+        ],
+      }),
+    )
+    montar()
+    act(() => {
+      expect(() =>
+        ctxClube.registrarPagamento({
+          assinaturaId: 'a1',
+          data: DIA,
+          valor: 89.9,
+          formaPagamento: 'pix',
+        }),
+      ).not.toThrow()
+    })
+    expect(ctxClube.pagamentos).toHaveLength(2)
+    expect(ctxCaixa.lancamentos.filter((l) => l.origem === 'clube')).toHaveLength(1)
   })
 })
 
