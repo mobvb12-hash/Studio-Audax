@@ -5,6 +5,8 @@ import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import type { Agendamento } from '@/modules/agenda/types'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { EstoqueProvider } from '@/modules/estoque/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 
 const DIA = '2026-09-25'
@@ -56,12 +58,16 @@ function montar(ag = AG, fechado = false) {
   return render(
     <ClientesProvider>
       <ServicosProvider>
-        <AgendaProvider>
-          <CaixaProvider>
-            <Estado />
-            <PagamentoModal agendamento={ag} onFechar={() => undefined} />
-          </CaixaProvider>
-        </AgendaProvider>
+        <ProdutosProvider>
+          <EstoqueProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <Estado />
+                <PagamentoModal agendamento={ag} onFechar={() => undefined} />
+              </CaixaProvider>
+            </AgendaProvider>
+          </EstoqueProvider>
+        </ProdutosProvider>
       </ServicosProvider>
     </ClientesProvider>,
   )
