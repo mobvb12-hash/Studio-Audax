@@ -20,6 +20,7 @@ import Clube from '@/pages/Clube'
 import Comissoes from '@/pages/Comissoes'
 import Crm from '@/pages/Crm'
 import Dashboard from '@/pages/Dashboard'
+import Financeiro from '@/pages/Financeiro'
 import Ia from '@/pages/Ia'
 import PDV from '@/pages/PDV'
 import Produtos from '@/pages/Produtos'
@@ -72,6 +73,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'servicos',
   'profissionais',
   'comissoes',
+  'financeiro',
   'relatorios',
   'pdv',
   'estoque',
@@ -112,6 +114,7 @@ function Conteudo() {
       {pagina === 'servicos' && <Servicos />}
       {pagina === 'profissionais' && <Profissionais />}
       {pagina === 'comissoes' && <Comissoes />}
+      {pagina === 'financeiro' && <Financeiro />}
       {pagina === 'relatorios' && <Relatorios />}
       {pagina === 'pdv' && <PDV />}
       {pagina === 'estoque' && <Produtos />}
