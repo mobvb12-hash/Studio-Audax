@@ -511,3 +511,42 @@ describe('Estoque — histórico e persistência', () => {
     expect(ctx.movimentacoes[0].estoqueDepois).toBe(7)
   })
 })
+
+// Auditoria F4a: a reversão pré-resolve TODOS os itens antes de registrar
+// estorno — um item inválido aborta a operação inteira e o retry futuro
+// ainda encontra a venda "não revertida".
+describe('Estoque — regressão: estorno atômico (auditoria F4)', () => {
+  it('item com quantidade inválida aborta a reversão inteira e o retry devolve', () => {
+    montar()
+    const a = criarProduto('Creme capilar', 10)
+    act(() => {
+      ctx.saidaPorVenda('venda-20', '2026-09-22', [
+        { produtoId: a.id, produto: a.nome, quantidade: 3 },
+      ])
+    })
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(7)
+
+    expect(() =>
+      ctx.reverterVenda({
+        id: 'venda-20',
+        itens: [
+          { produtoId: a.id, produto: a.nome, quantidade: 3 },
+          { produtoId: a.id, produto: a.nome, quantidade: 0 },
+        ],
+      }),
+    ).toThrow(/Quantidade inválida/)
+
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(7)
+    expect(ctx.movimentacoes.filter((m) => m.tipo === 'estorno')).toHaveLength(0)
+
+    // retry com itens válidos ainda funciona (não ficou marcada como revertida)
+    act(() => {
+      ctx.reverterVenda({
+        id: 'venda-20',
+        itens: [{ produtoId: a.id, produto: a.nome, quantidade: 3 }],
+      })
+    })
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(10)
+    expect(ctx.movimentacoes.filter((m) => m.tipo === 'estorno')).toHaveLength(1)
+  })
+})

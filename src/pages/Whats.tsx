@@ -78,7 +78,9 @@ export default function Whats() {
   const [falhando, setFalhando] = useState<MensagemWhats | null>(null)
   const [clienteDo, setClienteDo] = useState<Cliente | null>(null)
 
-  const hoje = useMemo(() => hojeISO(), [])
+  // Recalculado a cada render: uma sessão que cruza a meia-noite não
+  // pode continuar exibindo o "hoje" do dia anterior.
+  const hoje = hojeISO()
 
   const kpis = useMemo(
     () => [

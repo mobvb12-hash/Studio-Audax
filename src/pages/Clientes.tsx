@@ -54,9 +54,9 @@ export default function Clientes() {
   const { agendamentos, renomearCliente: renomearNaAgenda } = useAgenda()
   const { lancamentos, renomearCliente: renomearNoCaixa } = useCaixa()
   const { assinaturaDoCliente, renomearCliente: renomearNoClube } = useClube()
-  const { renomearCliente: renomearNaEspera } = useEsperaOpcional()
+  const { renomearCliente: renomearNaEspera, pedidos } = useEsperaOpcional()
   const { interacoesDoCliente } = useCrm()
-  const { mensagensDoCliente } = useWhats()
+  const { mensagensDoCliente, renomearCliente: renomearNoWhats } = useWhats()
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<FiltroStatusCliente>('todos')
   const [modalAberto, setModalAberto] = useState(false)
@@ -69,9 +69,13 @@ export default function Clientes() {
     cliente: Cliente
     interacoes: number
     mensagens: number
+    assinatura: boolean
+    pedidos: number
   } | null>(null)
 
-  const hoje = useMemo(() => hojeISO(), [])
+  // Recalculado a cada render: uma sessão que cruza a meia-noite não
+  // pode continuar exibindo o "hoje" do dia anterior.
+  const hoje = hojeISO()
   const atendimentos = useMemo(
     () => resumoAtendimentos(agendamentos),
     [agendamentos],
@@ -109,14 +113,30 @@ export default function Clientes() {
   }
 
   /**
-   * Exclusão segura: cliente com interações CRM ou conversas de WhatsApp
-   * vinculadas não pode ser removido (seria órfão nesses módulos).
+   * Exclusão segura: cliente com interações CRM, conversas de WhatsApp,
+   * assinatura ativa do Audax Club ou pedidos na fila não pode ser
+   * removido (seria órfão nesses módulos — ids referenciados sumiriam).
    */
   function tentarExcluir(cliente: Cliente) {
     const interacoes = interacoesDoCliente(cliente.id).length
     const mensagens = mensagensDoCliente(cliente.id).length
-    if (interacoes > 0 || mensagens > 0) {
-      setBloqueioExclusao({ cliente, interacoes, mensagens })
+    const assinatura = Boolean(assinaturaDoCliente(cliente.id))
+    const pedidosVinculados = pedidos.filter(
+      (p) => p.clienteId === cliente.id,
+    ).length
+    if (
+      interacoes > 0 ||
+      mensagens > 0 ||
+      assinatura ||
+      pedidosVinculados > 0
+    ) {
+      setBloqueioExclusao({
+        cliente,
+        interacoes,
+        mensagens,
+        assinatura,
+        pedidos: pedidosVinculados,
+      })
       return
     }
     setExcluindo(cliente)
@@ -198,16 +218,21 @@ export default function Clientes() {
             </p>
             <p className="mt-1">
               O cliente possui{' '}
-              {bloqueioExclusao.interacoes > 0 &&
-                `${bloqueioExclusao.interacoes} interação(ões) de CRM`}
-              {bloqueioExclusao.interacoes > 0 && bloqueioExclusao.mensagens > 0
-                ? ' e '
-                : ''}
-              {bloqueioExclusao.mensagens > 0 &&
-                `${bloqueioExclusao.mensagens} mensagem(ns) de WhatsApp`}
-              {' '}vinculada(s) ao cadastro. Excluir agora deixaria esses
-              registros sem cliente. Remova os registros em CRM/WhatsApp antes
-              de excluir, ou mantenha o cadastro.
+              {[
+                bloqueioExclusao.interacoes > 0 &&
+                  `${bloqueioExclusao.interacoes} interação(ões) de CRM`,
+                bloqueioExclusao.mensagens > 0 &&
+                  `${bloqueioExclusao.mensagens} mensagem(ns) de WhatsApp`,
+                bloqueioExclusao.assinatura &&
+                  'assinatura ativa do Audax Club',
+                bloqueioExclusao.pedidos > 0 &&
+                  `${bloqueioExclusao.pedidos} pedido(s) na fila de espera`,
+              ]
+                .filter(Boolean)
+                .join(', ')}{' '}
+              vinculado(s) ao cadastro. Excluir agora deixaria esses
+              registros sem cliente. Remova ou cancele esses vínculos
+              antes de excluir, ou mantenha o cadastro.
             </p>
           </div>
           <button
@@ -359,6 +384,7 @@ export default function Clientes() {
             renomearNoCaixa(antigo, novo)
             renomearNoClube(antigo, novo)
             renomearNaEspera(antigo, novo)
+            renomearNoWhats(antigo, novo)
           }}
           onFechar={() => setModalAberto(false)}
         />

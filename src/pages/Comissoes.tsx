@@ -4,6 +4,7 @@ import ConfigComissaoModal from '@/components/ConfigComissaoModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import DetalheComissaoModal from '@/components/DetalheComissaoModal'
 import FechamentoComissaoModal from '@/components/FechamentoComissaoModal'
+import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import {
   periodoHoje,
@@ -57,12 +58,18 @@ export default function Comissoes() {
     { id: string; nome: string } | null
   >(null)
 
+  // Dia corrente como dependência: "hoje"/"semana" não podem ficar
+  // congelados numa sessão que cruza a meia-noite.
+  const hoje = hojeISO()
+
   const periodo = useMemo<Periodo>(() => {
     if (tipo === 'hoje') return periodoHoje()
     if (tipo === 'semana') return periodoSemana()
     if (tipo === 'mes') return periodoMes()
     return custom
-  }, [tipo, custom])
+    // `hoje` é dependência proposital (força o recálculo quando o dia vira)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, custom, hoje])
 
   const linhas = useMemo<LinhaProducao[]>(
     () => linhasDoPeriodo(lancamentos, profissionais, configDe, periodo),

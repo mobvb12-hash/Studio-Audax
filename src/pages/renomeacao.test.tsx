@@ -135,4 +135,40 @@ describe('Renomeação de cadastro propaga para a operação', () => {
     expect(ctxAgenda.agendamentos[0].cliente).toBe('Lucas Mendes')
     expect(ctxCaixa.lancamentos[0].cliente).toBe('Lucas Mendes')
   })
+
+  // Auditoria F7: a renomeação propaga ao rótulo das mensagens já
+  // preparadas (conversas continuam ligadas ao cliente renomeado).
+  it('editar o nome do cliente atualiza as mensagens do WhatsApp', async () => {
+    localStorage.setItem(
+      'studio-audax:whatsapp:v1',
+      JSON.stringify([
+        {
+          id: 'm-1',
+          clienteId: 'c-1',
+          cliente: 'Lucas Mendes',
+          template: 'confirmacao',
+          texto: 'Olá, Lucas! Tudo bem?',
+          status: 'pendente',
+          origem: 'crm',
+          criadoEm: '2026-09-25T10:00:00.000Z',
+        },
+      ]),
+    )
+    montar()
+    semear()
+
+    editar('Lucas Mendes')
+    fireEvent.click(screen.getByText('Salvar alterações'))
+    await waitFor(() =>
+      expect(screen.queryByText('Salvar alterações')).toBeNull(),
+    )
+
+    await waitFor(() => {
+      const msgs = JSON.parse(
+        localStorage.getItem('studio-audax:whatsapp:v1') ?? '[]',
+      )
+      expect(msgs).toHaveLength(1)
+      expect(msgs[0].cliente).toBe('Lucas M.')
+    })
+  })
 })

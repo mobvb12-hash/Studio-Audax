@@ -94,7 +94,9 @@ export default function Crm() {
     () => aniversariantesDoMes(clientes),
     [clientes],
   )
-  const hoje = useMemo(() => hojeISO(), [])
+  // Recalculado a cada render: uma sessão que cruza a meia-noite não
+  // pode continuar exibindo o "hoje" do dia anterior.
+  const hoje = hojeISO()
 
   /** Mensagem de reativação já preparada (nunca duplica). */
   function mensagemReativacaoPronta(clienteId: string): boolean {

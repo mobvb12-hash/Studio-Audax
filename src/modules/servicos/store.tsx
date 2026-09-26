@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { SERVICOS as SEED } from '@/modules/agenda/catalogo'
 import { validarServico } from './regras'
 import type { NovoServicoInput, Servico } from './types'
@@ -53,19 +54,16 @@ function migrar(bruto: Partial<Servico>): Servico | null {
 }
 
 function carregar(): Servico[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (bruto) {
-      const lista = JSON.parse(bruto) as Partial<Servico>[]
-      if (Array.isArray(lista)) {
-        // lista salva (mesmo vazia) é preservada — o seed só entra em
-        // instalação nova ou storage corrompido
-        const migrada = lista.map(migrar).filter((s): s is Servico => s !== null)
-        return ordenar(migrada)
-      }
-    }
-  } catch {
-    // corrompido: recria a partir do seed
+  // JSON inválido ou com forma inesperada: cópia original preservada em
+  // `<chave>:corrompido` (com aviso visível) antes do seed.
+  const bruto = carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray)
+  if (Array.isArray(bruto)) {
+    // lista salva (mesmo vazia) é preservada — o seed só entra em
+    // instalação nova ou storage corrompido
+    const migrada = (bruto as Partial<Servico>[])
+      .map(migrar)
+      .filter((s): s is Servico => s !== null)
+    return ordenar(migrada)
   }
   const agora = new Date().toISOString()
   return ordenar(
@@ -86,11 +84,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
   const [servicos, setServicos] = useState<Servico[]>(() => carregar())
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(servicos))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, servicos)
   }, [servicos])
 
   const adicionar = useCallback(

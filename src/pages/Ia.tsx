@@ -31,7 +31,7 @@ export default function Ia() {
   const { lancamentos } = useCaixa()
   const { servicos } = useServicos()
   const { aceitas, descartadas, marcarAceita, marcarDescartada } = useIa()
-  const { criar } = useWhats()
+  const { criar, mensagens } = useWhats()
   const { adicionarInteracao } = useCrm()
   const [sugestoes, setSugestoes] = useState<SugestaoIa[] | null>(null)
   const [confirmando, setConfirmando] = useState<SugestaoIa | null>(null)
@@ -47,7 +47,7 @@ export default function Ia() {
 
   function analisar() {
     setSugestoes(
-      gerarSugestoes({ clientes, agendamentos, lancamentos, servicos }),
+      gerarSugestoes({ clientes, agendamentos, lancamentos, servicos, mensagens }),
     )
   }
 

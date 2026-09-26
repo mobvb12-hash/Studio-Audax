@@ -509,3 +509,112 @@ describe('Audax Club — consultas e persistência', () => {
     expect(screen.getByText('clube-pronto')).toBeTruthy()
   })
 })
+
+// Auditoria F6: pagamento cujo lançamento no caixa foi estornado não
+// cobre mais o ciclo (o dinheiro foi devolvido) — a cobrança pode ser
+// paga novamente sem a trava "já foi paga".
+describe('Audax Club — cobrança com lançamento estornado (auditoria F6)', () => {
+  const CHAVE_LANC = 'studio-audax:caixa:lancamentos:v1'
+
+  function semearCicloPagoEstornado() {
+    const vencimento = addMonthsISO(DIA, 1)
+    localStorage.setItem(
+      CHAVE_LANC,
+      JSON.stringify([
+        {
+          id: 'lanc-1',
+          tipo: 'receita',
+          origem: 'clube',
+          data: DIA,
+          hora: '10:00',
+          descricao: 'Assinatura Audax Club',
+          valor: 89.9,
+          desconto: 0,
+          valorLiquido: 89.9,
+          formaPagamento: 'pix',
+          estornado: true,
+        },
+      ]),
+    )
+    localStorage.setItem(
+      CHAVE_CLUBE,
+      JSON.stringify({
+        assinaturas: [
+          {
+            id: 'a1',
+            clienteId: 'cli-1',
+            cliente: 'Lucas Mendes',
+            plano: 'cabelo',
+            valorMensal: 89.9,
+            dataAssinatura: DIA,
+            proximoVencimento: vencimento,
+            cancelada: false,
+            criadoEm: DIA,
+          },
+        ],
+        pagamentos: [
+          {
+            id: 'p1',
+            assinaturaId: 'a1',
+            clienteId: 'cli-1',
+            data: DIA,
+            valor: 89.9,
+            formaPagamento: 'pix',
+            vencimentoCoberto: vencimento,
+            caixaLancamentoId: 'lanc-1',
+            criadoEm: DIA,
+          },
+        ],
+      }),
+    )
+    return vencimento
+  }
+
+  it('estorno do caixa libera nova cobrança do mesmo ciclo', () => {
+    semearCicloPagoEstornado()
+    montar()
+    act(() => {
+      ctxClube.registrarPagamento({
+        assinaturaId: 'a1',
+        data: DIA,
+        valor: 89.9,
+        formaPagamento: 'pix',
+      })
+    })
+    expect(ctxClube.pagamentos).toHaveLength(2)
+    expect(ctxCaixa.lancamentos.filter((l) => l.origem === 'clube')).toHaveLength(2)
+  })
+
+  it('sem estorno a mesma cobrança continua bloqueada', () => {
+    semearCicloPagoEstornado()
+    localStorage.setItem(
+      CHAVE_LANC,
+      JSON.stringify([
+        {
+          id: 'lanc-1',
+          tipo: 'receita',
+          origem: 'clube',
+          data: DIA,
+          hora: '10:00',
+          descricao: 'Assinatura Audax Club',
+          valor: 89.9,
+          desconto: 0,
+          valorLiquido: 89.9,
+          formaPagamento: 'pix',
+        },
+      ]),
+    )
+    montar()
+    expect(() =>
+      act(() => {
+        ctxClube.registrarPagamento({
+          assinaturaId: 'a1',
+          data: DIA,
+          valor: 89.9,
+          formaPagamento: 'pix',
+        })
+      }),
+    ).toThrow('já foi paga')
+    expect(ctxClube.pagamentos).toHaveLength(1)
+  })
+})

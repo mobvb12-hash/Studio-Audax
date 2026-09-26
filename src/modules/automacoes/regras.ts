@@ -145,12 +145,15 @@ export function gerarAutomacoes(
     }
 
     // 4) Reagendamento: avisar a remarcação atual (uma chave por horário).
+    // Assim como confirmação/lembrete, não re-sugere o que já foi
+    // preparado manualmente (CRM/IA) para este agendamento.
     if (
       ag.remarcacoes &&
       ag.remarcacoes.length > 0 &&
       ag.data >= hoje &&
       (ag.status === 'pendente' || ag.status === 'confirmado') &&
-      cliente
+      cliente &&
+      !jaPreparada(mensagens, 'reagendamento', cliente.id, ag.id)
     ) {
       sugestoes.push({
         chave: `reagendamento:${ag.id}:${ag.data}:${ag.horario}`,
@@ -268,18 +271,30 @@ export function gerarAutomacoes(
       continue
     const cliente = clientes.find((c) => c.id === assinatura.clienteId)
     if (!cliente?.ativo) continue
+    const texto = textoTemplate('vencimento_clube', {
+      nome: assinatura.cliente,
+      plano: PLANOS_ROTULO[assinatura.plano],
+      data: assinatura.proximoVencimento,
+      diasVencimento: diasEntre(hoje, assinatura.proximoVencimento),
+    })
+    // Ciclo já coberto por mensagem preparada (mesmo texto = mesma
+    // cobrança): não sugere de novo, mas o próximo vencimento continua
+    // sendo sugerido (texto diferente, chave diferente).
+    const jaCoberta = mensagens.some(
+      (m) =>
+        m.status !== 'falhou' &&
+        m.template === 'vencimento_clube' &&
+        m.clienteId === cliente.id &&
+        m.texto === texto,
+    )
+    if (jaCoberta) continue
     sugestoes.push({
       chave: `vencimento_clube:${assinatura.id}:${assinatura.proximoVencimento}`,
       tipo: 'vencimento_clube',
       template: 'vencimento_clube',
       clienteId: cliente.id,
       cliente: assinatura.cliente,
-      texto: textoTemplate('vencimento_clube', {
-        nome: assinatura.cliente,
-        plano: PLANOS_ROTULO[assinatura.plano],
-        data: assinatura.proximoVencimento,
-        diasVencimento: diasEntre(hoje, assinatura.proximoVencimento),
-      }),
+      texto,
     })
   }
 

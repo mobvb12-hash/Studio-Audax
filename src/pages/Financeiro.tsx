@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { formatarBRL } from '@/lib/moeda'
+import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import type { Periodo } from '@/modules/comissoes/types'
 import {
@@ -133,6 +134,10 @@ export default function Financeiro() {
   const [tipo, setTipo] = useState<TipoPeriodo>('mes')
   const [custom, setCustom] = useState<Periodo>(() => periodoMes())
 
+  // Dia corrente como dependência: "hoje"/"ontem"/"semana" não podem
+  // ficar congelados numa sessão que cruza a meia-noite.
+  const hoje = hojeISO()
+
   const periodo = useMemo<Periodo>(() => {
     if (tipo === 'hoje') return periodoHoje()
     if (tipo === 'ontem') return periodoOntem()
@@ -140,7 +145,9 @@ export default function Financeiro() {
     if (tipo === 'mes') return periodoMes()
     if (tipo === 'mesAnterior') return periodoMesAnterior()
     return custom
-  }, [tipo, custom])
+    // `hoje` é dependência proposital (força o recálculo quando o dia vira)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, custom, hoje])
 
   const resumo = useMemo(
     () => resumoFinanceiro(lancamentos, periodo),

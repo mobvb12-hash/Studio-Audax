@@ -461,3 +461,116 @@ describe('Relatórios — seção Produtos', () => {
     ).toBeTruthy()
   })
 })
+
+// Auditoria F4b: a devolução de estoque acontece ANTES do estorno no
+// caixa — se ela falhar (produto removido etc.), nada muda e o erro
+// aparece no modal; a venda segue ativa para um retry futuro.
+describe('Estoque ↔ Caixa — ordem do estorno (auditoria F4b)', () => {
+  it('falha na devolução aborta o estorno e mantém a venda ativa', () => {
+    localStorage.setItem(
+      'studio-audax:caixa:lancamentos:v1',
+      JSON.stringify([
+        {
+          id: 'l-fantasma',
+          tipo: 'receita',
+          origem: 'produto',
+          data: hojeISO(),
+          hora: '10:00',
+          descricao: 'Venda de produto',
+          valor: 60,
+          desconto: 0,
+          valorLiquido: 60,
+          formaPagamento: 'pix',
+          itens: [
+            { produtoId: 'px', produto: 'Fantasma', quantidade: 2, preco: 30 },
+          ],
+        },
+      ]),
+    )
+    // movimentação de venda existe, mas o produto saiu do cadastro
+    localStorage.setItem(
+      'studio-audax:estoque:movimentacoes:v1',
+      JSON.stringify([
+        {
+          id: 'm-1',
+          produtoId: 'px',
+          produto: 'Fantasma',
+          tipo: 'venda',
+          quantidade: -2,
+          estoqueAntes: 4,
+          estoqueDepois: 2,
+          custoUnitario: 10,
+          data: hojeISO(),
+          origem: 'pdv',
+          vendaId: 'l-fantasma',
+        },
+      ]),
+    )
+
+    env(<Caixa />)
+    fireEvent.click(screen.getByRole('button', { name: 'Estornar' }))
+    const botoes = screen.getAllByRole('button', { name: 'Estornar' })
+    fireEvent.click(botoes[botoes.length - 1])
+
+    // erro visível no modal; caixa e estoque intocados
+    expect(screen.getByText(/não encontrado/i)).toBeTruthy()
+    expect(screen.getByText('Estornar lançamento')).toBeTruthy()
+    expect(ctxCaixa.lancamentos[0].estornado).toBeFalsy()
+    expect(
+      ctxEstoque.movimentacoes.filter((m) => m.tipo === 'estorno'),
+    ).toHaveLength(0)
+    expect(ctxCaixa.lancamentos).toHaveLength(1)
+  })
+})
+
+// Auditoria F5: renomear produto atualiza também o histórico já
+// registrado no Caixa e no Estoque (rótulos antigos viravam órfãos).
+describe('Produtos — renomeação propaga para caixa e estoque (auditoria F5)', () => {
+  it('editar o nome do produto atualiza itens da venda e movimentações', () => {
+    env(<Produtos />)
+    const id = criarComEstoque('Pomada modeladora', 10)
+    // venda registrada igual ao modal: caixa + baixa de estoque
+    act(() => {
+      ctxCaixa.registrarVenda({
+        data: hojeISO(),
+        itens: [
+          {
+            produtoId: id,
+            produto: 'Pomada modeladora',
+            quantidade: 2,
+            preco: 30,
+          },
+        ],
+        desconto: 0,
+        formaPagamento: 'pix',
+      })
+    })
+    act(() => {
+      ctxEstoque.saidaPorVenda(ctxCaixa.lancamentos[0].id, hojeISO(), [
+        {
+          produtoId: id,
+          produto: 'Pomada modeladora',
+          quantidade: 2,
+          preco: 30,
+        },
+      ])
+    })
+
+    const card = screen
+      .getAllByRole('listitem')
+      .find((li) => li.textContent?.includes('Pomada modeladora')) as HTMLElement
+    fireEvent.click(within(card).getByText('Editar'))
+    fireEvent.change(screen.getByLabelText('Nome *'), {
+      target: { value: 'Pomada premium' },
+    })
+    fireEvent.click(screen.getByText('Salvar alterações'))
+
+    expect(ctxProdutos.porId(id)?.nome).toBe('Pomada premium')
+    const venda = ctxCaixa.lancamentos.find((l) => l.origem === 'produto')!
+    expect(venda.itens?.[0].produto).toBe('Pomada premium')
+    const movVenda = ctxEstoque.movimentacoes.find((m) => m.tipo === 'venda')!
+    expect(movVenda.produto).toBe('Pomada premium')
+    expect(screen.getByText('Pomada premium')).toBeTruthy()
+    expect(screen.queryByText('Pomada modeladora')).toBeNull()
+  })
+})

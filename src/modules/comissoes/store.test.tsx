@@ -214,3 +214,89 @@ describe('Comissões — fechamento', () => {
     expect(JSON.parse(localStorage.getItem(CHAVE_CONFIGS) ?? '[]')).toHaveLength(1)
   })
 })
+
+// Auditoria F1: períodos que se cruzam pagariam a mesma produção duas
+// vezes — o fechamento é sobre o intervalo, então intervalos comuns
+// duplicam pagamento.
+describe('Comissões — bloqueio de períodos sobrepostos (auditoria F1)', () => {
+  function fechar(
+    periodo: { inicio: string; fim: string },
+    profissionalId = 'prof-1',
+    profissionalNome = 'Audax',
+  ) {
+    act(() => {
+      ctx.fecharComissao({
+        profissionalId,
+        profissionalNome,
+        periodo,
+        qtdAtendimentos: 3,
+        producao: 180,
+        percentual: 40,
+        comissao: 72,
+      })
+    })
+  }
+
+  it('período parcialmente sobreposto é recusado e nada é gravado', () => {
+    montar()
+    fechar({ inicio: '2026-09-01', fim: '2026-09-30' })
+    expect(() => fechar({ inicio: '2026-09-20', fim: '2026-10-10' })).toThrow(
+      /se sobrepõe/,
+    )
+    expect(() => fechar({ inicio: '2026-08-15', fim: '2026-09-10' })).toThrow(
+      /se sobrepõe/,
+    )
+    expect(() => fechar({ inicio: '2026-09-05', fim: '2026-09-25' })).toThrow(
+      /se sobrepõe/,
+    )
+    expect(ctx.fechamentos).toHaveLength(1)
+    expect(JSON.parse(localStorage.getItem(CHAVE_FECH) ?? '[]')).toHaveLength(1)
+  })
+
+  it('período seguinte e outro profissional na mesma janela são permitidos', () => {
+    montar()
+    fechar({ inicio: '2026-09-01', fim: '2026-09-30' })
+    fechar({ inicio: '2026-10-01', fim: '2026-10-31' })
+    fechar({ inicio: '2026-09-01', fim: '2026-09-30' }, 'prof-2', 'Bruna')
+    expect(ctx.fechamentos).toHaveLength(3)
+  })
+
+  it('fechamento reaberto deixa de bloquear sobreposição', () => {
+    montar()
+    fechar({ inicio: '2026-09-01', fim: '2026-09-30' })
+    act(() => ctx.reabrirComissao(ctx.fechamentos[0].id, 'correção'))
+    fechar({ inicio: '2026-09-15', fim: '2026-09-25' })
+    expect(ctx.fechamentos).toHaveLength(2)
+  })
+})
+
+// Auditoria F8: renomear o profissional propaga ao rótulo do histórico,
+// mas preserva id, configs (por id) e a trilha de auditoria.
+describe('Comissões — renomeação profissional (auditoria F8)', () => {
+  it('atualiza rótulo dos fechamentos sem mexer em configs nem auditoria', () => {
+    montar()
+    act(() => {
+      ctx.salvarConfig('prof-1', { percentual: 55, ativo: true })
+    })
+    act(() => {
+      ctx.fecharComissao({
+        profissionalId: 'prof-1',
+        profissionalNome: 'Audax',
+        periodo: PERIODO,
+        qtdAtendimentos: 3,
+        producao: 180,
+        percentual: 55,
+        comissao: 99,
+      })
+    })
+    act(() => {
+      ctx.renomearProfissional('Audax', 'Studio Audax')
+    })
+
+    expect(ctx.fechamentos[0].profissionalNome).toBe('Studio Audax')
+    expect(ctx.fechamentos[0].profissionalId).toBe('prof-1')
+    expect(ctx.configDe('prof-1').percentual).toBe(55)
+    expect(ctx.auditoria).toHaveLength(1)
+    expect(ctx.auditoria[0].profissionalNome).toBe('Audax')
+  })
+})

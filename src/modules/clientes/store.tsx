@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import type { Cliente, NovoClienteInput } from './types'
 import { digitosDosTelefones, preferenciasPadrao } from './types'
 
@@ -75,25 +76,18 @@ function conflitoDeTelefone(novos: string[], lista: Cliente[]): boolean {
 }
 
 function carregar(): Cliente[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return []
-    const lista = JSON.parse(bruto) as Partial<Cliente>[]
-    return Array.isArray(lista) ? lista.map(normalizarCliente) : []
-  } catch {
-    return []
-  }
+  // JSON inválido ou com forma inesperada: cópia original preservada em
+  // `<chave>:corrompido` (com aviso visível) antes do fallback.
+  const bruto = carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray)
+  if (!Array.isArray(bruto)) return []
+  return (bruto as Partial<Cliente>[]).map(normalizarCliente)
 }
 
 export function ClientesProvider({ children }: { children: ReactNode }) {
   const [clientes, setClientes] = useState<Cliente[]>(() => carregar())
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(clientes))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, clientes)
   }, [clientes])
 
   const adicionar = useCallback(

@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { PROFISSIONAIS as SEED } from '@/modules/agenda/catalogo'
 import { validarProfissional } from './regras'
 import type { NovoProfissionalInput, Profissional } from './types'
@@ -77,22 +78,17 @@ function migrarPlaceholder(p: Profissional): Profissional {
 }
 
 function carregar(): Profissional[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (bruto) {
-      const lista = JSON.parse(bruto) as Partial<Profissional>[]
-      if (Array.isArray(lista)) {
-        // lista salva (mesmo vazia) é preservada — o seed só entra em
-        // instalação nova ou storage corrompido
-        const migrada = lista
-          .map(normalizar)
-          .filter((p): p is Profissional => p !== null)
-          .map(migrarPlaceholder)
-        return ordenar(migrada)
-      }
-    }
-  } catch {
-    // corrompido: recria a partir do seed
+  // JSON inválido ou com forma inesperada: cópia original preservada em
+  // `<chave>:corrompido` (com aviso visível) antes do seed.
+  const bruto = carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray)
+  if (Array.isArray(bruto)) {
+    // lista salva (mesmo vazia) é preservada — o seed só entra em
+    // instalação nova ou storage corrompido
+    const migrada = (bruto as Partial<Profissional>[])
+      .map(normalizar)
+      .filter((p): p is Profissional => p !== null)
+      .map(migrarPlaceholder)
+    return ordenar(migrada)
   }
   const agora = new Date().toISOString()
   return SEED.map((nome) => ({
@@ -112,11 +108,7 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(profissionais))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, profissionais)
   }, [profissionais])
 
   const adicionar = useCallback(

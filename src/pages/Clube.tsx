@@ -52,7 +52,9 @@ export default function Clube() {
   const { assinaturas, pagamentos } = useClube()
   const { lancamentos } = useCaixa()
 
-  const hoje = useMemo(() => hojeISO(), [])
+  // Recalculado a cada render: uma sessão que cruza a meia-noite não
+  // pode continuar exibindo o "hoje" do dia anterior.
+  const hoje = hojeISO()
   const mesAtual = hoje.slice(0, 7)
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [busca, setBusca] = useState('')
@@ -70,19 +72,17 @@ export default function Clube() {
   )
   const pagoNoMes = pagamentosNoMes(pagamentos, mesAtual, estornados)
 
-  const lista = useMemo(() => {
-    const chave = normalizarTexto(busca)
-    return assinaturas
-      .filter((a) => filtro === 'todas' || statusAssinatura(a, hoje) === filtro)
-      .filter((a) => !chave || normalizarTexto(a.cliente).includes(chave))
-      .sort(
-        (a, b) =>
-          ORDEM_STATUS[statusAssinatura(a, hoje)] -
-            ORDEM_STATUS[statusAssinatura(b, hoje)] ||
-          a.proximoVencimento.localeCompare(b.proximoVencimento) ||
-          a.cliente.localeCompare(b.cliente, 'pt-BR'),
-      )
-  }, [assinaturas, filtro, busca, hoje])
+  const chave = normalizarTexto(busca)
+  const lista = assinaturas
+    .filter((a) => filtro === 'todas' || statusAssinatura(a, hoje) === filtro)
+    .filter((a) => !chave || normalizarTexto(a.cliente).includes(chave))
+    .sort(
+      (a, b) =>
+        ORDEM_STATUS[statusAssinatura(a, hoje)] -
+          ORDEM_STATUS[statusAssinatura(b, hoje)] ||
+        a.proximoVencimento.localeCompare(b.proximoVencimento) ||
+        a.cliente.localeCompare(b.cliente, 'pt-BR'),
+    )
 
   const detalhe = detalheId
     ? assinaturas.find((a) => a.id === detalheId)

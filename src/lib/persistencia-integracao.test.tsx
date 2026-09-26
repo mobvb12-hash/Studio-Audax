@@ -4,10 +4,16 @@ import AvisoPersistencia from '@/components/AvisoPersistencia'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClubeProvider, useClube } from '@/modules/clube/store'
+import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
+import { CrmProvider, useCrm } from '@/modules/crm/store'
 import { EstoqueProvider, useEstoque } from '@/modules/estoque/store'
+import { IaProvider, useIa } from '@/modules/ia/store'
 import { ProdutosProvider, useProdutos } from '@/modules/produtos/store'
 import type { Produto } from '@/modules/produtos/types'
+import { ProfissionaisProvider, useProfissionais } from '@/modules/profissionais/store'
+import { ServicosProvider, useServicos } from '@/modules/servicos/store'
+import { WhatsProvider, useWhats } from '@/modules/whatsapp/store'
 import { limparAvisosPersistencia } from './persistencia'
 
 const DIA = '2026-09-25'
@@ -353,6 +359,159 @@ describe('persistência — falha de gravação', () => {
 
     fireEvent.click(screen.getByText('nova-despesa'))
     expect(lerJson(CHAVE_LANCAMENTOS)).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Auditoria F13 — stores convertados para carregarJSON com validação  */
+/* ------------------------------------------------------------------ */
+
+const CHAVE_WHATS = 'studio-audax:whatsapp:v1'
+const CHAVE_CLIENTES = 'studio-audax:clientes:v1'
+const CHAVE_CRM = 'studio-audax:crm:v1'
+const CHAVE_SERVICOS = 'studio-audax:servicos:v1'
+const CHAVE_PROFISSIONAIS = 'studio-audax:profissionais:v1'
+const CHAVE_IA = 'studio-audax:ia:v1'
+
+function TelaConvertidos() {
+  const whats = useWhats()
+  const clientes = useClientes()
+  const crm = useCrm()
+  const servicos = useServicos()
+  const profissionais = useProfissionais()
+  const ia = useIa()
+  return (
+    <div>
+      <output data-testid="whats">{JSON.stringify(whats.mensagens)}</output>
+      <output data-testid="clientes">{JSON.stringify(clientes.clientes)}</output>
+      <output data-testid="crm">{JSON.stringify(crm.interacoes)}</output>
+      <output data-testid="servicos">{JSON.stringify(servicos.servicos)}</output>
+      <output data-testid="profissionais">
+        {JSON.stringify(profissionais.profissionais)}
+      </output>
+      <output data-testid="ia">{JSON.stringify(ia.aceitas)}</output>
+      <button type="button" onClick={() => ia.marcarAceita('sug-1')}>
+        marcar
+      </button>
+    </div>
+  )
+}
+
+function montarConvertidos() {
+  return render(
+    <>
+      <AvisoPersistencia />
+      <WhatsProvider>
+        <ClientesProvider>
+          <CrmProvider>
+            <ServicosProvider>
+              <ProfissionaisProvider>
+                <IaProvider>
+                  <TelaConvertidos />
+                </IaProvider>
+              </ProfissionaisProvider>
+            </ServicosProvider>
+          </CrmProvider>
+        </ClientesProvider>
+      </WhatsProvider>
+    </>,
+  )
+}
+
+describe('persistência — stores convertidos na auditoria (F13)', () => {
+  it('corrupção em whatsapp/clientes/crm/servicos/profissionais/ia: fallback + backup + aviso', async () => {
+    const corrompidas = [
+      CHAVE_WHATS,
+      CHAVE_CLIENTES,
+      CHAVE_CRM,
+      CHAVE_SERVICOS,
+      CHAVE_PROFISSIONAIS,
+    ]
+    for (const chave of corrompidas) {
+      localStorage.setItem(chave, '{quebrado')
+    }
+    localStorage.setItem(CHAVE_IA, '"nao-e-objeto"')
+
+    const primeiro = montarConvertidos()
+    await act(async () => {})
+
+    // fallbacks: listas vazias; profissionais/servicos caem no SEED
+    expect(lista('whats')).toEqual([])
+    expect(lista('clientes')).toEqual([])
+    expect(lista('crm')).toEqual([])
+    expect(lista('ia')).toEqual([])
+    expect(lista('servicos').length).toBeGreaterThan(0)
+    expect(lista('profissionais').length).toBeGreaterThan(0)
+
+    // cópia original preservada em cada chave de backup
+    for (const chave of corrompidas) {
+      expect(localStorage.getItem(`${chave}:corrompido`)).toBe('{quebrado')
+    }
+    expect(localStorage.getItem(`${CHAVE_IA}:corrompido`)).toBe(
+      '"nao-e-objeto"',
+    )
+
+    // aviso visível, sem bloquear a aplicação
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Foi detectado um dado local corrompido; uma cópia foi preservada.',
+    )
+
+    // gravação normal mesmo após o fallback
+    fireEvent.click(screen.getByText('marcar'))
+    expect(lerJson(CHAVE_IA)).toEqual({
+      aceitas: ['sug-1'],
+      descartadas: [],
+    })
+
+    // F5: remonta com o mesmo localStorage
+    primeiro.unmount()
+    montarConvertidos()
+    await act(async () => {})
+    expect(lista('ia')).toEqual(['sug-1'])
+    expect(localStorage.getItem(`${CHAVE_WHATS}:corrompido`)).toBe('{quebrado')
+    expect(localStorage.getItem(`${CHAVE_PROFISSIONAIS}:corrompido`)).toBe(
+      '{quebrado',
+    )
+  })
+
+  it('listas válidas carregam sem gerar backup de corrupção', async () => {
+    localStorage.setItem(
+      CHAVE_WHATS,
+      JSON.stringify([
+        {
+          id: 'm-1',
+          clienteId: 'c-1',
+          cliente: 'Ana Souza',
+          template: 'confirmacao',
+          texto: 'Oi',
+          status: 'pendente',
+          origem: 'crm',
+          criadoEm: `${DIA}T10:00:00.000Z`,
+        },
+      ]),
+    )
+    localStorage.setItem(
+      CHAVE_CLIENTES,
+      JSON.stringify([
+        {
+          id: 'c-1',
+          nome: 'Ana Souza',
+          telefone: '(11) 99999-0000',
+          email: '',
+          observacao: '',
+          ativo: true,
+        },
+      ]),
+    )
+
+    montarConvertidos()
+    await act(async () => {})
+
+    expect(lista('whats')).toHaveLength(1)
+    expect(lista('clientes')).toHaveLength(1)
+    expect(localStorage.getItem(`${CHAVE_WHATS}:corrompido`)).toBeNull()
+    expect(localStorage.getItem(`${CHAVE_CLIENTES}:corrompido`)).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })

@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import {
   TIPOS_INTERACAO,
   type Interacao,
@@ -45,14 +46,11 @@ function gerarId(): string {
 }
 
 function carregar(): Interacao[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return []
-    const lista = JSON.parse(bruto) as Partial<Interacao>[]
-    return Array.isArray(lista) ? lista.map(normalizarInteracao) : []
-  } catch {
-    return []
-  }
+  // JSON inválido ou com forma inesperada: cópia original preservada em
+  // `<chave>:corrompido` (com aviso visível) antes do fallback.
+  const bruto = carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray)
+  if (!Array.isArray(bruto)) return []
+  return (bruto as Partial<Interacao>[]).map(normalizarInteracao)
 }
 
 function ordenar(lista: Interacao[]): Interacao[] {
@@ -63,11 +61,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const [interacoes, setInteracoes] = useState<Interacao[]>(() => carregar())
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(interacoes))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, interacoes)
   }, [interacoes])
 
   const adicionarInteracao = useCallback((input: NovaInteracaoInput) => {

@@ -654,3 +654,116 @@ describe('Automações — anti-duplicação e ordenação', () => {
     ])
   })
 })
+
+// Auditoria F9: o que já foi preparado manualmente no CRM/IA não é
+// sugerido de novo (inclusive reagendamento e vencimento do Clube);
+// falha de envio volta a sugerir.
+describe('Automações — não re-sugere o que já foi preparado (auditoria F9)', () => {
+  function reagendamentos(mensagens: MensagemWhats[]) {
+    return gerarAutomacoes(
+      entrada({
+        clientes: [cli('c1', 'Ana Souza')],
+        agendamentos: [
+          ag({
+            id: 'a1',
+            cliente: 'Ana Souza',
+            data: somarDias(HOJE, 3),
+            horario: '15:00',
+            status: 'confirmado',
+            remarcacoes: [
+              {
+                de: { data: HOJE, horario: '09:00', profissional: 'Audax' },
+                em: `${HOJE}T10:00:00.000Z`,
+              },
+            ],
+          }),
+        ],
+        mensagens,
+      }),
+    )
+  }
+
+  it('reagendamento já preparado (pendente/enviada) não é sugerido', () => {
+    expect(reagendamentos([])).toHaveLength(1)
+    expect(
+      reagendamentos([
+        msg({
+          template: 'reagendamento',
+          clienteId: 'c1',
+          agendamentoId: 'a1',
+          status: 'pendente',
+        }),
+      ]),
+    ).toHaveLength(0)
+    expect(
+      reagendamentos([
+        msg({
+          template: 'reagendamento',
+          clienteId: 'c1',
+          agendamentoId: 'a1',
+          status: 'enviada',
+        }),
+      ]),
+    ).toHaveLength(0)
+  })
+
+  it('falha de envio volta a sugerir o reagendamento', () => {
+    expect(
+      reagendamentos([
+        msg({
+          template: 'reagendamento',
+          clienteId: 'c1',
+          agendamentoId: 'a1',
+          status: 'falhou',
+        }),
+      ]),
+    ).toHaveLength(1)
+  })
+
+  it('mensagem de outro cliente/agendamento não bloqueia', () => {
+    expect(
+      reagendamentos([
+        msg({
+          template: 'reagendamento',
+          clienteId: 'c2',
+          agendamentoId: 'a9',
+          status: 'enviada',
+        }),
+      ]),
+    ).toHaveLength(1)
+  })
+
+  it('vencimento do Clube com o mesmo texto já coberto não é sugerido', () => {
+    const vencimento = somarDias(HOJE, 2)
+    const base = entrada({
+      clientes: [cli('c1', 'Ana Souza')],
+      assinaturas: [ass({ proximoVencimento: vencimento })],
+    })
+    const primeira = gerarAutomacoes(base)
+    expect(primeira).toHaveLength(1)
+
+    const coberta = gerarAutomacoes({
+      ...base,
+      mensagens: [
+        msg({
+          template: 'vencimento_clube',
+          texto: primeira[0].texto,
+          status: 'enviada',
+        }),
+      ],
+    })
+    expect(coberta).toHaveLength(0)
+
+    const falhou = gerarAutomacoes({
+      ...base,
+      mensagens: [
+        msg({
+          template: 'vencimento_clube',
+          texto: primeira[0].texto,
+          status: 'falhou',
+        }),
+      ],
+    })
+    expect(falhou).toHaveLength(1)
+  })
+})

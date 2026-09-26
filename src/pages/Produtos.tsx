@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AjusteEstoqueModal from '@/components/AjusteEstoqueModal'
 import EntradaEstoqueModal from '@/components/EntradaEstoqueModal'
 import ProdutoFormModal from '@/components/ProdutoFormModal'
 import { hojeISO } from '@/modules/agenda/catalogo'
+import { useCaixaOpcional } from '@/modules/caixa/store'
 import { useEstoque } from '@/modules/estoque/store'
 import {
   ROTULO_STATUS,
@@ -40,9 +41,10 @@ function abaClasse(ativa: boolean): string {
 }
 
 function lerFiltroInicial(): FiltroStatus {
+  // Leitura pura — o consumo da chave acontece num useEffect (o initializer
+  // do useState não pode ter efeito colateral: roda mais de uma vez no StrictMode).
   try {
     const valor = sessionStorage.getItem('studio-audax:estoque:filtro')
-    sessionStorage.removeItem('studio-audax:estoque:filtro')
     return valor === 'baixo' ? 'baixo' : 'todos'
   } catch {
     return 'todos'
@@ -89,10 +91,17 @@ function CardIndicador({
 
 export default function Produtos() {
   const { produtos, alternarAtivo } = useProdutos()
-  const { movimentacoes } = useEstoque()
+  const { movimentacoes, renomearProduto: renomearNoEstoque } = useEstoque()
+  const { renomearProduto: renomearNoCaixa } = useCaixaOpcional()
 
   const [aba, setAba] = useState<Aba>('produtos')
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>(lerFiltroInicial)
+  // Deep-link do relatório: a chave é consumida uma única vez após a
+  // montagem (o initializer do useState roda mais de uma vez no StrictMode
+  // e não pode ter efeito colateral).
+  useEffect(() => {
+    sessionStorage.removeItem('studio-audax:estoque:filtro')
+  }, [])
   const [modalProduto, setModalProduto] = useState<
     { modo: 'novo' } | { modo: 'editar'; produto: Produto } | null
   >(null)
@@ -464,6 +473,12 @@ export default function Produtos() {
       {modalProduto && (
         <ProdutoFormModal
           produto={modalProduto.modo === 'editar' ? modalProduto.produto : null}
+          aoRenomear={(antigo, novo) => {
+            renomearNoCaixa(antigo, novo)
+            if (modalProduto.modo === 'editar') {
+              renomearNoEstoque(modalProduto.produto.id, novo)
+            }
+          }}
           onFechar={() => setModalProduto(null)}
         />
       )}

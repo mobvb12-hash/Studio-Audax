@@ -39,6 +39,8 @@ export type EstoqueContexto = {
     quantidade?: number
   }) => MovimentacaoEstoque[]
   movimentacoesDoProduto: (produtoId: string) => MovimentacaoEstoque[]
+  /** Propaga a renomeação de produto ao rótulo das movimentações */
+  renomearProduto: (produtoId: string, novoNome: string) => void
 }
 
 const Contexto = createContext<EstoqueContexto | null>(null)
@@ -365,10 +367,21 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
             : []
       if (itens.length === 0) return []
 
+      // Pré-resolução de TODOS os itens — atômico: a venda só é marcada
+      // como estornada (registrarEstorno) depois que cada produto existe
+      // e a quantidade é válida; se algo faltar, nada muda e o retry
+      // futuro ainda encontra a venda "não revertida".
+      const resolvidos = itens.map((item) => {
+        const produto = resolverProduto(item)
+        if (!inteiroPositivo(item.quantidade)) {
+          throw new Error(`Quantidade inválida para "${produto.nome}".`)
+        }
+        return { produto, item }
+      })
+
       registrarEstorno(pendencias.current, venda.id)
       const novas: MovimentacaoEstoque[] = []
-      for (const item of itens) {
-        const produto = resolverProduto(item)
+      for (const { produto, item } of resolvidos) {
         const antes = saldoVigente(produto, pendencias.current)
         const depois = antes + item.quantidade
         novas.push(
@@ -399,6 +412,23 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
     [movimentacoes],
   )
 
+  // Rótulo da movimentação acompanha o cadastro (o vínculo continua
+  // sendo o produtoId — saldo e histórico nunca se perdem no rename).
+  const renomearProduto = useCallback(
+    (produtoId: string, novoNome: string) => {
+      const destino = novoNome.trim()
+      if (!produtoId || !destino) return
+      setMovimentacoes((atual) =>
+        atual.map((m) =>
+          m.produtoId === produtoId && m.produto !== destino
+            ? { ...m, produto: destino }
+            : m,
+        ),
+      )
+    },
+    [],
+  )
+
   const valor = useMemo(
     () => ({
       movimentacoes,
@@ -408,6 +438,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
       saidaPorVenda,
       reverterVenda,
       movimentacoesDoProduto,
+      renomearProduto,
     }),
     [
       movimentacoes,
@@ -417,6 +448,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
       saidaPorVenda,
       reverterVenda,
       movimentacoesDoProduto,
+      renomearProduto,
     ],
   )
 

@@ -9,7 +9,7 @@ import { normalizarBusca } from '@/modules/clientes/regras'
 import type { Cliente } from '@/modules/clientes/types'
 import { montarPerfis, type PerfilCliente } from '@/modules/crm/regras'
 import type { Servico } from '@/modules/servicos/types'
-import type { IdTemplate } from '@/modules/whatsapp/types'
+import type { IdTemplate, MensagemWhats } from '@/modules/whatsapp/types'
 import { textoTemplate } from '@/modules/whatsapp/templates'
 
 export type TipoSugestao =
@@ -50,6 +50,8 @@ export type EntradaSugestoes = {
   agendamentos: Agendamento[]
   lancamentos: Lancamento[]
   servicos: Servico[]
+  /** Mensagens já existentes (dedupe de reativação e opt-out) */
+  mensagens?: MensagemWhats[]
   /** YYYY-MM-DD (padrão = hoje) */
   hoje?: string
 }
@@ -84,10 +86,25 @@ function temAgendamentoFuturo(
   )
 }
 
-function sugestaoReativacao(perfil: PerfilCliente): SugestaoIa | null {
+function sugestaoReativacao(
+  perfil: PerfilCliente,
+  mensagens?: MensagemWhats[],
+): SugestaoIa | null {
   const { cliente, segmento } = perfil
   if (segmento !== 'sem_retorno' && segmento !== 'inativo') return null
   if (perfil.totalAtendimentos < 1) return null
+  // Opt-out de marketing: reativação é mensagem de marketing (mesmo
+  // critério das automações de inatividade).
+  if (cliente.preferencias?.smsMarketing === false) return null
+  // Já existe mensagem de reativação para este cliente (CRM/IA/automação):
+  // nunca prepara uma segunda — igual ao comportamento do CRM.
+  if (
+    mensagens?.some(
+      (m) => m.template === 'reativacao' && m.clienteId === cliente.id,
+    )
+  ) {
+    return null
+  }
   const dias = perfil.diasDesdeUltimo ?? 0
   const texto = textoTemplate('reativacao', {
     nome: cliente.nome,
@@ -178,7 +195,7 @@ export function gerarSugestoes(entrada: EntradaSugestoes): SugestaoIa[] {
   for (const perfil of perfis) {
     // Cliente inativo no cadastro não recebe sugestões.
     if (!perfil.cliente.ativo) continue
-    const reativar = sugestaoReativacao(perfil)
+    const reativar = sugestaoReativacao(perfil, entrada.mensagens)
     if (reativar) sugestoes.push(reativar)
     const oportunidade = sugestaoOportunidade(
       perfil,

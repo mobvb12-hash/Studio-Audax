@@ -6,10 +6,12 @@ import type {
   PagamentoClube,
 } from '@/modules/clube/types'
 import type { Periodo } from '@/modules/comissoes/types'
+import type { Produto } from '@/modules/produtos/types'
 import {
   agendaDoPeriodo,
   clubeDoPeriodo,
   faturamento,
+  produtosDoPeriodo,
   resumoFinanceiro,
   variacaoPercentual,
 } from './calculos'
@@ -263,5 +265,101 @@ describe('consistência com as regras oficiais do Caixa', () => {
     expect(fat.liquido).toBe(resumo.receitaTotal)
     expect(fat.bruto).toBe(229.9)
     expect(fat.descontos).toBe(10)
+  })
+})
+
+// Auditoria F19: o desconto do PDV é rateado pelo valor bruto de cada
+// item — a soma das receitas por produto fecha com o valor líquido do
+// caixa (nunca acima do faturamento oficial).
+describe('produtosDoPeriodo — desconto do PDV rateado (auditoria F19)', () => {
+  const PERIODO_PROD: Periodo = { inicio: '2026-06-01', fim: '2026-06-30' }
+
+  function produto(
+    overrides: Partial<Produto> & { id: string; nome: string },
+  ): Produto {
+    return {
+      preco: 30,
+      custo: 12,
+      estoque: 5,
+      estoqueMinimo: 2,
+      categoria: '',
+      foto: '',
+      ativo: true,
+      criadoEm: '2026-06-01T00:00:00.000Z',
+      atualizadoEm: '2026-06-01T00:00:00.000Z',
+      ...overrides,
+    }
+  }
+
+  it('rateia o desconto e fecha com o valor líquido do caixa', () => {
+    const venda = lanc({
+      id: 'v-1',
+      data: '2026-06-15',
+      origem: 'produto',
+      valor: 130,
+      desconto: 10,
+      valorLiquido: 120,
+      itens: [
+        { produtoId: 'p1', produto: 'Pomada', quantidade: 2, preco: 50 },
+        { produtoId: 'p2', produto: 'Gel', quantidade: 1, preco: 30 },
+      ],
+    })
+    const r = produtosDoPeriodo(
+      [venda],
+      [
+        produto({ id: 'p1', nome: 'Pomada' }),
+        produto({ id: 'p2', nome: 'Gel' }),
+      ],
+      PERIODO_PROD,
+    )
+
+    const pomada = r.linhas.find((l) => l.id === 'p1')!
+    const gel = r.linhas.find((l) => l.id === 'p2')!
+    expect(pomada.qtdVendida).toBe(2)
+    expect(pomada.receita).toBe(92.31)
+    expect(gel.qtdVendida).toBe(1)
+    expect(gel.receita).toBe(27.69)
+    // soma por produto == faturamento oficial do caixa (valorLiquido)
+    expect(r.receitaTotal).toBe(120)
+    expect(r.qtdTotalVendida).toBe(3)
+  })
+
+  it('venda avulsa sem itens continua usando o valor líquido direto', () => {
+    const venda = lanc({
+      id: 'v-2',
+      data: '2026-06-16',
+      origem: 'produto',
+      produto: 'Pomada',
+      quantidade: 3,
+      valor: 90,
+      valorLiquido: 90,
+    })
+    const r = produtosDoPeriodo(
+      [venda],
+      [produto({ id: 'p1', nome: 'Pomada' })],
+      PERIODO_PROD,
+    )
+    expect(r.linhas[0].receita).toBe(90)
+    expect(r.receitaTotal).toBe(90)
+  })
+
+  it('venda estornada fica fora do relatório de produtos', () => {
+    const venda = lanc({
+      id: 'v-3',
+      data: '2026-06-17',
+      origem: 'produto',
+      valorLiquido: 50,
+      estornado: true,
+      itens: [
+        { produtoId: 'p1', produto: 'Pomada', quantidade: 1, preco: 50 },
+      ],
+    })
+    const r = produtosDoPeriodo(
+      [venda],
+      [produto({ id: 'p1', nome: 'Pomada' })],
+      PERIODO_PROD,
+    )
+    expect(r.receitaTotal).toBe(0)
+    expect(r.qtdTotalVendida).toBe(0)
   })
 })

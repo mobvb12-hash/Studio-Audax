@@ -1,6 +1,6 @@
 import { act, useEffect } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatarBRL } from '@/lib/moeda'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
@@ -211,5 +211,38 @@ describe('Financeiro — filtro de período (mesmo padrão dos Relatórios)', ()
       target: { value: hojeISO() },
     })
     expect(kpi('Receita total')).toBe(brl(299.9))
+  })
+})
+
+// Auditoria F16: o período "Hoje" depende do dia corrente — uma sessão
+// que cruza a meia-noite recalcula o filtro em vez de congelar o ontem.
+describe('Financeiro — sessão que cruza a meia-noite (auditoria F16)', () => {
+  it('o filtro "Hoje" recalcula quando o dia vira', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-26T12:00:00.000Z'))
+      const r = montar()
+      semear()
+
+      clicarFiltro('Hoje')
+      expect(kpi('Receita total')).toBe(brl(299.9))
+
+      // sessão atravessa a meia-noite: o período "Hoje" anda um dia
+      vi.setSystemTime(new Date('2026-09-27T12:00:00.000Z'))
+      r.rerender(
+        <CaixaProvider>
+          <Captura />
+          <div data-testid="financeiro">
+            <Financeiro />
+          </div>
+        </CaixaProvider>,
+      )
+      expect(
+        screen.getByText('Nenhuma movimentação no período selecionado.'),
+      ).toBeTruthy()
+      expect(screen.queryByText('Receita total')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

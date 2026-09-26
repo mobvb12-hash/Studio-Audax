@@ -140,7 +140,9 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
   } | null>(null)
   const [erroIa, setErroIa] = useState('')
 
-  const hoje = useMemo(() => hojeISO(), [])
+  // Recalculado a cada render: uma sessão que cruza a meia-noite não
+  // pode continuar exibindo o "hoje" do dia anterior.
+  const hoje = hojeISO()
   const perfil = useMemo(
     () => montarPerfis([cliente], agendamentos, lancamentos, hoje)[0],
     [cliente, agendamentos, lancamentos, hoje],

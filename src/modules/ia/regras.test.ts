@@ -299,3 +299,76 @@ describe('personalizarTexto — assistente de texto do WhatsApp', () => {
     expect(fraco).toBe(TEXTO)
   })
 })
+
+// Auditoria F10: reativação é mensagem de marketing — respeita o
+// opt-out (smsMarketing) e nunca prepara uma segunda mensagem para o
+// mesmo cliente (dedupe igual ao do CRM).
+describe('Central de IA — reativação: opt-out e dedupe (auditoria F10)', () => {
+  it('opt-out de marketing (smsMarketing false) remove a reativação', () => {
+    const base = entrada()
+    const clientes = base.clientes.map((c) =>
+      c.id === 'c-ana'
+        ? { ...c, preferencias: { ...c.preferencias, smsMarketing: false } }
+        : c,
+    )
+    const sugestoes = gerarSugestoes({ ...base, clientes })
+    expect(sugestoes.map((s) => s.id)).not.toContain('reativacao:c-ana')
+    expect(sugestoes.map((s) => s.id)).toContain('complementar:c-ana:s2')
+  })
+
+  it('mensagem de reativação já existente não gera uma segunda', () => {
+    const sugestoes = gerarSugestoes({
+      ...entrada(),
+      mensagens: [
+        {
+          id: 'm1',
+          clienteId: 'c-ana',
+          cliente: 'Ana Souza',
+          template: 'reativacao',
+          texto: 'Oi Ana, sentimos sua falta!',
+          status: 'pendente',
+          origem: 'crm',
+          criadoEm: `${HOJE}T00:00:00.000Z`,
+        },
+      ],
+    })
+    expect(sugestoes.map((s) => s.id)).not.toContain('reativacao:c-ana')
+    expect(sugestoes.map((s) => s.id)).toContain('complementar:c-ana:s2')
+  })
+
+  it('mensagem de outro template ou de outro cliente não bloqueia', () => {
+    const outroTemplate = gerarSugestoes({
+      ...entrada(),
+      mensagens: [
+        {
+          id: 'm1',
+          clienteId: 'c-ana',
+          cliente: 'Ana Souza',
+          template: 'confirmacao',
+          texto: 'Confirmamos seu horário',
+          status: 'enviada',
+          origem: 'crm',
+          criadoEm: `${HOJE}T00:00:00.000Z`,
+        },
+      ],
+    })
+    expect(outroTemplate.map((s) => s.id)).toContain('reativacao:c-ana')
+
+    const outroCliente = gerarSugestoes({
+      ...entrada(),
+      mensagens: [
+        {
+          id: 'm2',
+          clienteId: 'c-bruno',
+          cliente: 'Bruno Lima',
+          template: 'reativacao',
+          texto: 'Oi Bruno!',
+          status: 'pendente',
+          origem: 'crm',
+          criadoEm: `${HOJE}T00:00:00.000Z`,
+        },
+      ],
+    })
+    expect(outroCliente.map((s) => s.id)).toContain('reativacao:c-ana')
+  })
+})

@@ -4,14 +4,18 @@ import ConfirmarModal from '@/components/ConfirmarModal'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
+import { useComissoesOpcional } from '@/modules/comissoes/store'
 import { useEsperaOpcional } from '@/modules/espera/store'
 import { useProfissionais } from '@/modules/profissionais/store'
+import { profissionalEmUso } from '@/modules/profissionais/regras'
 import type { Profissional } from '@/modules/profissionais/types'
 
 export default function Profissionais() {
   const { profissionais, remover, alternarAtivo } = useProfissionais()
   const { agendamentos, renomearProfissional: renomearNaAgenda } = useAgenda()
-  const { renomearProfissional: renomearNoCaixa } = useCaixa()
+  const { lancamentos, renomearProfissional: renomearNoCaixa } = useCaixa()
+  const { fechamentos, renomearProfissional: renomearNasComissoes } =
+    useComissoesOpcional()
   const { renomearProfissional: renomearNaEspera } = useEsperaOpcional()
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Profissional | null>(null)
@@ -126,6 +130,7 @@ export default function Profissionais() {
             renomearNaAgenda(antigo, novo)
             renomearNoCaixa(antigo, novo)
             renomearNaEspera(antigo, novo)
+            renomearNasComissoes(antigo, novo)
           }}
           onFechar={() => setModalAberto(false)}
         />
@@ -138,6 +143,16 @@ export default function Profissionais() {
           rotuloConfirmar="Sim, excluir"
           perigo
           onConfirmar={() => {
+            const uso = profissionalEmUso(excluindo, {
+              agendamentos,
+              lancamentos,
+              fechamentos,
+            })
+            if (uso.emUso) {
+              throw new Error(
+                `“${excluindo.nome}” já aparece em ${uso.agendamentos} agendamento(s), ${uso.lancamentos} lançamento(oes) do caixa e ${uso.comissoes} fechamento(s) de comissão — não é possível excluí-lo. Use “Inativar” para retirá-lo de novos agendamentos.`,
+              )
+            }
             remover(excluindo.id)
             setExcluindo(null)
           }}

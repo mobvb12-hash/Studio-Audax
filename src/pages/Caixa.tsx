@@ -422,12 +422,14 @@ export default function Caixa() {
           rotuloConfirmar="Estornar"
           perigo
           onConfirmar={() => {
-            estornar(estornando.id)
-            // Venda de produto: devolve estoque (movimentação "Estorno").
-            // A movimentação original nunca é apagada; a venda fica no histórico.
+            // Venda de produto: devolve estoque ANTES do estorno no caixa —
+            // se a devolução falhar (produto removido etc.), nada muda e o
+            // lançamento segue ativo; a movimentação original nunca é
+            // apagada e a venda fica no histórico.
             if (estornando.origem === 'produto') {
               reverterVenda(estornando)
             }
+            estornar(estornando.id)
             setEstornando(null)
           }}
           onFechar={() => setEstornando(null)}

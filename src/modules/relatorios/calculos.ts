@@ -420,11 +420,21 @@ export function produtosDoPeriodo(
   }
   for (const l of vendas) {
     if (l.itens && l.itens.length > 0) {
+      // Desconto do PDV rateado pelo valor bruto de cada item: a soma dos
+      // itens fecha com o valor líquido do caixa — receita por produto
+      // nunca fica acima do faturamento oficial (que usa valorLiquido).
+      const brutoTotal = l.itens.reduce(
+        (soma, item) => soma + item.quantidade * item.preco,
+        0,
+      )
       for (const item of l.itens) {
+        const brutoItem = item.quantidade * item.preco
+        const receita =
+          brutoTotal > 0 ? l.valorLiquido * (brutoItem / brutoTotal) : 0
         somar(
           item.produtoId || normalizar(item.produto),
           item.quantidade,
-          item.quantidade * item.preco,
+          receita,
         )
       }
     } else {

@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import type { ProvedorEnvio } from './provedor'
 import {
   ehIdTemplate,
@@ -63,6 +64,8 @@ type WhatsContexto = {
   registrarFalha: (id: string, motivo: string) => void
   configurarProvedor: (provedor: ProvedorEnvio | null) => void
   mensagensDoCliente: (clienteId: string) => MensagemWhats[]
+  /** Propaga a renomeação de cliente ao rótulo das mensagens */
+  renomearCliente: (antigo: string, novo: string) => void
 }
 
 const Contexto = createContext<WhatsContexto | null>(null)
@@ -72,14 +75,11 @@ function gerarId(): string {
 }
 
 function carregar(): MensagemWhats[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return []
-    const lista = JSON.parse(bruto) as Partial<MensagemWhats>[]
-    return Array.isArray(lista) ? lista.map(normalizarMensagem) : []
-  } catch {
-    return []
-  }
+  // JSON inválido ou com forma inesperada: cópia original preservada em
+  // `<chave>:corrompido` (com aviso visível) antes do fallback.
+  const bruto = carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray)
+  if (!Array.isArray(bruto)) return []
+  return (bruto as Partial<MensagemWhats>[]).map(normalizarMensagem)
 }
 
 function ordenar(lista: MensagemWhats[]): MensagemWhats[] {
@@ -91,11 +91,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
   const [provedor, setProvedor] = useState<ProvedorEnvio | null>(null)
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(mensagens))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, mensagens)
   }, [mensagens])
 
   const criar = useCallback((input: NovaMensagemInput) => {
@@ -209,6 +205,14 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
     [mensagens],
   )
 
+  const renomearCliente = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setMensagens((atual) =>
+      atual.map((m) => (m.cliente === antigo ? { ...m, cliente: destino } : m)),
+    )
+  }, [])
+
   const valor = useMemo(
     () => ({
       mensagens,
@@ -219,6 +223,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
       registrarFalha,
       configurarProvedor,
       mensagensDoCliente,
+      renomearCliente,
     }),
     [
       mensagens,
@@ -229,6 +234,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
       registrarFalha,
       configurarProvedor,
       mensagensDoCliente,
+      renomearCliente,
     ],
   )
 

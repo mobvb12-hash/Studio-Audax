@@ -38,9 +38,34 @@ export type ComissoesContexto = {
   ) => FechamentoComissao | undefined
   fecharComissao: (input: FecharComissaoInput) => FechamentoComissao
   reabrirComissao: (fechamentoId: string, motivo: string) => void
+  /** Propaga a renomeação de profissional aos rótulos dos fechamentos */
+  renomearProfissional: (antigo: string, novo: string) => void
 }
 
 const Contexto = createContext<ComissoesContexto | null>(null)
+
+/** Estado vazio compartilhado (provider ausente em testes/árvores avulsas). */
+const VAZIO: ComissoesContexto = {
+  configs: [],
+  fechamentos: [],
+  auditoria: [],
+  configDe: (profissionalId) => ({
+    profissionalId,
+    percentual: PERCENTUAL_PADRAO,
+    ativo: true,
+  }),
+  salvarConfig: () => {
+    throw new Error('useComissoes precisa do ComissoesProvider.')
+  },
+  fechamentoAtivo: () => undefined,
+  fecharComissao: () => {
+    throw new Error('useComissoes precisa do ComissoesProvider.')
+  },
+  reabrirComissao: () => {
+    throw new Error('useComissoes precisa do ComissoesProvider.')
+  },
+  renomearProfissional: () => {},
+}
 
 export function ComissoesProvider({ children }: { children: ReactNode }) {
   const [configs, setConfigs] = useState<ConfigComissao[]>(() =>
@@ -138,6 +163,21 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
           'Já existe comissão fechada para este profissional neste período.',
         )
       }
+      // Fechamentos sobrepagos: períodos que se cruzam pagariam a mesma
+      // produção duas vezes (a comissão é calculada sobre os lançamentos
+      // do intervalo, então intervalos comuns duplicam pagamento).
+      const sobreposto = fechamentos.find(
+        (f) =>
+          f.profissionalId === input.profissionalId &&
+          !f.reaberto &&
+          f.periodo.inicio <= input.periodo.fim &&
+          f.periodo.fim >= input.periodo.inicio,
+      )
+      if (sobreposto) {
+        throw new Error(
+          `Já existe comissão fechada de ${sobreposto.periodo.inicio} a ${sobreposto.periodo.fim} para este profissional — o período pedido se sobrepõe e pagaria a mesma produção duas vezes.`,
+        )
+      }
       if (!Number.isFinite(input.producao) || input.producao < 0) {
         throw new Error('Produção inválida.')
       }
@@ -177,7 +217,7 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
       setAuditoria((atual) => [...atual, evento])
       return fechamento
     },
-    [fechamentoAtivo],
+    [fechamentoAtivo, fechamentos],
   )
 
   const reabrirComissao = useCallback(
@@ -211,6 +251,21 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
     [fechamentos],
   )
 
+  // Propaga renomeação ao rótulo dos fechamentos (o mesmo que Caixa e
+  // Agenda fazem com o histórico). A auditoria é trilha histórica e não
+  // é reescrita; configs são indexados por profissionalId e não mudam.
+  const renomearProfissional = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setFechamentos((atual) =>
+      atual.map((f) =>
+        f.profissionalNome === antigo
+          ? { ...f, profissionalNome: destino }
+          : f,
+      ),
+    )
+  }, [])
+
   const valor = useMemo(
     () => ({
       configs,
@@ -221,6 +276,7 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
       fechamentoAtivo,
       fecharComissao,
       reabrirComissao,
+      renomearProfissional,
     }),
     [
       configs,
@@ -231,6 +287,7 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
       fechamentoAtivo,
       fecharComissao,
       reabrirComissao,
+      renomearProfissional,
     ],
   )
 
@@ -249,4 +306,13 @@ export function useComissoes(): ComissoesContexto {
   if (!ctx)
     throw new Error('useComissoes deve ser usado dentro de ComissoesProvider')
   return ctx
+}
+
+/**
+ * useComissoes tolerante a árvore sem provider (Profissionais e
+ * renomeações em páginas testadas avulsas): devolve estado vazio em
+ * vez de erro.
+ */
+export function useComissoesOpcional(): ComissoesContexto {
+  return useContext(Contexto) ?? VAZIO
 }

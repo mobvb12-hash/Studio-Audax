@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 
 const CHAVE_STORAGE = 'studio-audax:ia:v1'
 
@@ -23,17 +24,17 @@ function normalizarLista(valor: unknown): string[] {
     : []
 }
 
+function ehEstadoIa(valor: unknown): boolean {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
+}
+
 function carregar(): EstadoIa {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return { aceitas: [], descartadas: [] }
-    const brutoEstado = JSON.parse(bruto) as Partial<EstadoIa>
-    return {
-      aceitas: normalizarLista(brutoEstado.aceitas),
-      descartadas: normalizarLista(brutoEstado.descartadas),
-    }
-  } catch {
-    return { aceitas: [], descartadas: [] }
+  // JSON inválido ou com forma inesperada: cópia original preservada em
+  // `<chave>:corrompido` (com aviso visível) antes do fallback.
+  const bruto = carregarJSON<Partial<EstadoIa>>(CHAVE_STORAGE, {}, ehEstadoIa)
+  return {
+    aceitas: normalizarLista(bruto.aceitas),
+    descartadas: normalizarLista(bruto.descartadas),
   }
 }
 
@@ -52,11 +53,7 @@ export function IaProvider({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<EstadoIa>(() => carregar())
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(estado))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, estado)
   }, [estado])
 
   const marcarAceita = useCallback((sugestaoId: string) => {

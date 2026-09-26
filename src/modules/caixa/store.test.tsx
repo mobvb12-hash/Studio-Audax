@@ -449,3 +449,46 @@ describe('Caixa — persistência (F5)', () => {
     expect(ctx.resumoDoDia(DIA).totalRecebido).toBe(30)
   })
 })
+
+// Auditoria F14: um lançamento fora da forma mínima (sem data/valor)
+// invalida a lista inteira — o original fica em `<chave>:corrompido`
+// em vez de vazar NaN nos resumos.
+describe('Caixa — lista corrompida (auditoria F14)', () => {
+  it('entrada fora da forma é preservada em :corrompido e o caixa reabre vazio', () => {
+    localStorage.setItem(
+      CHAVE_LANC,
+      JSON.stringify([{ id: 'x', tipo: 'receita' }]),
+    )
+    montar()
+    expect(ctx.lancamentos).toHaveLength(0)
+    expect(ctx.resumoDoDia(DIA).totalRecebido).toBe(0)
+    const backup = JSON.parse(
+      localStorage.getItem(`${CHAVE_LANC}:corrompido`) ?? '[]',
+    )
+    expect(backup).toHaveLength(1)
+    expect(backup[0].id).toBe('x')
+  })
+
+  it('lista válida carrega normalmente sem backup', () => {
+    localStorage.setItem(
+      CHAVE_LANC,
+      JSON.stringify([
+        {
+          id: 'l-1',
+          tipo: 'receita',
+          origem: 'atendimento',
+          data: DIA,
+          hora: '10:00',
+          descricao: 'Corte',
+          valor: 70,
+          desconto: 0,
+          valorLiquido: 70,
+          formaPagamento: 'pix',
+        },
+      ]),
+    )
+    montar()
+    expect(ctx.lancamentos).toHaveLength(1)
+    expect(localStorage.getItem(`${CHAVE_LANC}:corrompido`)).toBeNull()
+  })
+})

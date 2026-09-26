@@ -6,6 +6,8 @@ import { parseMoeda } from '@/lib/moeda'
 
 type Props = {
   produto?: Produto | null
+  /** Chamado quando o nome muda, para propagar aos módulos (Caixa/Estoque) */
+  aoRenomear?: (antigo: string, novo: string) => void
   onFechar: () => void
 }
 
@@ -15,7 +17,11 @@ const campo =
 const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
-export default function ProdutoFormModal({ produto, onFechar }: Props) {
+export default function ProdutoFormModal({
+  produto,
+  aoRenomear,
+  onFechar,
+}: Props) {
   const { adicionar, atualizar } = useProdutos()
   const { registrarInicial } = useEstoque()
   const editando = Boolean(produto)
@@ -52,6 +58,8 @@ export default function ProdutoFormModal({ produto, onFechar }: Props) {
       const custoNum = custo.trim() === '' ? 0 : parseMoeda(custo)
       const minimoNum = minimo.trim() === '' ? 0 : Number(minimo.trim())
       if (editando && produto) {
+        const antigo = produto.nome
+        const destino = nome.trim()
         atualizar(produto.id, {
           nome,
           preco: precoNum,
@@ -61,6 +69,7 @@ export default function ProdutoFormModal({ produto, onFechar }: Props) {
           foto,
           ativo,
         })
+        if (antigo !== destino) aoRenomear?.(antigo, destino)
         onFechar()
         return
       }

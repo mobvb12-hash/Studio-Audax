@@ -185,3 +185,62 @@ describe('Página Produtos — indicadores de estoque', () => {
     erros.mockRestore()
   })
 })
+
+// Auditoria F17: o deep-link do relatório ("estoque baixo") é consumido
+// uma única vez — a chave sai do sessionStorage na montagem e o filtro
+// não reaparece sozinho numa remontagem.
+describe('Página Produtos — deep-link de filtro (auditoria F17)', () => {
+  function semearProdutos() {
+    localStorage.setItem(
+      'studio-audax:produtos:v1',
+      JSON.stringify([
+        {
+          id: 'p-baixo',
+          nome: 'Creme capilar',
+          preco: 30,
+          custo: 12,
+          estoque: 1,
+          estoqueMinimo: 5,
+          categoria: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-09-01T00:00:00.000Z',
+          atualizadoEm: '2026-09-01T00:00:00.000Z',
+        },
+        {
+          id: 'p-ok',
+          nome: 'Pomada modeladora',
+          preco: 40,
+          custo: 20,
+          estoque: 10,
+          estoqueMinimo: 2,
+          categoria: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-09-01T00:00:00.000Z',
+          atualizadoEm: '2026-09-01T00:00:00.000Z',
+        },
+      ]),
+    )
+  }
+
+  it('restaura o filtro "baixo" uma única vez e limpa a chave', () => {
+    sessionStorage.clear()
+    semearProdutos()
+    sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')
+
+    const primeiro = montar()
+    expect(screen.getByText('Creme capilar')).toBeTruthy()
+    expect(screen.queryByText('Pomada modeladora')).toBeNull()
+    expect(
+      sessionStorage.getItem('studio-audax:estoque:filtro'),
+    ).toBeNull()
+
+    primeiro.unmount()
+    semearProdutos()
+    montar()
+    expect(screen.getByText('Creme capilar')).toBeTruthy()
+    expect(screen.getByText('Pomada modeladora')).toBeTruthy()
+    sessionStorage.clear()
+  })
+})

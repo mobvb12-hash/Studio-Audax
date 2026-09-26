@@ -74,13 +74,83 @@ export type CaixaContexto = {
   renomearProfissional: (antigo: string, novo: string) => void
   renomearServico: (antigo: string, novo: string) => void
   renomearCliente: (antigo: string, novo: string) => void
+  renomearProduto: (antigo: string, novo: string) => void
 }
 
 const Contexto = createContext<CaixaContexto | null>(null)
 
+/** Estado vazio compartilhado (provider ausente em testes/árvores avulsas). */
+const VAZIO: CaixaContexto = {
+  lancamentos: [],
+  fechamentos: [],
+  auditoria: [],
+  diaFechado: () => false,
+  fechamentoAtivo: () => undefined,
+  lancamentosDoDia: () => [],
+  resumoDoDia: () => ({
+    receitasAtendimentos: 0,
+    receitasProdutos: 0,
+    receitasClube: 0,
+    totalRecebido: 0,
+    descontos: 0,
+    despesas: 0,
+    liquido: 0,
+    porForma: formaVazia(),
+    porProfissional: [],
+    qtdAtendimentos: 0,
+    qtdProdutos: 0,
+  }),
+  jaPago: () => undefined,
+  registrarPagamento: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  venderProduto: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  registrarVenda: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  registrarReceitaClube: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  adicionarDespesa: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  estornar: () => {},
+  fecharCaixa: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  reabrirCaixa: () => {},
+  renomearProfissional: () => {},
+  renomearServico: () => {},
+  renomearCliente: () => {},
+  renomearProduto: () => {},
+}
+
+/**
+ * Forma mínima de um lançamento: campos essenciais para nunca vazar
+ * NaN nos resumos/relatórios nem estouro no estorno. Um item fora da
+ * forma invalida a lista inteira — o original fica em `<chave>:corrompido`.
+ */
+function ehLancamento(valor: unknown): boolean {
+  if (typeof valor !== 'object' || valor === null) return false
+  const l = valor as Partial<Lancamento>
+  return (
+    typeof l.id === 'string' &&
+    (l.tipo === 'receita' || l.tipo === 'despesa') &&
+    typeof l.data === 'string' &&
+    typeof l.valorLiquido === 'number' &&
+    Number.isFinite(l.valorLiquido)
+  )
+}
+
+function ehListaDeLancamentos(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every(ehLancamento)
+}
+
 export function CaixaProvider({ children }: { children: ReactNode }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>(() =>
-    carregarJSON<Lancamento[]>(CHAVE_LANCAMENTOS, [], Array.isArray),
+    carregarJSON<Lancamento[]>(CHAVE_LANCAMENTOS, [], ehListaDeLancamentos),
   )
   const [fechamentos, setFechamentos] = useState<Fechamento[]>(() =>
     carregarJSON<Fechamento[]>(CHAVE_FECHAMENTOS, [], Array.isArray),
@@ -540,6 +610,30 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
+  // Produto renomeado: atualiza a venda avulsa (campo `produto`) e o
+  // nome exibido em cada item do PDV — o `produtoId` dos itens não muda,
+  // então estoque e relatórios continuam vinculados.
+  const renomearProduto = useCallback((antigo: string, novo: string) => {
+    const destino = novo.trim()
+    if (!antigo || !destino || antigo === destino) return
+    setLancamentos((atual) =>
+      atual.map((l) => {
+        const mudouProduto = l.produto === antigo
+        const mudouItens = l.itens?.some((i) => i.produto === antigo) ?? false
+        if (!mudouProduto && !mudouItens) return l
+        return {
+          ...l,
+          produto: mudouProduto ? destino : l.produto,
+          itens: mudouItens
+            ? l.itens?.map((i) =>
+                i.produto === antigo ? { ...i, produto: destino } : i,
+              )
+            : l.itens,
+        }
+      }),
+    )
+  }, [])
+
   const valor = useMemo(
     () => ({
       lancamentos,
@@ -561,6 +655,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       renomearProfissional,
       renomearServico,
       renomearCliente,
+      renomearProduto,
     }),
     [
       lancamentos,
@@ -582,6 +677,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       renomearProfissional,
       renomearServico,
       renomearCliente,
+      renomearProduto,
     ],
   )
 
@@ -592,4 +688,12 @@ export function useCaixa(): CaixaContexto {
   const ctx = useContext(Contexto)
   if (!ctx) throw new Error('useCaixa deve ser usado dentro de CaixaProvider')
   return ctx
+}
+
+/**
+ * useCaixa tolerante a árvore sem provider (Produtos e renomeações em
+ * páginas testadas avulsas): devolve estado vazio em vez de erro.
+ */
+export function useCaixaOpcional(): CaixaContexto {
+  return useContext(Contexto) ?? VAZIO
 }

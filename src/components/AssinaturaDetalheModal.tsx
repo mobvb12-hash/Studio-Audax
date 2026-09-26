@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import PagamentoAssinaturaModal from '@/components/PagamentoAssinaturaModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import { useCaixa } from '@/modules/caixa/store'
 import { useClube } from '@/modules/clube/store'
 import {
   assinaturaVigente,
@@ -20,6 +21,7 @@ type Props = {
 
 export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) {
   const { pagamentosDaAssinatura, cancelar } = useClube()
+  const { lancamentos } = useCaixa()
   const [pagamentoAberto, setPagamentoAberto] = useState(false)
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
   const [mensagem, setMensagem] = useState('')
@@ -38,7 +40,15 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
   const status = statusAssinatura(assinatura, hoje)
   const vigente = assinaturaVigente(assinatura, hoje)
   const pagamentos = pagamentosDaAssinatura(assinatura.id)
-  const totalPago = pagamentos.reduce((soma, p) => soma + p.valor, 0)
+  // Pagamento estornado (lançamento do caixa marcado como estornado) não
+  // conta no total — o histórico continua visível, apenas fora do somatório.
+  const estornados = new Set(
+    lancamentos.filter((l) => l.estornado).map((l) => l.id),
+  )
+  const pagamentosValidos = pagamentos.filter(
+    (p) => !p.caixaLancamentoId || !estornados.has(p.caixaLancamentoId),
+  )
+  const totalPago = pagamentosValidos.reduce((soma, p) => soma + p.valor, 0)
 
   return (
     <div
@@ -154,23 +164,39 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
             </div>
           ) : (
             <ul className="divide-y divide-[#EFE7D3]">
-              {pagamentos.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between gap-2 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#1C1A15]">
-                      {formatarDataLonga(p.data)} ·{' '}
-                      {FORMAS_ROTULO[p.formaPagamento]}
-                    </p>
-                    <p className="text-xs text-[#8A8171]">Renovação do ciclo</p>
-                  </div>
-                  <span className="shrink-0 text-sm font-semibold text-[#8A6A14]">
-                    {formatarBRL(p.valor)}
-                  </span>
-                </li>
-              ))}
+              {pagamentos.map((p) => {
+                const estornado = Boolean(
+                  p.caixaLancamentoId && estornados.has(p.caixaLancamentoId),
+                )
+                return (
+                  <li
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[#1C1A15]">
+                        {formatarDataLonga(p.data)} ·{' '}
+                        {FORMAS_ROTULO[p.formaPagamento]}
+                        {estornado && (
+                          <span className="ml-2 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            Estornado
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-[#8A8171]">Renovação do ciclo</p>
+                    </div>
+                    <span
+                      className={`shrink-0 text-sm font-semibold ${
+                        estornado
+                          ? 'text-[#A99E85] line-through'
+                          : 'text-[#8A6A14]'
+                      }`}
+                    >
+                      {formatarBRL(p.valor)}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

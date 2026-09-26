@@ -43,19 +43,25 @@ function ehEstadoClube(valor: unknown): boolean {
 
 /**
  * A cobrança do ciclo (vencimento) já foi paga: pela pendência do lote
- * atual (duplo clique) ou pelo histórico gravado. Pagamentos legados sem
- * `vencimentoCoberto` não bloqueiam nada.
+ * atual (duplo clique) ou pelo histórico gravado. Pagamento cujo
+ * lançamento no caixa foi estornado NÃO cobre o ciclo (o dinheiro
+ * voltou — a cobrança pode ser feita de novo). Pagamentos legados sem
+ * `vencimentoCoberto` ou sem lançamento vinculado não bloqueiam nada.
  */
 function cicloJaPago(
   pagamentos: PagamentoClube[],
   pendenciasDoLote: Set<string> | null,
   assinaturaId: string,
   vencimento: string,
+  estornados: ReadonlySet<string>,
 ): boolean {
   const chave = `${assinaturaId}:${vencimento}`
   if (pendenciasDoLote?.has(chave)) return true
   return pagamentos.some(
-    (p) => p.assinaturaId === assinaturaId && p.vencimentoCoberto === vencimento,
+    (p) =>
+      p.assinaturaId === assinaturaId &&
+      p.vencimentoCoberto === vencimento &&
+      (!p.caixaLancamentoId || !estornados.has(p.caixaLancamentoId)),
   )
 }
 
@@ -131,7 +137,7 @@ export type ClubeContexto = {
 const Contexto = createContext<ClubeContexto | null>(null)
 
 export function ClubeProvider({ children }: { children: ReactNode }) {
-  const { registrarReceitaClube } = useCaixa()
+  const { registrarReceitaClube, lancamentos } = useCaixa()
   const [estado, setEstado] = useState<EstadoClube>(carregarEstado)
 
   /**
@@ -287,13 +293,15 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
         throw new Error('Selecione a forma de pagamento.')
       }
       // Cobrança do ciclo atual já paga: recusa duplicidade — tanto no mesmo
-      // lote (pendência) quanto pelo histórico já gravado.
+      // lote (pendência) quanto pelo histórico já gravado (pagamentos com
+      // lançamento estornado ficam de fora: o ciclo não está coberto).
       if (
         cicloJaPago(
           estado.pagamentos,
           ciclosPagos.current,
           ass.id,
           ass.proximoVencimento,
+          new Set(lancamentos.filter((l) => l.estornado).map((l) => l.id)),
         )
       ) {
         throw new Error(
@@ -341,7 +349,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       }))
       return { assinatura: atualizada, pagamento }
     },
-    [estado.assinaturas, estado.pagamentos, registrarReceitaClube],
+    [estado.assinaturas, estado.pagamentos, registrarReceitaClube, lancamentos],
   )
 
   const renomearCliente = useCallback((antigo: string, novo: string) => {

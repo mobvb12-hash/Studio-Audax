@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { hojeISO, somarDias } from '@/modules/agenda/catalogo'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
-import { addMonthsISO } from '@/modules/clube/regras'
+import { addMonthsISO, STATUS_ROTULO } from '@/modules/clube/regras'
 import { ClubeProvider, useClube } from '@/modules/clube/store'
 import type { AssinaturaClube } from '@/modules/clube/types'
 import { formatarBRL } from '@/lib/moeda'
@@ -340,5 +340,57 @@ describe('Audax Club — página', () => {
     expect(screen.getByRole('heading', { name: 'Audax Club' })).toBeTruthy()
     expect(erros).not.toHaveBeenCalled()
     erros.mockRestore()
+  })
+})
+
+// Auditoria F16: `hoje` é recalculado a cada render — uma sessão que
+// cruza a meia-noite não pode continuar exibindo o status do dia anterior.
+describe('Audax Club — sessão que cruza a meia-noite (auditoria F16)', () => {
+  it('status da assinatura muda quando o dia vira', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-26T12:00:00.000Z'))
+      localStorage.setItem(
+        'studio-audax:clube:v1',
+        JSON.stringify({
+          assinaturas: [
+            {
+              id: 'a1',
+              clienteId: 'cli-1',
+              cliente: 'Lucas Mendes',
+              plano: 'cabelo',
+              valorMensal: 89.9,
+              dataAssinatura: '2026-01-01',
+              proximoVencimento: '2026-09-26',
+              cancelada: false,
+              criadoEm: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          pagamentos: [],
+        }),
+      )
+      const r = montar()
+      expect(screen.getByText(STATUS_ROTULO.proxima_vencimento)).toBeTruthy()
+      expect(screen.queryByText(STATUS_ROTULO.vencida)).toBeNull()
+
+      // 9 dias depois: vencimento ficou para trás (vencida)
+      vi.setSystemTime(new Date('2026-10-05T12:00:00.000Z'))
+      r.rerender(
+        <ClientesProvider>
+          <CaixaProvider>
+            <ClubeProvider>
+              <Captura />
+              <div data-testid="clube">
+                <Clube />
+              </div>
+            </ClubeProvider>
+          </CaixaProvider>
+        </ClientesProvider>,
+      )
+      expect(screen.getByText(STATUS_ROTULO.vencida)).toBeTruthy()
+      expect(screen.queryByText(STATUS_ROTULO.proxima_vencimento)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
