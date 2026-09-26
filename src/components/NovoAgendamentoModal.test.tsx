@@ -9,7 +9,7 @@ import { ServicosProvider } from '@/modules/servicos/store'
 const CHAVE_AG = 'studio-audax:agendamentos:v1'
 const DIA = '2026-09-25'
 
-function semear(horario: string, profissional = 'Audax') {
+function semear(horario: string, profissional = 'Cleiton Silva') {
   localStorage.setItem(
     CHAVE_AG,
     JSON.stringify([
@@ -29,7 +29,7 @@ function semear(horario: string, profissional = 'Audax') {
   )
 }
 
-function montar(horarioInicial = '10:30', profissionalInicial = 'Audax') {
+function montar(horarioInicial = '10:30', profissionalInicial = 'Cleiton Silva') {
   const onFechar = vi.fn()
   render(
     <ClientesProvider>
@@ -68,8 +68,8 @@ describe('NovoAgendamentoModal — conflito de horários', () => {
   })
 
   it('profissional diferente no mesmo horário não conflita', () => {
-    semear('10:30', 'Audax')
-    const onFechar = montar('10:30', 'Diego')
+    semear('10:30', 'Cleiton Silva')
+    const onFechar = montar('10:30', 'Ítalo Santos')
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Ana Souza' },
     })
@@ -103,8 +103,8 @@ describe('NovoAgendamentoModal — conflito de horários', () => {
 
 describe('NovoAgendamentoModal — cliente duplicado no horário', () => {
   it('bloqueia mesmo cliente no mesmo horário mesmo com profissional diferente', () => {
-    semear('10:00', 'Audax')
-    const onFechar = montar('10:00', 'Diego')
+    semear('10:00', 'Cleiton Silva')
+    const onFechar = montar('10:00', 'Ítalo Santos')
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'lucas mendes' },
     })
@@ -116,8 +116,8 @@ describe('NovoAgendamentoModal — cliente duplicado no horário', () => {
   })
 
   it('cliente diferente no mesmo horário salva normalmente', () => {
-    semear('10:00', 'Audax')
-    const onFechar = montar('10:00', 'Diego')
+    semear('10:00', 'Cleiton Silva')
+    const onFechar = montar('10:00', 'Ítalo Santos')
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Ana Souza' },
     })

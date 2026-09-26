@@ -19,27 +19,27 @@ function Semente() {
       <button
         type="button"
         onClick={() => {
-          // Audax: 70 - 10 de desconto = 60 líquido (conta)
+          // Cleiton Silva: 70 - 10 de desconto = 60 líquido (conta)
           registrarPagamento({
             agendamentoId: 'ag-1',
             data: hojeISO(),
             hora: '10:00',
             cliente: 'Lucas Mendes',
-            profissional: 'Audax',
+            profissional: 'Cleiton Silva',
             servico: 'Corte Degradê',
             valor: 70,
             desconto: 10,
             formaPagamento: 'pix',
             statusAgendamento: 'confirmado',
           })
-          // Audax: pago e depois estornado (não conta) — estorno em clique
+          // Cleiton Silva: pago e depois estornado (não conta) — estorno em clique
           // separado porque o store atualiza o estado em lotes
           const paraEstornar = registrarPagamento({
             agendamentoId: 'ag-2',
             data: hojeISO(),
             hora: '11:00',
             cliente: 'Rafael',
-            profissional: 'Audax',
+            profissional: 'Cleiton Silva',
             servico: 'Barba',
             valor: 50,
             desconto: 0,
@@ -47,33 +47,33 @@ function Semente() {
             statusAgendamento: 'confirmado',
           })
           idParaEstornar = paraEstornar.id
-          // Diego: 90 (conta)
+          // Ítalo Santos: 90 (conta)
           registrarPagamento({
             agendamentoId: 'ag-3',
             data: hojeISO(),
             hora: '12:00',
             cliente: 'Bruno',
-            profissional: 'Diego',
+            profissional: 'Ítalo Santos',
             servico: 'Corte Máquina',
             valor: 90,
             desconto: 0,
             formaPagamento: 'pix',
             statusAgendamento: 'concluido',
           })
-          // Audax: pagamento fora do mês corrente (não conta no período "Este mês")
+          // Cleiton Silva: pagamento fora do mês corrente (não conta no período "Este mês")
           registrarPagamento({
             agendamentoId: 'ag-4',
             data: '2020-01-15',
             hora: '09:00',
             cliente: 'Antigo',
-            profissional: 'Audax',
+            profissional: 'Cleiton Silva',
             servico: 'Corte',
             valor: 40,
             desconto: 0,
             formaPagamento: 'dinheiro',
             statusAgendamento: 'concluido',
           })
-          // Venda de produto de Audax (separada da produção de serviços)
+          // Venda de produto de Cleiton Silva (separada da produção de serviços)
           venderProduto({
             data: hojeISO(),
             produto: 'Pomada',
@@ -81,7 +81,7 @@ function Semente() {
             preco: 30,
             desconto: 0,
             formaPagamento: 'cartao_credito',
-            profissional: 'Audax',
+            profissional: 'Cleiton Silva',
           })
         }}
       >
@@ -104,7 +104,7 @@ function Semente() {
               data: hojeISO(),
               hora: '13:00',
               cliente: 'Cancelado',
-              profissional: 'Audax',
+              profissional: 'Cleiton Silva',
               servico: 'Corte',
               valor: 60,
               desconto: 0,
@@ -125,7 +125,7 @@ function Semente() {
       <button
         type="button"
         onClick={() =>
-          salvarConfig('prof-diego', { percentual: 40, ativo: false })
+          salvarConfig('prof-italo-santos', { percentual: 40, ativo: false })
         }
       >
         desativar-diego
@@ -170,10 +170,10 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     fireEvent.click(screen.getByText('semear'))
     fireEvent.click(screen.getByText('estornar'))
 
-    const audax = linha('Audax')
-    const diego = linha('Diego')
+    const audax = linha('Cleiton Silva')
+    const diego = linha('Ítalo Santos')
 
-    // Audax: 1 atendimento pago no mês (estornado fora, fora do mês fora)
+    // Cleiton Silva: 1 atendimento pago no mês (estornado fora, fora do mês fora)
     expect(within(audax).getByText('1')).toBeTruthy()
     expect(within(audax).getByText('R$ 60,00')).toBeTruthy()
     expect(within(audax).getByText('R$ 24,00')).toBeTruthy()
@@ -197,7 +197,7 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
 
     // Venda de produto não entra na produção de serviços (30 separados)
     const detalhe = screen.getByRole('button', {
-      name: 'Ver detalhes de Audax',
+      name: 'Ver detalhes de Cleiton Silva',
     })
     fireEvent.click(detalhe)
     expect(screen.getByText('Detalhamento da produção')).toBeTruthy()
@@ -229,7 +229,7 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     fireEvent.click(screen.getByText('semear'))
     fireEvent.click(screen.getByText('estornar'))
 
-    fireEvent.click(within(linha('Audax')).getByText('Fechar'))
+    fireEvent.click(within(linha('Cleiton Silva')).getByText('Fechar'))
     expect(screen.getByText('Comissão a pagar')).toBeTruthy()
     const modal = screen
       .getByText('Confirmar fechamento')
@@ -237,14 +237,14 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     expect(within(modal).getByText('R$ 24,00')).toBeTruthy()
     fireEvent.click(screen.getByText('Confirmar fechamento'))
 
-    expect(within(linha('Audax')).getByText(/Fechada R\$ 24,00/)).toBeTruthy()
-    expect(within(linha('Audax')).getByText('Reabrir')).toBeTruthy()
+    expect(within(linha('Cleiton Silva')).getByText(/Fechada R\$ 24,00/)).toBeTruthy()
+    expect(within(linha('Cleiton Silva')).getByText('Reabrir')).toBeTruthy()
     expect(screen.getByText('Auditoria de comissões')).toBeTruthy()
 
     // F5: fechamento persiste
     primeira.unmount()
     montar()
-    expect(within(linha('Audax')).getByText(/Fechada R\$ 24,00/)).toBeTruthy()
+    expect(within(linha('Cleiton Silva')).getByText(/Fechada R\$ 24,00/)).toBeTruthy()
   })
 
   it('profissional inativo mantém histórico, produção e comissão visíveis', () => {
@@ -253,7 +253,7 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     fireEvent.click(screen.getByText('estornar'))
     fireEvent.click(screen.getByText('desativar-diego'))
 
-    const diego = linha('Diego')
+    const diego = linha('Ítalo Santos')
     expect(within(diego).getByText('Inativo')).toBeTruthy()
     expect(within(diego).getByText('R$ 90,00')).toBeTruthy()
     expect(within(diego).getByText('R$ 36,00')).toBeTruthy()
@@ -266,10 +266,10 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     montar()
     fireEvent.click(screen.getByText('semear'))
     fireEvent.click(screen.getByText('estornar'))
-    fireEvent.click(within(linha('Audax')).getByText('Fechar'))
+    fireEvent.click(within(linha('Cleiton Silva')).getByText('Fechar'))
     fireEvent.click(screen.getByText('Confirmar fechamento'))
 
-    fireEvent.click(within(linha('Audax')).getByText('Reabrir'))
+    fireEvent.click(within(linha('Cleiton Silva')).getByText('Reabrir'))
     expect(screen.getByText('Reabrir comissão')).toBeTruthy()
     const modalReabertura = screen
       .getByText('Reabrir comissão')
@@ -285,7 +285,7 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     )
     fireEvent.click(within(modalReabertura).getByText('Reabrir'))
     expect(screen.queryByText('Reabrir comissão')).toBeNull()
-    expect(within(linha('Audax')).getByText('Fechar')).toBeTruthy()
+    expect(within(linha('Cleiton Silva')).getByText('Fechar')).toBeTruthy()
     expect(screen.getByText(/Reabertura/)).toBeTruthy()
   })
 })

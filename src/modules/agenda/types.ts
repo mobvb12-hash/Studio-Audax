@@ -45,6 +45,16 @@ export type NovoAgendamentoInput = {
 }
 
 /** Expediente de trabalho configurado na Agenda */
+/** Edição dos campos de um agendamento (data/horário/profissional = remarcação) */
+export type EdicaoAgendamentoInput = {
+  cliente: string
+  telefone: string
+  servico: string
+  observacao: string
+  /** Duração do serviço escolhido no momento da edição */
+  duracaoMin?: number
+}
+
 export type Expediente = {
   /** HH:MM — início do atendimento */
   inicio: string

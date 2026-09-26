@@ -136,7 +136,7 @@ describe('PDV — venda completa', () => {
       target: { value: ctxClientes.clientes[0].id },
     })
     fireEvent.change(screen.getByLabelText('Profissional (opcional)'), {
-      target: { value: 'Diego' },
+      target: { value: 'Ítalo Santos' },
     })
     escolherForma('dinheiro')
     finalizar()
@@ -156,7 +156,7 @@ describe('PDV — venda completa', () => {
     expect(venda.formaPagamento).toBe('dinheiro')
     expect(venda.cliente).toBe('Lucas Mendes')
     expect(venda.clienteId).toBe(ctxClientes.clientes[0].id)
-    expect(venda.profissional).toBe('Diego')
+    expect(venda.profissional).toBe('Ítalo Santos')
     expect(venda.itens).toHaveLength(1)
     expect(venda.itens?.[0]).toEqual({
       produtoId: id,
@@ -393,14 +393,14 @@ describe('PDV — profissionais', () => {
   it('não oferece profissional inativo na nova venda', () => {
     montar()
     act(() => {
-      ctxComissoes.salvarConfig('prof-audax', {
+      ctxComissoes.salvarConfig('prof-cleiton-silva', {
         percentual: 40,
         ativo: false,
       })
     })
     const select = screen.getByLabelText('Profissional (opcional)')
-    expect(select.textContent).toContain('Diego')
-    expect(select.textContent).not.toContain('Audax')
+    expect(select.textContent).toContain('Ítalo Santos')
+    expect(select.textContent).not.toContain('Cleiton Silva')
   })
 })
 

@@ -237,7 +237,7 @@ describe('Fila de Espera — encaixes compatíveis com a Agenda', () => {
         cliente: 'Ana Souza',
         telefone: '',
         servico: 'Corte Degradê',
-        profissional: 'Audax',
+        profissional: 'Cleiton Silva',
         data: HOJE,
         horario: '09:00',
         observacao: '',
@@ -246,24 +246,24 @@ describe('Fila de Espera — encaixes compatíveis com a Agenda', () => {
 
     adicionarPedido('Bruno Lima', 'Corte Degradê', {
       periodo: 'Manhã',
-      profissional: 'Audax',
+      profissional: 'Cleiton Silva',
     })
     const li = pedidoDe('Bruno Lima')
     expect(li).not.toBeNull()
 
     // 09:00 ocupado por Ana (40 min) — não é sugerido; 08:00 está livre
-    expect(within(li!).queryByText(/09:00 · Audax/)).toBeNull()
-    expect(within(li!).getByText(/08:00 · Audax/)).toBeTruthy()
+    expect(within(li!).queryByText(/09:00 · Cleiton Silva/)).toBeNull()
+    expect(within(li!).getByText(/08:00 · Cleiton Silva/)).toBeTruthy()
 
     // cancelar o agendamento libera o horário na hora
     act(() => {
       ctxAgenda.mudarStatus(idAgendamento, 'cancelado')
     })
-    expect(within(pedidoDe('Bruno Lima')!).getByText(/09:00 · Audax/)).toBeTruthy()
+    expect(within(pedidoDe('Bruno Lima')!).getByText(/09:00 · Cleiton Silva/)).toBeTruthy()
 
     // clicar no encaixe abre o modal já com cliente/data/hora/profissional
     fireEvent.click(
-      within(pedidoDe('Bruno Lima')!).getByText(/09:00 · Audax/),
+      within(pedidoDe('Bruno Lima')!).getByText(/09:00 · Cleiton Silva/),
     )
     expect(screen.getByText('Novo agendamento')).toBeTruthy()
     const painel = screen
@@ -278,7 +278,7 @@ describe('Fila de Espera — encaixes compatíveis com a Agenda', () => {
     expect(
       (within(painel).getByLabelText('Profissional') as HTMLSelectElement)
         .value,
-    ).toBe('Audax')
+    ).toBe('Cleiton Silva')
     // horário é um grupo de chips — o selecionado usa o destaque dourado
     const chipHora = within(painel).getByRole('button', { name: '09:00' })
     expect(chipHora.className).toContain('bg-[#8A6A14]')

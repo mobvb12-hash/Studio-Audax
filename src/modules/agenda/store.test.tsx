@@ -203,6 +203,7 @@ function TelaExtra() {
     adicionar,
     mudarStatus,
     remarcar,
+    editar,
     salvarExpediente,
     criarBloqueio,
     removerBloqueio,
@@ -381,6 +382,56 @@ function TelaExtra() {
       >
         renomear-pro
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('editar', () =>
+            agendamentos[0] &&
+            editar(agendamentos[0].id, {
+              cliente: 'Lucas Editado',
+              telefone: '(11) 90000-0000',
+              servico: 'Barba',
+              observacao: 'máquina baixa',
+              duracaoMin: 30,
+            }),
+          )
+        }
+      >
+        editar-campos
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('editar', () =>
+            agendamentos[0] &&
+            editar(agendamentos[0].id, {
+              cliente: 'L',
+              telefone: '',
+              servico: 'Barba',
+              observacao: '',
+            }),
+          )
+        }
+      >
+        editar-cliente-curto
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('editar', () =>
+            agendamentos[0] &&
+            editar(agendamentos[0].id, {
+              cliente: agendamentos[0].cliente,
+              telefone: '',
+              servico: 'Platinado / Luzes',
+              observacao: '',
+              duracaoMin: 120,
+            }),
+          )
+        }
+      >
+        editar-duracao-longa
+      </button>
     </div>
   )
 }
@@ -527,12 +578,60 @@ describe('Agenda — remarcação', () => {
   })
 })
 
+describe('Agenda — edição de agendamento', () => {
+  it('edita cliente, telefone, serviço e observação preservando id, status e horário', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre'))
+    const id = lerExtra().lista[0].id
+
+    fireEvent.click(screen.getByText('editar-campos'))
+    expect(screen.getByTestId('saida').textContent).toContain('editar:ok')
+
+    const ag = lerExtra().lista[0]
+    expect(ag.id).toBe(id)
+    expect(ag.cliente).toBe('Lucas Editado')
+    expect(ag.telefone).toBe('(11) 90000-0000')
+    expect(ag.servico).toBe('Barba')
+    expect(ag.duracaoMin).toBe(30)
+    expect(ag.observacao).toBe('máquina baixa')
+    expect(ag.status).toBe('pendente')
+    expect(ag.horario).toBe('10:00')
+    expect(ag.profissional).toBe('Audax')
+
+    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
+    expect(noStorage).toHaveLength(1)
+    expect(noStorage[0].cliente).toBe('Lucas Editado')
+    expect(noStorage[0].servico).toBe('Barba')
+  })
+
+  it('nome de cliente muito curto é recusado', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre'))
+    fireEvent.click(screen.getByText('editar-cliente-curto'))
+    expect(screen.getByTestId('saida').textContent).toContain(
+      'Informe o nome do cliente.',
+    )
+    expect(lerExtra().lista[0].cliente).toBe('Ana Souza')
+  })
+
+  it('serviço mais longo que invade horário de outro agendamento é recusado por conflito', () => {
+    montarExtra()
+    fireEvent.click(screen.getByText('criar-livre')) // 10:00 Ana — 40 min
+    fireEvent.click(screen.getByText('criar-11')) // 11:00 Carla
+    fireEvent.click(screen.getByText('editar-duracao-longa')) // 10:00 + 120 min
+
+    expect(screen.getByTestId('saida').textContent).toContain('Conflito:')
+    expect(lerExtra().lista[0].servico).toBe('Corte Degradê')
+    expect(lerExtra().lista[0].duracaoMin).toBe(40)
+  })
+})
+
 /* ------------------------------------------------------------------ */
 /* Trava de agendamento pago (jaPago do CaixaProvider)                */
 /* ------------------------------------------------------------------ */
 
 function TelaPagamento() {
-  const { agendamentos, adicionar, mudarStatus, remover } = useAgenda()
+  const { agendamentos, adicionar, mudarStatus, remover, editar } = useAgenda()
   const { registrarPagamento, estornar } = useCaixa()
   const [saida, setSaida] = useState('')
   const [idLancamento, setIdLancamento] = useState('')
@@ -589,6 +688,23 @@ function TelaPagamento() {
         }}
       >
         pagar
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('editar', () =>
+            ag &&
+            editar(ag.id, {
+              cliente: 'Ana Editada',
+              telefone: '',
+              servico: ag.servico,
+              observacao: '',
+              duracaoMin: ag.duracaoMin,
+            }),
+          )
+        }
+      >
+        editar
       </button>
       <button
         type="button"
@@ -660,6 +776,30 @@ describe('Agenda — agendamento pago não pode ser cancelado nem excluído', ()
     expect(lerSaida()).toContain('Estorne o pagamento no Caixa antes de excluir')
     expect(lerPagamentos()).toHaveLength(1)
     expect(JSON.parse(localStorage.getItem(CHAVE) ?? '[]')).toHaveLength(1)
+  })
+
+  it('pago: editar é bloqueado orientando estornar no Caixa', () => {
+    montarPagamento()
+    fireEvent.click(screen.getByText('criar'))
+    fireEvent.click(screen.getByText('pagar'))
+
+    fireEvent.click(screen.getByText('editar'))
+    expect(lerSaida()).toContain('Estorne o pagamento no Caixa antes de editar')
+    expect(lerPagamentos()[0].cliente).toBe('Ana Souza')
+    expect(JSON.parse(localStorage.getItem(CHAVE) ?? '[]')[0].cliente).toBe(
+      'Ana Souza',
+    )
+  })
+
+  it('pagamento estornado: editar volta a ser permitido', () => {
+    montarPagamento()
+    fireEvent.click(screen.getByText('criar'))
+    fireEvent.click(screen.getByText('pagar'))
+    fireEvent.click(screen.getByText('estornar'))
+
+    fireEvent.click(screen.getByText('editar'))
+    expect(lerSaida()).toBe('editar:ok')
+    expect(lerPagamentos()[0].cliente).toBe('Ana Editada')
   })
 
   it('pagamento estornado: cancelar e excluir passam a ser permitidos', () => {

@@ -72,10 +72,14 @@ beforeEach(() => {
 })
 
 describe('Profissionais — store', () => {
-  it('instalação nova inicia com Audax e Diego e campos vazios', () => {
+  it('instalação nova inicia com Cleiton Silva e Ítalo Santos e campos vazios', () => {
     montar()
     const lista = lerLista()
-    expect(lista.map((p) => p.nome)).toEqual(['Audax', 'Diego'])
+    expect(lista.map((p) => p.nome)).toEqual(['Cleiton Silva', 'Ítalo Santos'])
+    expect(lista.map((p) => p.id)).toEqual([
+      'prof-cleiton-silva',
+      'prof-italo-santos',
+    ])
     for (const p of lista) {
       expect(p.telefone).toBe('')
       expect(p.email).toBe('')
@@ -99,6 +103,59 @@ describe('Profissionais — store', () => {
     expect(lista[0].foto).toBe('')
     expect(lista[0].ativo).toBe(true)
     expect(lista[1].ativo).toBe(true)
+  })
+
+  it('renomeia os placeholders intactos do template para a equipe real', () => {
+    localStorage.setItem(
+      CHAVE,
+      JSON.stringify([
+        {
+          id: 'prof-audax',
+          nome: 'Audax',
+          telefone: '',
+          email: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'prof-diego',
+          nome: 'Diego',
+          telefone: '',
+          email: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+    montar()
+    const lista = lerLista()
+    expect(lista.map((p) => p.nome)).toEqual(['Cleiton Silva', 'Ítalo Santos'])
+    // ids preservados: chaves de comissões e configs continuam valendo
+    expect(lista.map((p) => p.id)).toEqual(['prof-audax', 'prof-diego'])
+  })
+
+  it('placeholder já renomeado pelo usuário não é tocado pela migração', () => {
+    localStorage.setItem(
+      CHAVE,
+      JSON.stringify([
+        {
+          id: 'prof-audax',
+          nome: 'Audax Barbearia',
+          telefone: '(11) 91111-2222',
+          email: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+    montar()
+    const lista = lerLista()
+    expect(lista).toHaveLength(1)
+    expect(lista[0].nome).toBe('Audax Barbearia')
+    expect(lista[0].telefone).toBe('(11) 91111-2222')
   })
 
   it('cria funcionário com telefone, e-mail e foto e grava no localStorage', () => {
@@ -143,8 +200,8 @@ describe('Profissionais — store', () => {
     expect(luan?.telefone).toBe('(11) 91234-5678')
     expect(luan?.email).toBe('luan@email.com')
     expect(luan?.foto).toBe('data:image/jpeg;base64,NOVA')
-    expect(lista.map((p) => p.nome)).toContain('Audax')
-    expect(lista.map((p) => p.nome)).toContain('Diego')
+    expect(lista.map((p) => p.nome)).toContain('Cleiton Silva')
+    expect(lista.map((p) => p.nome)).toContain('Ítalo Santos')
   })
 
   it('preserva lista vazia salva sem reinstalar o seed', () => {
@@ -156,7 +213,7 @@ describe('Profissionais — store', () => {
   it('rejeita profissional duplicado por nome', () => {
     montar()
     expect(() =>
-      ctx.adicionar({ nome: 'audax', telefone: '', email: '', foto: '' }),
+      ctx.adicionar({ nome: 'cleiton silva', telefone: '', email: '', foto: '' }),
     ).toThrow(/Já existe um profissional com este nome/)
 
     act(() => {
@@ -193,30 +250,30 @@ describe('Profissionais — validação no store', () => {
 
   it('rejeita atualização inválida mantendo o cadastro intacto', () => {
     montar()
-    const alvo = ctx.profissionais.find((p) => p.nome === 'Audax')!
+    const alvo = ctx.profissionais.find((p) => p.nome === 'Cleiton Silva')!
     expect(() =>
       ctx.atualizar(alvo.id, { nome: 'A', telefone: '', email: '', foto: '' }),
     ).toThrow(/nome completo do profissional/)
-    expect(ctx.porId(alvo.id)?.nome).toBe('Audax')
+    expect(ctx.porId(alvo.id)?.nome).toBe('Cleiton Silva')
   })
 })
 
 describe('Profissionais — status ativo/inativo (sem apagar dados)', () => {
   it('profissional nasce ativo e alternarAtivo inativa/reativa preservando tudo', () => {
     montar()
-    const alvo = ctx.profissionais.find((p) => p.nome === 'Diego')!
+    const alvo = ctx.profissionais.find((p) => p.nome === 'Ítalo Santos')!
     expect(alvo.ativo).toBe(true)
 
     act(() => ctx.alternarAtivo(alvo.id))
     const inativo = ctx.porId(alvo.id)!
     expect(inativo.ativo).toBe(false)
-    expect(inativo.nome).toBe('Diego')
+    expect(inativo.nome).toBe('Ítalo Santos')
     expect(inativo.telefone).toBe('')
     expect(inativo.email).toBe('')
 
     const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
     expect(
-      noStorage.find((p: Profissional) => p.nome === 'Diego')?.ativo,
+      noStorage.find((p: Profissional) => p.nome === 'Ítalo Santos')?.ativo,
     ).toBe(false)
 
     act(() => ctx.alternarAtivo(alvo.id))
@@ -225,20 +282,20 @@ describe('Profissionais — status ativo/inativo (sem apagar dados)', () => {
 
   it('atualizar preserva o status inativo do profissional', () => {
     montar()
-    const alvo = ctx.profissionais.find((p) => p.nome === 'Diego')!
+    const alvo = ctx.profissionais.find((p) => p.nome === 'Ítalo Santos')!
     act(() => ctx.alternarAtivo(alvo.id))
     act(() => {
       ctx.atualizar(alvo.id, {
-        nome: 'Diego',
+        nome: 'Ítalo Santos',
         telefone: '(11) 97777-6666',
-        email: 'diego@email.com',
+        email: 'italo@email.com',
         foto: '',
       })
     })
     const atual = ctx.porId(alvo.id)!
     expect(atual.ativo).toBe(false)
     expect(atual.telefone).toBe('(11) 97777-6666')
-    expect(atual.email).toBe('diego@email.com')
+    expect(atual.email).toBe('italo@email.com')
   })
 
   it('profissionais criados nascem ativos por padrão', () => {

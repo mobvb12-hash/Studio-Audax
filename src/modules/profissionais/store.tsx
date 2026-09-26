@@ -50,6 +50,32 @@ function nomeChave(texto: string): string {
   return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
 
+/** Id legível gerado para o seed da instalação nova */
+function idSeed(nome: string): string {
+  const slug = nome
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return `prof-${slug}`
+}
+
+/**
+ * Placeholders do template antigo renomeados para a equipe real.
+ * Só age sobre o registro intacto (mesmo id + mesmo nome); qualquer
+ * personalização do usuário é preservada como está.
+ */
+const PLACEHOLDERS = [
+  { id: 'prof-audax', antigo: 'Audax', novo: 'Cleiton Silva' },
+  { id: 'prof-diego', antigo: 'Diego', novo: 'Ítalo Santos' },
+] as const
+
+function migrarPlaceholder(p: Profissional): Profissional {
+  const ph = PLACEHOLDERS.find((x) => x.id === p.id && x.antigo === p.nome)
+  return ph ? { ...p, nome: ph.novo } : p
+}
+
 function carregar(): Profissional[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
@@ -61,6 +87,7 @@ function carregar(): Profissional[] {
         const migrada = lista
           .map(normalizar)
           .filter((p): p is Profissional => p !== null)
+          .map(migrarPlaceholder)
         return ordenar(migrada)
       }
     }
@@ -69,7 +96,7 @@ function carregar(): Profissional[] {
   }
   const agora = new Date().toISOString()
   return SEED.map((nome) => ({
-    id: `prof-${nome.toLowerCase()}`,
+    id: idSeed(nome),
     nome,
     telefone: '',
     email: '',

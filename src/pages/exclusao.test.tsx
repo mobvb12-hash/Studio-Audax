@@ -92,13 +92,13 @@ describe('Confirmação de exclusão destrutiva', () => {
         </AgendaProvider>
       </ProfissionaisProvider>,
     )
-    fireEvent.click(screen.getByLabelText('Excluir Audax'))
+    fireEvent.click(screen.getByLabelText('Excluir Cleiton Silva'))
     expect(screen.getByText('Excluir profissional')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Voltar'))
     await waitFor(() =>
       expect(screen.queryByText('Excluir profissional')).toBeNull(),
     )
-    expect(screen.getByText('Audax')).toBeTruthy()
+    expect(screen.getByText('Cleiton Silva')).toBeTruthy()
   })
 })

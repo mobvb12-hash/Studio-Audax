@@ -49,7 +49,7 @@ function semearBloqueio() {
     JSON.stringify([
       {
         id: 'blk-1',
-        profissional: 'Audax',
+        profissional: 'Cleiton Silva',
         data: DIA,
         inicio: '11:30',
         fim: '12:00',
@@ -123,10 +123,10 @@ beforeEach(() => {
 describe('Integração Agenda → NovoAgendamentoModal', () => {
   it('conflito de horário é recusado e o modal permanece aberto', () => {
     semearAgendamentos([
-      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Audax', horario: '10:00' },
+      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Cleiton Silva', horario: '10:00' },
     ])
     montar()
-    fireEvent.click(screen.getByLabelText('Agendar 10:30 com Audax'))
+    fireEvent.click(screen.getByLabelText('Agendar 10:30 com Cleiton Silva'))
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Bruno Dias' },
     })
@@ -140,7 +140,7 @@ describe('Integração Agenda → NovoAgendamentoModal', () => {
 
   it('serviço longo que cruza o almoço é recusado', () => {
     montar()
-    fireEvent.click(screen.getByLabelText('Agendar 11:00 com Audax'))
+    fireEvent.click(screen.getByLabelText('Agendar 11:00 com Cleiton Silva'))
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Bruno Dias' },
     })
@@ -157,7 +157,7 @@ describe('Integração Agenda → NovoAgendamentoModal', () => {
   it('horário coberto por bloqueio é recusado', () => {
     semearBloqueio()
     montar()
-    fireEvent.click(screen.getByLabelText('Agendar 11:00 com Audax'))
+    fireEvent.click(screen.getByLabelText('Agendar 11:00 com Cleiton Silva'))
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Bruno Dias' },
     })
@@ -176,14 +176,14 @@ describe('Integração Agenda → NovoAgendamentoModal', () => {
 describe('Integração status → horário liberado', () => {
   it('cancelar pela interface libera o horário para novo agendamento', () => {
     semearAgendamentos([
-      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Audax', horario: '10:00' },
+      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Cleiton Silva', horario: '10:00' },
     ])
     montar()
     fireEvent.click(screen.getByText('Lucas Mendes'))
     fireEvent.click(screen.getByText('Cancelar'))
     expect(lerAgendamentos()[0].status).toBe('cancelado')
 
-    fireEvent.click(screen.getByLabelText('Agendar 10:00 com Audax'))
+    fireEvent.click(screen.getByLabelText('Agendar 10:00 com Cleiton Silva'))
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Bruno Dias' },
     })
@@ -204,8 +204,8 @@ describe('Integração status → horário liberado', () => {
 describe('Integração remarcação pela interface', () => {
   it('recusa remarcar para horário ocupado sem alterar nada', () => {
     semearAgendamentos([
-      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Audax', horario: '10:00' },
-      { id: 'ag-2', cliente: 'Carla Lima', profissional: 'Audax', horario: '11:00' },
+      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Cleiton Silva', horario: '10:00' },
+      { id: 'ag-2', cliente: 'Carla Lima', profissional: 'Cleiton Silva', horario: '11:00' },
     ])
     montar()
     fireEvent.click(screen.getByText('Lucas Mendes'))
@@ -225,7 +225,7 @@ describe('Integração remarcação pela interface', () => {
 
   it('agendamento pago não oferece remarcação nem exclusão', () => {
     semearAgendamentos([
-      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Audax', horario: '10:00' },
+      { id: 'ag-1', cliente: 'Lucas Mendes', profissional: 'Cleiton Silva', horario: '10:00' },
     ])
     montar()
     act(() => {
@@ -234,7 +234,7 @@ describe('Integração remarcação pela interface', () => {
         data: DIA,
         hora: '10:00',
         cliente: 'Lucas Mendes',
-        profissional: 'Audax',
+        profissional: 'Cleiton Silva',
         servico: 'Corte Degradê',
         valor: 70,
         desconto: 0,
@@ -256,7 +256,7 @@ describe('Integração remarcação pela interface', () => {
 describe('Integração do usoAgenda com a grade', () => {
   it('agendamento criado pelo modal aparece na grade no mesmo horário', () => {
     montar()
-    fireEvent.click(screen.getByLabelText('Agendar 14:00 com Diego'))
+    fireEvent.click(screen.getByLabelText('Agendar 14:00 com Ítalo Santos'))
     fireEvent.change(screen.getByLabelText('Cliente *'), {
       target: { value: 'Bruno Dias' },
     })
@@ -267,7 +267,7 @@ describe('Integração do usoAgenda com a grade', () => {
     expect(lista).toHaveLength(1)
     expect(lista[0]).toMatchObject({
       cliente: 'Bruno Dias',
-      profissional: 'Diego',
+      profissional: 'Ítalo Santos',
       horario: '14:00',
       status: 'pendente',
       servico: 'Barba',

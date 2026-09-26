@@ -33,7 +33,7 @@ function semearAgendamento() {
         cliente: 'Lucas Mendes',
         telefone: '(11) 98888-7777',
         servico: 'Corte Degradê',
-        profissional: 'Audax',
+        profissional: 'Cleiton Silva',
         data: DIA,
         horario: '10:00',
         status: 'confirmado',
@@ -51,7 +51,7 @@ function semearBloqueio() {
     JSON.stringify([
       {
         id: 'blk-1',
-        profissional: 'Audax',
+        profissional: 'Cleiton Silva',
         data: DIA,
         inicio: '15:00',
         fim: '17:00',
@@ -89,14 +89,14 @@ describe('Agenda — visão dia', () => {
   it('colunas por profissional e clique no horário vazio abre novo', () => {
     const onNovo = montar()
     expect(screen.getByRole('heading', { name: 'Agenda' })).toBeTruthy()
-    expect(screen.getByText('Audax')).toBeTruthy()
-    expect(screen.getByText('Diego')).toBeTruthy()
+    expect(screen.getByText('Cleiton Silva')).toBeTruthy()
+    expect(screen.getByText('Ítalo Santos')).toBeTruthy()
 
-    fireEvent.click(screen.getByLabelText('Agendar 10:00 com Audax'))
+    fireEvent.click(screen.getByLabelText('Agendar 10:00 com Cleiton Silva'))
     expect(onNovo).toHaveBeenCalledWith({
       data: DIA,
       horario: '10:00',
-      profissional: 'Audax',
+      profissional: 'Cleiton Silva',
     })
   })
 
@@ -113,10 +113,10 @@ describe('Agenda — visão dia', () => {
   it('célula de bloqueio fica desabilitada só para o profissional afetado', () => {
     semearBloqueio()
     montar()
-    expect(screen.getByLabelText('Bloqueado 15:00 com Audax')).toBeTruthy()
-    expect(screen.queryByLabelText('Agendar 15:00 com Audax')).toBeNull()
+    expect(screen.getByLabelText('Bloqueado 15:00 com Cleiton Silva')).toBeTruthy()
+    expect(screen.queryByLabelText('Agendar 15:00 com Cleiton Silva')).toBeNull()
     expect(screen.getByText('Folga — viagem')).toBeTruthy()
-    expect(screen.getByLabelText('Agendar 15:00 com Diego')).toBeTruthy()
+    expect(screen.getByLabelText('Agendar 15:00 com Ítalo Santos')).toBeTruthy()
   })
 
   it('faixa de almoço segue o expediente configurado', () => {
@@ -146,7 +146,7 @@ describe('Agenda — visão semana', () => {
     expect(onNovo).toHaveBeenCalledWith({
       data: DIA,
       horario: '10:00',
-      profissional: 'Audax',
+      profissional: 'Cleiton Silva',
     })
   })
 
@@ -156,7 +156,7 @@ describe('Agenda — visão semana', () => {
     montar()
     fireEvent.click(screen.getByRole('button', { name: 'Semana' }))
     expect(screen.getByText('Lucas Mendes')).toBeTruthy()
-    expect(screen.getByText(/10:00 · Audax/)).toBeTruthy()
+    expect(screen.getByText(/10:00 · Cleiton Silva/)).toBeTruthy()
     expect(screen.getByText(/Folga — viagem/)).toBeTruthy()
   })
 })
@@ -198,7 +198,7 @@ describe('Agenda — modais de expediente e bloqueios', () => {
     const lista = JSON.parse(localStorage.getItem(CHAVE_BLK) ?? '[]')
     expect(lista).toHaveLength(1)
     expect(lista[0]).toMatchObject({
-      profissional: 'Audax',
+      profissional: 'Cleiton Silva',
       tipo: 'folga',
       inicio: '08:00',
       fim: '20:00',
@@ -226,7 +226,7 @@ describe('Agenda — remarcação pela interface', () => {
     expect(lista[0].remarcacoes).toHaveLength(1)
     expect(lista[0].remarcacoes[0].de).toMatchObject({
       horario: '10:00',
-      profissional: 'Audax',
+      profissional: 'Cleiton Silva',
     })
   })
 })

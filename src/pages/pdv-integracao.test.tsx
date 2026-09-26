@@ -66,7 +66,7 @@ function env(children: ReactNode) {
   )
 }
 
-/** Cliente + atendimento de R$100 (Audax) + produtos Creme 30 / Pomada 50. */
+/** Cliente + atendimento de R$100 (Cleiton Silva) + produtos Creme 30 / Pomada 50. */
 function semearBase() {
   act(() => {
     ctxClientes.adicionar({
@@ -80,7 +80,7 @@ function semearBase() {
       data: hojeISO(),
       hora: '09:00',
       cliente: 'Lucas Mendes',
-      profissional: 'Audax',
+      profissional: 'Cleiton Silva',
       servico: 'Corte Degradê',
       valor: 100,
       desconto: 0,
@@ -102,7 +102,7 @@ function semearBase() {
       formaPagamento: 'dinheiro',
       cliente: 'Lucas Mendes',
       clienteId: ctxClientes.clientes[0]?.id,
-      profissional: 'Diego',
+      profissional: 'Ítalo Santos',
     })
   })
 }
@@ -172,7 +172,7 @@ describe('PDV ↔ Caixa — auditoria numérica', () => {
       target: { value: ctxClientes.clientes[0].id },
     })
     fireEvent.change(screen.getByLabelText('Profissional (opcional)'), {
-      target: { value: 'Diego' },
+      target: { value: 'Ítalo Santos' },
     })
     fireEvent.change(screen.getByLabelText('Forma de pagamento *'), {
       target: { value: 'dinheiro' },
@@ -199,7 +199,7 @@ describe('PDV ↔ Caixa — auditoria numérica', () => {
     expect(resumo.porForma.dinheiro).toBe(100)
 
     // Venda atribuída ao profissional no Caixa
-    const diego = resumo.porProfissional.find((p) => p.nome === 'Diego')
+    const diego = resumo.porProfissional.find((p) => p.nome === 'Ítalo Santos')
     expect(diego?.valor).toBe(100)
     expect(diego?.qtd).toBe(1)
 
@@ -243,7 +243,7 @@ describe('PDV ↔ Dashboard', () => {
     expect(
       within(kpiDashboard('Receita do mês')).getByText('R$ 200,00'),
     ).toBeTruthy()
-    // Comissão só do atendimento de Audax (100 × 40%) — venda não gera comissão
+    // Comissão só do atendimento de Cleiton Silva (100 × 40%) — venda não gera comissão
     expect(
       within(kpiDashboard('Comissões a pagar')).getByText('R$ 40,00'),
     ).toBeTruthy()
@@ -296,13 +296,13 @@ describe('PDV ↔ Profissionais e Comissões', () => {
       ctxComissoes.configDe,
       periodoSemana(),
     )
-    const audax = linhas.find((l) => l.nome === 'Audax')!
+    const audax = linhas.find((l) => l.nome === 'Cleiton Silva')!
     expect(audax.producao).toBe(100)
     expect(audax.comissao).toBe(40)
     expect(audax.qtd).toBe(1)
 
-    // Diego recebeu a venda no Caixa, mas produtos não entram na comissão
-    const diego = linhas.find((l) => l.nome === 'Diego')!
+    // Ítalo Santos recebeu a venda no Caixa, mas produtos não entram na comissão
+    const diego = linhas.find((l) => l.nome === 'Ítalo Santos')!
     expect(diego.producao).toBe(0)
     expect(diego.comissao).toBe(0)
     expect(diego.qtd).toBe(0)

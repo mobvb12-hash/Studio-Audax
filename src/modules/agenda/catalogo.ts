@@ -8,7 +8,7 @@ export const SERVICOS = [
   { nome: 'Sobrancelha', preco: 25, duracaoMin: 15 },
 ]
 
-export const PROFISSIONAIS = ['Audax', 'Diego']
+export const PROFISSIONAIS = ['Cleiton Silva', 'Ítalo Santos']
 
 export const HORARIOS = [
   '08:00',

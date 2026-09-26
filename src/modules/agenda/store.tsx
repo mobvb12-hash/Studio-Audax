@@ -18,6 +18,7 @@ import {
 import type {
   Agendamento,
   Bloqueio,
+  EdicaoAgendamentoInput,
   Expediente,
   NovoAgendamentoInput,
   NovoBloqueioInput,
@@ -47,6 +48,12 @@ type AgendaContexto = {
   ) => Agendamento
   /** Persiste o expediente validando os horários (lança erro) */
   salvarExpediente: (entrada: Expediente) => void
+  /**
+   * Edita cliente, telefone, serviço e observação mantendo id, status,
+   * data/horário/profissional (mover é remarcação). Revalida conflito com a
+   * nova duração e bloqueia quando o agendamento já foi pago (lança erro).
+   */
+  editar: (id: string, entrada: EdicaoAgendamentoInput) => Agendamento
   criarBloqueio: (entrada: NovoBloqueioInput) => Bloqueio
   removerBloqueio: (id: string) => void
   /** Propaga renomeações de cadastro para os agendamentos existentes */
@@ -239,6 +246,54 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
     [agendamentos, bloqueios, expediente],
   )
 
+  const editar = useCallback(
+    (id: string, entrada: EdicaoAgendamentoInput) => {
+      const ag = agendamentos.find((a) => a.id === id)
+      if (!ag) throw new Error('Agendamento não encontrado.')
+      if (jaPago(id)) {
+        throw new Error(
+          'Este agendamento já foi pago. Estorne o pagamento no Caixa antes de editar.',
+        )
+      }
+      const cliente = entrada.cliente.trim()
+      if (cliente.length < 2) {
+        throw new Error('Informe o nome do cliente.')
+      }
+      if (!entrada.servico) {
+        throw new Error('Cadastre um serviço no módulo Serviços antes de editar.')
+      }
+      const servicoMudou = entrada.servico !== ag.servico
+      const duracaoMin = servicoMudou
+        ? entrada.duracaoMin ?? duracaoBase(entrada.servico)
+        : (ag.duracaoMin ?? duracaoBase(entrada.servico))
+      const resultado = validarProposta({
+        agendamentos,
+        bloqueios,
+        expediente,
+        data: ag.data,
+        horario: ag.horario,
+        profissional: ag.profissional,
+        duracaoMin,
+        ignorarId: id,
+      })
+      if (!resultado.ok) throw new Error(resultado.erro)
+
+      const editado: Agendamento = {
+        ...ag,
+        cliente,
+        telefone: entrada.telefone.trim(),
+        servico: entrada.servico,
+        observacao: entrada.observacao.trim(),
+        duracaoMin,
+      }
+      setAgendamentos((atual) =>
+        ordenar(atual.map((a) => (a.id === id ? editado : a))),
+      )
+      return editado
+    },
+    [agendamentos, bloqueios, expediente, jaPago],
+  )
+
   const salvarExpediente = useCallback((entrada: Expediente) => {
     const inicio = paraMinutos(entrada.inicio)
     const fim = paraMinutos(entrada.fim)
@@ -352,6 +407,7 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
       remover,
       porData,
       remarcar,
+      editar,
       salvarExpediente,
       criarBloqueio,
       removerBloqueio,
@@ -368,6 +424,7 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
       remover,
       porData,
       remarcar,
+      editar,
       salvarExpediente,
       criarBloqueio,
       removerBloqueio,

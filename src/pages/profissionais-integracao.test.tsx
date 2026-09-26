@@ -296,11 +296,11 @@ describe('PDV — profissional inativo do cadastro', () => {
   it('não oferece profissional inativo no select do atendimento', () => {
     envPdv()
     act(() => {
-      ctxProfissionais.alternarAtivo(idDoProfissional('Audax'))
+      ctxProfissionais.alternarAtivo(idDoProfissional('Cleiton Silva'))
     })
     const select = screen.getByLabelText('Profissional (opcional)')
-    expect(select.textContent).toContain('Diego')
-    expect(select.textContent).not.toContain('Audax')
+    expect(select.textContent).toContain('Ítalo Santos')
+    expect(select.textContent).not.toContain('Cleiton Silva')
   })
 })
 
@@ -313,14 +313,14 @@ describe('Relatórios — profissional inativo com produção preservada', () =>
         data: DIA,
         hora: '10:00',
         cliente: 'Ana Souza',
-        profissional: 'Audax',
+        profissional: 'Cleiton Silva',
         servico: 'Corte Degradê',
         valor: 100,
         desconto: 0,
         formaPagamento: 'pix',
         statusAgendamento: 'concluido',
       })
-      ctxProfissionais.alternarAtivo(idDoProfissional('Audax'))
+      ctxProfissionais.alternarAtivo(idDoProfissional('Cleiton Silva'))
     })
 
     expect(screen.getByText('Inativo')).toBeTruthy()

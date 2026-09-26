@@ -104,8 +104,8 @@ describe('Dashboard — horários disponíveis (dados reais)', () => {
 
   it('agendamentos de hoje reduzem horários e vagas', () => {
     montar()
-    agendar('10:00', 'Audax')
-    agendar('10:00', 'Diego')
+    agendar('10:00', 'Cleiton Silva')
+    agendar('10:00', 'Ítalo Santos')
 
     // 10:00 e 10:30 ficam sem nenhuma vaga (atendimento de 40 min)
     expect(screen.getByText(/20 horário\(s\) · 40 vaga\(s\)/)).toBeTruthy()

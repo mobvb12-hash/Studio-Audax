@@ -477,13 +477,16 @@ describe('Relatórios — profissionais', () => {
   it('profissional inativo aparece identificado como Inativo', () => {
     montar()
     act(() => {
-      ctxComissoes.salvarConfig('prof-diego', { percentual: 40, ativo: false })
+      ctxComissoes.salvarConfig('prof-italo-santos', {
+        percentual: 40,
+        ativo: false,
+      })
       ctxCaixa.registrarPagamento({
         agendamentoId: 'ag-1',
         data: hojeISO(),
         hora: '10:00',
         cliente: 'Ana Souza',
-        profissional: 'Diego',
+        profissional: 'Ítalo Santos',
         servico: 'Barba',
         valor: 50,
         desconto: 0,
@@ -495,7 +498,9 @@ describe('Relatórios — profissionais', () => {
     expect(screen.getByText('Inativo')).toBeTruthy()
     // continua com produção e comissão calculados (mesma regra da Comissões)
     const secao = screen.getByText('Profissionais').closest('section') as HTMLElement
-    const linha = within(secao).getByText('Diego').closest('tr') as HTMLElement
+    const linha = within(secao)
+      .getByText('Ítalo Santos')
+      .closest('tr') as HTMLElement
     expect(norm(linha.textContent)).toContain('R$ 20,00')
   })
 })

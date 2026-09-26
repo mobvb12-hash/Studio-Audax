@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import BloqueiosModal from '@/components/BloqueiosModal'
+import EditarAgendamentoModal from '@/components/EditarAgendamentoModal'
 import ExpedienteModal from '@/components/ExpedienteModal'
 import PagamentoModal from '@/components/PagamentoModal'
 import RemarcarAgendamentoModal from '@/components/RemarcarAgendamentoModal'
@@ -88,6 +89,7 @@ function DetalheAgendamento({
   pago,
   onPagar,
   onRemarcar,
+  onEditar,
   onFechar,
 }: {
   ag: Agendamento
@@ -97,6 +99,7 @@ function DetalheAgendamento({
   pago: boolean
   onPagar: () => void
   onRemarcar: () => void
+  onEditar: () => void
   onFechar: () => void
 }) {
   const duracao = duracaoDo(ag.servico)
@@ -224,6 +227,15 @@ function DetalheAgendamento({
                   Remarcar
                 </button>
               )}
+              {!confirmandoExclusao && (
+                <button
+                  type="button"
+                  onClick={onEditar}
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                >
+                  Editar
+                </button>
+              )}
               {emAberto && (
                 <button
                   type="button"
@@ -322,6 +334,7 @@ export default function Agenda({ onNovo }: Props) {
   const [remarcando, setRemarcando] = useState<Agendamento | null>(null)
   const [expedienteAberto, setExpedienteAberto] = useState(false)
   const [bloqueiosAberto, setBloqueiosAberto] = useState(false)
+  const [editando, setEditando] = useState<Agendamento | null>(null)
 
   const slots = useMemo(() => slotsDoExpediente(expediente), [expediente])
 
@@ -809,7 +822,18 @@ export default function Agenda({ onNovo }: Props) {
             setRemarcando(selecionado)
             setSelecionado(null)
           }}
+          onEditar={() => {
+            setEditando(selecionado)
+            setSelecionado(null)
+          }}
           onFechar={() => setSelecionado(null)}
+        />
+      )}
+
+      {editando && (
+        <EditarAgendamentoModal
+          agendamento={editando}
+          onFechar={() => setEditando(null)}
         />
       )}
 
