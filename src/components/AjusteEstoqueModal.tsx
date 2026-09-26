@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useEstoque } from '@/modules/estoque/store'
 import { MOTIVOS_AJUSTE, type MotivoAjuste } from '@/modules/estoque/types'
@@ -26,6 +26,8 @@ export default function AjusteEstoqueModal({ produtoId, onFechar }: Props) {
   const [data, setData] = useState(() => hojeISO())
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
+  /** Anti duplo clique: um submit por vez até dar erro/sucesso */
+  const salvandoRef = useRef(false)
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -36,6 +38,8 @@ export default function AjusteEstoqueModal({ produtoId, onFechar }: Props) {
   }, [onFechar])
 
   function confirmar() {
+    if (salvandoRef.current) return
+    salvandoRef.current = true
     try {
       ajuste({
         produtoId: produto,
@@ -48,6 +52,7 @@ export default function AjusteEstoqueModal({ produtoId, onFechar }: Props) {
       onFechar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar o ajuste.')
+      salvandoRef.current = false
     }
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCaixa } from '@/modules/caixa/store'
 import {
   CATEGORIAS_DESPESA,
@@ -29,6 +29,8 @@ export default function DespesaFormModal({ data, onFechar }: Props) {
   const [forma, setForma] = useState<FormaPagamento>('pix')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
+  /** Anti duplo clique: um submit por vez até dar erro/sucesso */
+  const salvandoRef = useRef(false)
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -39,10 +41,12 @@ export default function DespesaFormModal({ data, onFechar }: Props) {
   }, [onFechar])
 
   function salvar() {
+    if (salvandoRef.current) return
     if (diaFechado(data)) {
       setErro(`O caixa de ${data} está fechado. Reabra o caixa para lançar.`)
       return
     }
+    salvandoRef.current = true
     try {
       adicionarDespesa({
         data,
@@ -55,6 +59,7 @@ export default function DespesaFormModal({ data, onFechar }: Props) {
       onFechar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
+      salvandoRef.current = false
     }
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { FormaPagamento } from '@/modules/caixa/types'
@@ -33,6 +33,8 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
   const [forma, setForma] = useState<FormaPagamento>('dinheiro')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
+  /** Anti duplo clique: um submit por vez até dar erro/sucesso */
+  const salvandoRef = useRef(false)
 
   // Venda só de produto cadastrado, ativo e com estoque
   const produtosVendaveis = produtos.filter((p) => p.ativo && p.estoque > 0)
@@ -54,6 +56,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
     : 0
 
   function salvar() {
+    if (salvandoRef.current) return
     if (diaFechado(data)) {
       setErro(`O caixa de ${data} está fechado. Reabra o caixa para lançar.`)
       return
@@ -68,6 +71,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       )
       return
     }
+    salvandoRef.current = true
     let vendaId = ''
     try {
       const lancamento = venderProduto({
@@ -96,6 +100,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       // para a venda não ficar registrada sem estoque baixado.
       if (vendaId) desfazerLancamento(vendaId)
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
+      salvandoRef.current = false
     }
   }
 
