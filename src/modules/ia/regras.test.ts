@@ -3,8 +3,9 @@ import { hojeISO, somarDias } from '@/modules/agenda/catalogo'
 import type { Agendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { preferenciasPadrao, type Cliente } from '@/modules/clientes/types'
+import type { PerfilCliente } from '@/modules/crm/regras'
 import type { Servico } from '@/modules/servicos/types'
-import { gerarSugestoes, semTratadas } from './regras'
+import { gerarSugestoes, personalizarTexto, semTratadas } from './regras'
 
 const HOJE = hojeISO()
 
@@ -220,5 +221,81 @@ describe('Central de IA — sugestões a partir de dados reais', () => {
     expect(restantes).toHaveLength(sugestoes.length - 1)
     const comoSet = semTratadas(sugestoes, new Set(['oportunidade:c-bruno']))
     expect(comoSet.some((s) => s.id === 'oportunidade:c-bruno')).toBe(false)
+  })
+})
+
+describe('personalizarTexto — assistente de texto do WhatsApp', () => {
+  const TEXTO = 'Olá, Ana! Confirmação do seu agendamento de amanhã.'
+
+  function perfil(extras: Partial<PerfilCliente>): PerfilCliente {
+    return {
+      cliente: cliente('c-ana', 'Ana Souza'),
+      segmento: 'ativo',
+      totalAtendimentos: 0,
+      primeiroAtendimento: '',
+      ultimoAtendimento: '',
+      diasDesdeUltimo: null,
+      frequenciaDias: null,
+      totalGasto: 0,
+      servicos: [],
+      produtos: [],
+      profissionalPreferido: null,
+      ...extras,
+    }
+  }
+
+  it('primeira visita ganha a boas-vindas quando há horário futuro', () => {
+    const texto = personalizarTexto(
+      TEXTO,
+      perfil({ totalAtendimentos: 0 }),
+      ag('Ana Souza', 1, 'Corte'),
+    )
+    expect(texto).toContain(TEXTO)
+    expect(texto).toContain('primeira visita')
+    expect(texto).toContain('Studio Audax')
+  })
+
+  it('fiel atendido pelo profissional preferido recebe a frase pessoal', () => {
+    const texto = personalizarTexto(
+      TEXTO,
+      perfil({ totalAtendimentos: 4, profissionalPreferido: 'Audax' }),
+      ag('Ana Souza', 1, 'Corte'),
+    )
+    expect(texto).toContain('4 vez(es)')
+    expect(texto).toContain('o seu preferido')
+  })
+
+  it('profissional diferente cai na frase de número da visita', () => {
+    const texto = personalizarTexto(
+      TEXTO,
+      perfil({ totalAtendimentos: 4, profissionalPreferido: 'Diego' }),
+      ag('Ana Souza', 1, 'Corte'),
+    )
+    expect(texto).toContain('visita de número 5')
+    expect(texto).not.toContain('preferido')
+  })
+
+  it('sem personalização aplicável o texto base volta intacto', () => {
+    const texto = personalizarTexto(
+      TEXTO,
+      perfil({ totalAtendimentos: 2, profissionalPreferido: 'Audax' }),
+      ag('Ana Souza', 1, 'Corte'),
+    )
+    expect(texto).toBe(TEXTO)
+  })
+
+  it('sem agendamento só usa frase atemporal a partir de 5 visitas', () => {
+    const forte = personalizarTexto(
+      TEXTO,
+      perfil({ totalAtendimentos: 5, primeiroAtendimento: '2025-01-10' }),
+    )
+    expect(forte).toContain('5 atendimentos conosco desde')
+    expect(forte).toContain('10/01/2025')
+
+    const fraco = personalizarTexto(
+      TEXTO,
+      perfil({ totalAtendimentos: 3, primeiroAtendimento: '2025-01-10' }),
+    )
+    expect(fraco).toBe(TEXTO)
   })
 })

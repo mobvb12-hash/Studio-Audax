@@ -381,3 +381,76 @@ describe('CRM — aniversariantes, produtos e marketing', () => {
     expect(depois.map((l) => l.nome)).toEqual(['Reativação'])
   })
 })
+
+describe('CRM — assistente de texto da IA no WhatsApp', () => {
+  it('gera rascunho personalizado e cria pendente com origem ia', () => {
+    env(<Crm />)
+    semear()
+    fireEvent.click(within(cardDe('Ana Souza')).getByText('Detalhe'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir com IA' }))
+    // rascunho = texto oficial + toque pessoal (4 visitas, Audax preferido)
+    expect(screen.getByText(/o seu preferido/)).toBeTruthy()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Criar mensagem pendente' }),
+    )
+    const mensagens: {
+      status: string
+      origem: string
+      template: string
+      texto: string
+    }[] = JSON.parse(localStorage.getItem(CHAVE_WHATS) ?? '[]')
+    expect(mensagens).toHaveLength(1)
+    expect(mensagens[0]).toMatchObject({
+      status: 'pendente',
+      origem: 'ia',
+      template: 'confirmacao',
+    })
+    expect(mensagens[0].texto).toContain('Corte Degradê')
+    expect(mensagens[0].texto).toContain('o seu preferido')
+
+    // rascunho consumido e a mensagem aparece na lista do cliente
+    expect(
+      screen.queryByRole('button', { name: 'Criar mensagem pendente' }),
+    ).toBeNull()
+    expect(screen.getByText('Confirmação · ia')).toBeTruthy()
+    expect(ctxWhats.integracaoAtiva).toBe(false)
+  })
+
+  it('descartar o rascunho não cria mensagem', () => {
+    env(<Crm />)
+    semear()
+    fireEvent.click(within(cardDe('Ana Souza')).getByText('Detalhe'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir com IA' }))
+    expect(screen.getByText(/primeira visita|preferido|número/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }))
+
+    expect(
+      screen.queryByRole('button', { name: 'Criar mensagem pendente' }),
+    ).toBeNull()
+    const nada: unknown[] = JSON.parse(localStorage.getItem(CHAVE_WHATS) ?? '[]')
+    expect(nada).toHaveLength(0)
+  })
+
+  it('sem dados disponíveis o assistente avisa em vez de criar', () => {
+    env(<Crm />)
+    act(() => {
+      ctxClientes.adicionar({
+        nome: 'Zilda Nunes',
+        telefone: '',
+        email: '',
+        observacao: '',
+      })
+    })
+    fireEvent.click(within(cardDe('Zilda Nunes')).getByText('Detalhe'))
+    // nenhum template disponível: botão desabilitado, nada é criado
+    expect(
+      (screen.getByRole('button', { name: 'Sugerir com IA' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
+    const nada: unknown[] = JSON.parse(localStorage.getItem(CHAVE_WHATS) ?? '[]')
+    expect(nada).toHaveLength(0)
+  })
+})

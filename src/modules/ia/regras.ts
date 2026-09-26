@@ -211,3 +211,38 @@ export function semTratadas(
     tratadas instanceof Set ? tratadas : new Set(tratadas)
   return sugestoes.filter((s) => !conjunto.has(s.id))
 }
+
+/**
+ * Assistente de texto do WhatsApp: acrescenta ao texto oficial do template
+ * uma frase pessoal calculada apenas com fatos do perfil (visitas e
+ * profissional preferido). `agendamento` deve ser informado quando a
+ * mensagem trata de um horário futuro — sem ele só frases atemporais
+ * entram. Sem personalização aplicável, o texto base volta intacto.
+ */
+export function personalizarTexto(
+  textoBase: string,
+  perfil: PerfilCliente,
+  agendamento?: Agendamento | null,
+): string {
+  const base = textoBase.trim()
+  const total = perfil.totalAtendimentos
+  if (agendamento && total === 0) {
+    return `${base} Essa será a sua primeira visita ao Studio Audax — seja bem-vindo(a)!`
+  }
+  if (
+    agendamento &&
+    total >= 3 &&
+    perfil.profissionalPreferido &&
+    agendamento.profissional === perfil.profissionalPreferido
+  ) {
+    return `${base} Você já passou por aqui ${total} vez(es) — e desta vez é com ${perfil.profissionalPreferido}, o seu preferido.`
+  }
+  if (!agendamento && total >= 5 && perfil.primeiroAtendimento) {
+    const [ano, mes, dia] = perfil.primeiroAtendimento.split('-')
+    return `${base} Você já é da casa: são ${total} atendimentos conosco desde ${dia}/${mes}/${ano}.`
+  }
+  if (agendamento && total >= 3) {
+    return `${base} Essa será a sua visita de número ${total + 1} no Studio Audax.`
+  }
+  return base
+}

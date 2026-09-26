@@ -7,10 +7,12 @@ import {
   hojeISO,
 } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
+import type { Agendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClube } from '@/modules/clube/store'
 import { montarPerfis, proximaDataSugerida, proximoAgendamento } from '@/modules/crm/regras'
 import { useCrm } from '@/modules/crm/store'
+import { personalizarTexto } from '@/modules/ia/regras'
 import {
   SEGMENTOS_ROTULO,
   TIPOS_INTERACAO,
@@ -89,6 +91,12 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
   const [erroWhats, setErroWhats] = useState('')
   const [falhando, setFalhando] = useState<MensagemWhats | null>(null)
   const [agendar, setAgendar] = useState(false)
+  const [iaTemplate, setIaTemplate] = useState<IdTemplate>('confirmacao')
+  const [iaRascunho, setIaRascunho] = useState<{
+    texto: string
+    agendamentoId?: string
+  } | null>(null)
+  const [erroIa, setErroIa] = useState('')
 
   const hoje = useMemo(() => hojeISO(), [])
   const perfil = useMemo(
@@ -140,47 +148,90 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
     return Boolean(perfil?.ultimoAtendimento)
   }
 
+  /** Monta o texto oficial do template a partir dos dados reais do cliente. */
+  function montarTemplate(
+    id: IdTemplate,
+  ): { texto: string; agendamento?: Agendamento | null } {
+    if (id === 'confirmacao' || id === 'lembrete') {
+      if (!futuro) {
+        throw new Error(
+          'Este cliente não tem agendamento futuro para este template.',
+        )
+      }
+      return { texto: textoTemplate(id, dadosDoAgendamento(futuro)), agendamento: futuro }
+    }
+    if (id === 'pos_atendimento') {
+      if (!ultimoConcluido) {
+        throw new Error(
+          'Este cliente não tem atendimento concluído para este template.',
+        )
+      }
+      return {
+        texto: textoTemplate(id, dadosDoAgendamento(ultimoConcluido)),
+        agendamento: null,
+      }
+    }
+    if (!perfil?.ultimoAtendimento) {
+      throw new Error('Este cliente nunca foi atendido.')
+    }
+    return {
+      texto: textoTemplate(id, {
+        nome: cliente.nome,
+        ultimoAtendimento: perfil.ultimoAtendimento,
+        diasSemAtendimento: perfil.diasDesdeUltimo ?? 0,
+      }),
+      agendamento: null,
+    }
+  }
+
   function criarDeTemplate(id: IdTemplate) {
     setErroWhats('')
     try {
-      let dados
-      if (id === 'confirmacao' || id === 'lembrete') {
-        if (!futuro) {
-          throw new Error(
-            'Este cliente não tem agendamento futuro para este template.',
-          )
-        }
-        dados = dadosDoAgendamento(futuro)
-      } else if (id === 'pos_atendimento') {
-        if (!ultimoConcluido) {
-          throw new Error(
-            'Este cliente não tem atendimento concluído para este template.',
-          )
-        }
-        dados = dadosDoAgendamento(ultimoConcluido)
-      } else {
-        if (!perfil?.ultimoAtendimento) {
-          throw new Error('Este cliente nunca foi atendido.')
-        }
-        dados = {
-          nome: cliente.nome,
-          ultimoAtendimento: perfil.ultimoAtendimento,
-          diasSemAtendimento: perfil.diasDesdeUltimo ?? 0,
-        }
-      }
+      const { texto: textoGerado, agendamento } = montarTemplate(id)
       criar({
         clienteId: cliente.id,
         cliente: cliente.nome,
         template: id,
-        texto: textoTemplate(id, dados),
+        texto: textoGerado,
         origem: 'crm',
-        agendamentoId:
-          (id === 'confirmacao' || id === 'lembrete') && futuro
-            ? futuro.id
-            : undefined,
+        agendamentoId: agendamento?.id,
       })
     } catch (e) {
       setErroWhats(e instanceof Error ? e.message : 'Não foi possível criar.')
+    }
+  }
+
+  /** Assistente de texto da IA: gera um rascunho personalizado (sem criar). */
+  function sugerirComIa() {
+    setErroIa('')
+    try {
+      const { texto: base, agendamento } = montarTemplate(templateIa)
+      setIaRascunho({
+        texto: personalizarTexto(base, perfil, agendamento),
+        agendamentoId: agendamento?.id,
+      })
+    } catch (e) {
+      setIaRascunho(null)
+      setErroIa(e instanceof Error ? e.message : 'Não foi possível gerar.')
+    }
+  }
+
+  /** Cria o rascunho da IA como mensagem PENDENTE (nunca envia). */
+  function criarIaRascunho() {
+    setErroIa('')
+    if (!iaRascunho) return
+    try {
+      criar({
+        clienteId: cliente.id,
+        cliente: cliente.nome,
+        template: templateIa,
+        texto: iaRascunho.texto,
+        origem: 'ia',
+        agendamentoId: iaRascunho.agendamentoId,
+      })
+      setIaRascunho(null)
+    } catch (e) {
+      setErroIa(e instanceof Error ? e.message : 'Não foi possível criar.')
     }
   }
 
@@ -194,6 +245,12 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
   }
 
   const rotulo = (id: IdTemplate) => TEMPLATES_ROTULO[id]
+
+  /** Modelos usáveis pelo assistente de IA (mesma trava dos botões). */
+  const disponiveis = TEMPLATES_ORDEM.filter(disponivel)
+  const templateIa: IdTemplate = disponiveis.includes(iaTemplate)
+    ? iaTemplate
+    : (disponiveis[0] ?? 'confirmacao')
 
   return (
     <div
@@ -443,6 +500,70 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 {rotulo(id)}
               </button>
             ))}
+          </div>
+
+          {/* Assistente de texto da IA — rascunho revisado pelo humano */}
+          <div className="mt-3 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[13px] font-bold text-[#1C1A15]">
+                Sugestão com IA
+              </p>
+              <span className="text-[11px] text-[#8A8171]">
+                Texto gerado do perfil real — nada é enviado
+              </span>
+            </div>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <label className="sr-only" htmlFor="ia-template">
+                Modelo da mensagem
+              </label>
+              <select
+                id="ia-template"
+                className="flex-1 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs text-[#4A4436] outline-none focus:border-[#8A6A14]"
+                value={templateIa}
+                disabled={disponiveis.length === 0}
+                onChange={(e) => setIaTemplate(e.target.value as IdTemplate)}
+              >
+                {disponiveis.map((id) => (
+                  <option key={id} value={id}>
+                    {rotulo(id)}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={sugerirComIa}
+                disabled={disponiveis.length === 0}
+                className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Sugerir com IA
+              </button>
+            </div>
+            {erroIa && (
+              <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                {erroIa}
+              </p>
+            )}
+            {iaRascunho && (
+              <div className="mt-2 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
+                <p className="text-sm text-[#4A4436]">{iaRascunho.texto}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={criarIaRascunho}
+                    className="rounded-lg bg-[#8A6A14] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                  >
+                    Criar mensagem pendente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIaRascunho(null)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                  >
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {erroWhats && (
