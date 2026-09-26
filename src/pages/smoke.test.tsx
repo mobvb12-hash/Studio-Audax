@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { CrmProvider } from '@/modules/crm/store'
 import { ClubeProvider } from '@/modules/clube/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
@@ -128,13 +130,17 @@ describe('Smoke — páginas renderizam sem erros de console', () => {
     const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(
       <ClientesProvider>
-        <AgendaProvider>
-          <CaixaProvider>
-            <ClubeProvider>
-              <Clientes />
-            </ClubeProvider>
-          </CaixaProvider>
-        </AgendaProvider>
+        <CrmProvider>
+          <WhatsProvider>
+            <AgendaProvider>
+              <CaixaProvider>
+                <ClubeProvider>
+                  <Clientes />
+                </ClubeProvider>
+              </CaixaProvider>
+            </AgendaProvider>
+          </WhatsProvider>
+        </CrmProvider>
       </ClientesProvider>,
     )
     expect(screen.getByRole('heading', { name: 'Clientes' })).toBeTruthy()

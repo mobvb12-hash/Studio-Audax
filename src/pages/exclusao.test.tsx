@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { CrmProvider } from '@/modules/crm/store'
 import { ClubeProvider } from '@/modules/clube/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Clientes from './Clientes'
@@ -17,13 +19,17 @@ beforeEach(() => {
 function montarClientes() {
   return render(
     <ClientesProvider>
-      <AgendaProvider>
-        <CaixaProvider>
-          <ClubeProvider>
-            <Clientes />
-          </ClubeProvider>
-        </CaixaProvider>
-      </AgendaProvider>
+      <CrmProvider>
+        <WhatsProvider>
+          <AgendaProvider>
+            <CaixaProvider>
+              <ClubeProvider>
+                <Clientes />
+              </ClubeProvider>
+            </CaixaProvider>
+          </AgendaProvider>
+        </WhatsProvider>
+      </CrmProvider>
     </ClientesProvider>,
   )
 }

@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { CrmProvider } from '@/modules/crm/store'
 import { ClubeProvider } from '@/modules/clube/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import Clientes from './Clientes'
 
 let ctxClientes: ReturnType<typeof useClientes>
@@ -26,14 +28,18 @@ function Captura() {
 function montar() {
   return render(
     <ClientesProvider>
-      <AgendaProvider>
-        <CaixaProvider>
-          <ClubeProvider>
-            <Captura />
-            <Clientes />
-          </ClubeProvider>
-        </CaixaProvider>
-      </AgendaProvider>
+      <CrmProvider>
+        <WhatsProvider>
+          <AgendaProvider>
+            <CaixaProvider>
+              <ClubeProvider>
+                <Captura />
+                <Clientes />
+              </ClubeProvider>
+            </CaixaProvider>
+          </AgendaProvider>
+        </WhatsProvider>
+      </CrmProvider>
     </ClientesProvider>,
   )
 }

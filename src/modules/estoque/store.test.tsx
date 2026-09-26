@@ -385,6 +385,88 @@ describe('Estoque — estorno (devolução)', () => {
   })
 })
 
+describe('Estoque — regressão: mesmo lote de estado (duplo clique/submit)', () => {
+  it('duas baixas no mesmo lote: a segunda enxerga o saldo já debitado', () => {
+    montar()
+    const a = criarProduto('Creme capilar', 5)
+    const erros: string[] = []
+    act(() => {
+      ctx.saidaPorVenda('venda-a', '2026-09-23', [
+        { produtoId: a.id, produto: a.nome, quantidade: 3 },
+      ])
+      try {
+        ctx.saidaPorVenda('venda-b', '2026-09-23', [
+          { produtoId: a.id, produto: a.nome, quantidade: 4 },
+        ])
+      } catch (e) {
+        erros.push((e as Error).message)
+      }
+    })
+    expect(erros[0]).toMatch(
+      /Estoque insuficiente para "Creme capilar": disponível 2, solicitado 4/,
+    )
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(2)
+    expect(ctx.movimentacoes).toHaveLength(1)
+    expect(ctx.movimentacoes[0].vendaId).toBe('venda-a')
+    expect(ctx.movimentacoes[0].estoqueDepois).toBe(2)
+  })
+
+  it('a mesma vendaId nunca baixa duas vezes (no mesmo lote nem em lotes seguidos)', () => {
+    montar()
+    const a = criarProduto('Creme capilar', 10)
+    let segunda: MovimentacaoEstoque[] | null = null
+    act(() => {
+      ctx.saidaPorVenda('venda-dup', '2026-09-23', [
+        { produtoId: a.id, produto: a.nome, quantidade: 4 },
+      ])
+      segunda = ctx.saidaPorVenda('venda-dup', '2026-09-23', [
+        { produtoId: a.id, produto: a.nome, quantidade: 4 },
+      ])
+    })
+    expect(segunda).toEqual([])
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(6)
+    expect(ctx.movimentacoes).toHaveLength(1)
+
+    let terceira: MovimentacaoEstoque[] | null = null
+    act(() => {
+      terceira = ctx.saidaPorVenda('venda-dup', '2026-09-23', [
+        { produtoId: a.id, produto: a.nome, quantidade: 4 },
+      ])
+    })
+    expect(terceira).toEqual([])
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(6)
+    expect(
+      ctx.movimentacoes.filter((m) => m.vendaId === 'venda-dup'),
+    ).toHaveLength(1)
+  })
+
+  it('duas reversões no mesmo lote devolvem o estoque uma única vez', () => {
+    montar()
+    const a = criarProduto('Creme capilar', 10)
+    act(() => {
+      ctx.saidaPorVenda('venda-9', '2026-09-23', [
+        { produtoId: a.id, produto: a.nome, quantidade: 3 },
+      ])
+    })
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(7)
+
+    let segunda: MovimentacaoEstoque[] | null = null
+    act(() => {
+      ctx.reverterVenda({
+        id: 'venda-9',
+        itens: [{ produtoId: a.id, produto: a.nome, quantidade: 3 }],
+      })
+      segunda = ctx.reverterVenda({
+        id: 'venda-9',
+        itens: [{ produtoId: a.id, produto: a.nome, quantidade: 3 }],
+      })
+    })
+    expect(segunda).toEqual([])
+    expect(ctxProdutos.porId(a.id)?.estoque).toBe(10)
+    expect(ctx.movimentacoes.filter((m) => m.tipo === 'estorno')).toHaveLength(1)
+  })
+})
+
 describe('Estoque — histórico e persistência', () => {
   it('movimentacoesDoProduto filtra por produto', () => {
     montar()

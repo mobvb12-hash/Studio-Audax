@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
@@ -69,11 +70,92 @@ function carregar(): MovimentacaoEstoque[] {
   }
 }
 
+type Pendencias = {
+  /** Saldos aplicados no lote atual, antes do re-render */
+  saldos: Map<string, number> | null
+  /** Vendas cuja baixa já aconteceu no lote atual */
+  saidas: Set<string> | null
+  /** Vendas já revertidas no lote atual */
+  estornos: Set<string> | null
+}
+
+/** Saldo real do produto já considerando o aplicado no lote atual. */
+function saldoVigente(produto: Produto, pend: Pendencias): number {
+  return pend.saldos?.has(produto.id)
+    ? pend.saldos.get(produto.id)!
+    : produto.estoque
+}
+
+/** Grava o saldo no lote pendente e aplica no produto (valor absoluto). */
+function aplicarSaldo(
+  pend: Pendencias,
+  produtoId: string,
+  estoque: number,
+  aplicar: (id: string, estoque: number) => void,
+): void {
+  if (!pend.saldos) pend.saldos = new Map()
+  pend.saldos.set(produtoId, estoque)
+  aplicar(produtoId, estoque)
+}
+
+/** A venda já teve baixa: pendente deste lote ou registrada no histórico. */
+function jaBaixou(
+  vendaId: string,
+  pend: Pendencias,
+  movimentacoes: MovimentacaoEstoque[],
+): boolean {
+  if (pend.saidas?.has(vendaId)) return true
+  return movimentacoes.some(
+    (m) => m.tipo === 'venda' && m.vendaId === vendaId,
+  )
+}
+
+/** A venda já foi revertida: pendente deste lote ou no histórico. */
+function jaRevertida(
+  vendaId: string,
+  pend: Pendencias,
+  movimentacoes: MovimentacaoEstoque[],
+): boolean {
+  if (pend.estornos?.has(vendaId)) return true
+  return movimentacoes.some(
+    (m) => m.tipo === 'estorno' && m.vendaId === vendaId,
+  )
+}
+
+function registrarSaida(pend: Pendencias, vendaId: string): void {
+  if (!pend.saidas) pend.saidas = new Set()
+  pend.saidas.add(vendaId)
+}
+
+function registrarEstorno(pend: Pendencias, vendaId: string): void {
+  if (!pend.estornos) pend.estornos = new Set()
+  pend.estornos.add(vendaId)
+}
+
 export function EstoqueProvider({ children }: { children: ReactNode }) {
   const { porId, aplicarEstoque, produtos } = useProdutos()
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>(() =>
     carregar(),
   )
+
+  /**
+   * Pendências do lote de estado atual: duas chamadas antes do re-render
+   * (duplo clique, duplo submit) enxergam o mesmo snapshot, então registramos
+   * aqui o que já foi aplicado — saldo vigente, vendas baixadas e vendas
+   * revertidas — para validar sobre o valor real e nunca duplicar efeito.
+   */
+  const pendencias = useRef<Pendencias>({ saldos: null, saidas: null, estornos: null })
+
+  useEffect(() => {
+    // Produtos já refletem as aplicações: volta a ler o estado normal.
+    pendencias.current.saldos = null
+  }, [produtos])
+
+  useEffect(() => {
+    // Movimentações já refletem as baixas/estornos: volta ao estado normal.
+    pendencias.current.saidas = null
+    pendencias.current.estornos = null
+  }, [movimentacoes])
 
   useEffect(() => {
     try {
@@ -132,7 +214,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         throw new Error('O custo unitário deve ser maior ou igual a zero.')
       }
       if (!input.data) throw new Error('Informe a data da entrada.')
-      const antes = produto.estoque
+      const antes = saldoVigente(produto, pendencias.current)
       const depois = antes + input.quantidade
       const nova = criarMovimentacao({
         produtoId: produto.id,
@@ -147,7 +229,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         origem: 'manual',
         observacao: input.observacao?.trim() || undefined,
       })
-      aplicarEstoque(produto.id, depois)
+      aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       setMovimentacoes((atual) => [...atual, nova])
       return nova
     },
@@ -163,7 +245,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
       }
       if (!input.motivo) throw new Error('Informe o motivo do ajuste.')
       if (!input.data) throw new Error('Informe a data do ajuste.')
-      const antes = produto.estoque
+      const antes = saldoVigente(produto, pendencias.current)
       const sinal = input.tipo === 'entrada' ? 1 : -1
       const depois = antes + sinal * input.quantidade
       if (depois < 0) {
@@ -184,7 +266,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         motivo: input.motivo,
         observacao: input.observacao?.trim() || undefined,
       })
-      aplicarEstoque(produto.id, depois)
+      aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       setMovimentacoes((atual) => [...atual, nova])
       return nova
     },
@@ -216,6 +298,8 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
       itens: ItemVendaEstoque[],
     ): MovimentacaoEstoque[] => {
       if (!vendaId) throw new Error('Venda sem identificação.')
+      // Idempotente: a mesma venda nunca baixa o estoque duas vezes.
+      if (jaBaixou(vendaId, pendencias.current, movimentacoes)) return []
       if (!itens || itens.length === 0) {
         throw new Error('Venda sem itens para baixar estoque.')
       }
@@ -234,20 +318,20 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
       }
       for (const [produtoId, qtd] of exigido) {
         const produto = resolvidos.find((r) => r.produto.id === produtoId)!.produto
-        if (produto.estoque < qtd) {
+        const disponivel = saldoVigente(produto, pendencias.current)
+        if (disponivel < qtd) {
           throw new Error(
-            `Estoque insuficiente para "${produto.nome}": disponível ${produto.estoque}, solicitado ${qtd}.`,
+            `Estoque insuficiente para "${produto.nome}": disponível ${disponivel}, solicitado ${qtd}.`,
           )
         }
       }
 
+      registrarSaida(pendencias.current, vendaId)
       const novas: MovimentacaoEstoque[] = []
-      const jaBaixado = new Map<string, number>()
       for (const { produto, item } of resolvidos) {
-        const baixado = jaBaixado.get(produto.id) ?? 0
-        const antes = produto.estoque - baixado
+        // saldoVigente já considera os itens anteriores desta mesma venda
+        const antes = saldoVigente(produto, pendencias.current)
         const depois = antes - item.quantidade
-        jaBaixado.set(produto.id, baixado + item.quantidade)
         novas.push(
           criarMovimentacao({
             produtoId: produto.id,
@@ -262,12 +346,12 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
             vendaId,
           }),
         )
-        aplicarEstoque(produto.id, depois)
+        aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       }
       setMovimentacoes((atual) => [...atual, ...novas])
       return novas
     },
-    [resolverProduto, aplicarEstoque],
+    [movimentacoes, resolverProduto, aplicarEstoque],
   )
 
   const reverterVenda = useCallback(
@@ -277,14 +361,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
       produto?: string
       quantidade?: number
     }): MovimentacaoEstoque[] => {
-      const jaRevertido = movimentacoes.some(
-        (m) => m.tipo === 'estorno' && m.vendaId === venda.id,
-      )
+      const jaRevertido = jaRevertida(venda.id, pendencias.current, movimentacoes)
       if (jaRevertido) return []
-      const houveSaida = movimentacoes.some(
-        (m) => m.tipo === 'venda' && m.vendaId === venda.id,
-      )
       // Venda anterior ao controle de estoque nunca baixou — nada a devolver
+      const houveSaida = jaBaixou(venda.id, pendencias.current, movimentacoes)
       if (!houveSaida) return []
 
       const itens: ItemVendaEstoque[] =
@@ -293,11 +373,13 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
           : venda.produto && venda.quantidade
             ? [{ produto: venda.produto, quantidade: venda.quantidade }]
             : []
+      if (itens.length === 0) return []
 
+      registrarEstorno(pendencias.current, venda.id)
       const novas: MovimentacaoEstoque[] = []
       for (const item of itens) {
         const produto = resolverProduto(item)
-        const antes = produto.estoque
+        const antes = saldoVigente(produto, pendencias.current)
         const depois = antes + item.quantidade
         novas.push(
           criarMovimentacao({
@@ -313,11 +395,9 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
             vendaId: venda.id,
           }),
         )
-        aplicarEstoque(produto.id, depois)
+        aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       }
-      if (novas.length > 0) {
-        setMovimentacoes((atual) => [...atual, ...novas])
-      }
+      setMovimentacoes((atual) => [...atual, ...novas])
       return novas
     },
     [movimentacoes, resolverProduto, aplicarEstoque],

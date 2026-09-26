@@ -7,7 +7,9 @@ import { hojeISO } from '@/modules/agenda/catalogo'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { CrmProvider } from '@/modules/crm/store'
 import { ClubeProvider, useClube } from '@/modules/clube/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
@@ -38,24 +40,28 @@ function Captura() {
 function env(children: ReactNode) {
   return render(
     <ClientesProvider>
-      <ProfissionaisProvider>
-        <ProdutosProvider>
-          <EstoqueProvider>
-            <ServicosProvider>
-              <AgendaProvider>
-                <CaixaProvider>
-                  <ComissoesProvider>
-                    <ClubeProvider>
-                      <Captura />
-                      {children}
-                    </ClubeProvider>
-                  </ComissoesProvider>
-                </CaixaProvider>
-              </AgendaProvider>
-            </ServicosProvider>
-          </EstoqueProvider>
-        </ProdutosProvider>
-      </ProfissionaisProvider>
+      <CrmProvider>
+        <WhatsProvider>
+          <ProfissionaisProvider>
+            <ProdutosProvider>
+              <EstoqueProvider>
+                <ServicosProvider>
+                  <AgendaProvider>
+                    <CaixaProvider>
+                      <ComissoesProvider>
+                        <ClubeProvider>
+                          <Captura />
+                          {children}
+                        </ClubeProvider>
+                      </ComissoesProvider>
+                    </CaixaProvider>
+                  </AgendaProvider>
+                </ServicosProvider>
+              </EstoqueProvider>
+            </ProdutosProvider>
+          </ProfissionaisProvider>
+        </WhatsProvider>
+      </CrmProvider>
     </ClientesProvider>,
   )
 }

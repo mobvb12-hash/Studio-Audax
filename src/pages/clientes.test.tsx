@@ -6,8 +6,10 @@ import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ClubeProvider, useClube } from '@/modules/clube/store'
+import { CrmProvider, useCrm } from '@/modules/crm/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider, useServicos } from '@/modules/servicos/store'
+import { WhatsProvider, useWhats } from '@/modules/whatsapp/store'
 import Clientes from './Clientes'
 
 const DIA = hojeISO()
@@ -17,6 +19,8 @@ let ctxAgenda: ReturnType<typeof useAgenda>
 let ctxCaixa: ReturnType<typeof useCaixa>
 let ctxClube: ReturnType<typeof useClube>
 let ctxServicos: ReturnType<typeof useServicos>
+let ctxCrm: ReturnType<typeof useCrm>
+let ctxWhats: ReturnType<typeof useWhats>
 
 function Captura() {
   const clientes = useClientes()
@@ -24,12 +28,16 @@ function Captura() {
   const caixa = useCaixa()
   const clube = useClube()
   const servicos = useServicos()
+  const crm = useCrm()
+  const whats = useWhats()
   useEffect(() => {
     ctxClientes = clientes
     ctxAgenda = agenda
     ctxCaixa = caixa
     ctxClube = clube
     ctxServicos = servicos
+    ctxCrm = crm
+    ctxWhats = whats
   })
   return null
 }
@@ -37,18 +45,22 @@ function Captura() {
 function montar() {
   return render(
     <ClientesProvider>
-      <AgendaProvider>
-        <CaixaProvider>
-          <ClubeProvider>
-            <ServicosProvider>
-              <ProfissionaisProvider>
-                <Captura />
-                <Clientes />
-              </ProfissionaisProvider>
-            </ServicosProvider>
-          </ClubeProvider>
-        </CaixaProvider>
-      </AgendaProvider>
+      <CrmProvider>
+        <WhatsProvider>
+          <AgendaProvider>
+            <CaixaProvider>
+              <ClubeProvider>
+                <ServicosProvider>
+                  <ProfissionaisProvider>
+                    <Captura />
+                    <Clientes />
+                  </ProfissionaisProvider>
+                </ServicosProvider>
+              </ClubeProvider>
+            </CaixaProvider>
+          </AgendaProvider>
+        </WhatsProvider>
+      </CrmProvider>
     </ClientesProvider>,
   )
 }
@@ -110,6 +122,8 @@ beforeEach(() => {
   ctxCaixa = undefined as unknown as ReturnType<typeof useCaixa>
   ctxClube = undefined as unknown as ReturnType<typeof useClube>
   ctxServicos = undefined as unknown as ReturnType<typeof useServicos>
+  ctxCrm = undefined as unknown as ReturnType<typeof useCrm>
+  ctxWhats = undefined as unknown as ReturnType<typeof useWhats>
 })
 
 describe('Clientes — página (filtros, status e ações)', () => {
@@ -255,5 +269,62 @@ describe('Clientes — página (filtros, status e ações)', () => {
 
     const total = within(modal).getByText('Total gasto').parentElement as HTMLElement
     expect(norm(total.textContent)).toContain('R$ 100,00')
+  })
+})
+
+describe('Clientes — exclusão segura (CRM e WhatsApp vinculados)', () => {
+  it('bloqueia a exclusão quando há interação de CRM e mostra o motivo', () => {
+    montar()
+    const id = criarCliente('Lucas Mendes', '(11) 98888-7777')
+    act(() => {
+      ctxCrm.adicionarInteracao({
+        clienteId: id,
+        tipo: 'ligacao',
+        texto: 'Cliente pediu retorno sobre o corte.',
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir Lucas Mendes' }))
+
+    expect(screen.queryByText('Excluir cliente')).toBeNull()
+    const alerta = screen.getByRole('alert')
+    expect(alerta.textContent).toContain('Não foi possível excluir “Lucas Mendes”')
+    expect(alerta.textContent).toContain('1 interação(ões) de CRM')
+    expect(ctxClientes.clientes).toHaveLength(1)
+
+    fireEvent.click(screen.getByText('Entendi'))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(ctxClientes.clientes).toHaveLength(1)
+  })
+
+  it('bloqueia a exclusão quando há mensagem de WhatsApp vinculada', () => {
+    montar()
+    const id = criarCliente('Ana Souza', '(11) 97777-6666')
+    act(() => {
+      ctxWhats.criar({
+        clienteId: id,
+        cliente: 'Ana Souza',
+        template: 'pos_atendimento',
+        texto: 'Obrigado pela visita!',
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir Ana Souza' }))
+
+    expect(screen.queryByText('Excluir cliente')).toBeNull()
+    expect(screen.getByRole('alert').textContent).toContain(
+      '1 mensagem(ns) de WhatsApp',
+    )
+    expect(ctxClientes.clientes).toHaveLength(1)
+  })
+
+  it('cliente sem CRM/WhatsApp mantém o fluxo normal de confirmação', () => {
+    montar()
+    criarCliente('Lucas Mendes', '(11) 98888-7777')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir Lucas Mendes' }))
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('Excluir cliente')).toBeTruthy()
   })
 })

@@ -6,6 +6,7 @@ import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
+import { useCrm } from '@/modules/crm/store'
 import {
   filtrarClientes,
   gastoDoCliente,
@@ -23,6 +24,7 @@ import {
   STATUS_ROTULO,
 } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
+import { useWhats } from '@/modules/whatsapp/store'
 import { formatarBRL } from '@/lib/moeda'
 
 const FILTROS: { id: FiltroStatusCliente; rotulo: string }[] = [
@@ -50,6 +52,8 @@ export default function Clientes() {
   const { agendamentos, renomearCliente: renomearNaAgenda } = useAgenda()
   const { lancamentos, renomearCliente: renomearNoCaixa } = useCaixa()
   const { assinaturaDoCliente, renomearCliente: renomearNoClube } = useClube()
+  const { interacoesDoCliente } = useCrm()
+  const { mensagensDoCliente } = useWhats()
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<FiltroStatusCliente>('todos')
   const [modalAberto, setModalAberto] = useState(false)
@@ -57,6 +61,11 @@ export default function Clientes() {
   const [historicoDo, setHistoricoDo] = useState<Cliente | null>(null)
   const [excluindo, setExcluindo] = useState<Cliente | null>(null)
   const [agendarPara, setAgendarPara] = useState<Cliente | null>(null)
+  const [bloqueioExclusao, setBloqueioExclusao] = useState<{
+    cliente: Cliente
+    interacoes: number
+    mensagens: number
+  } | null>(null)
 
   const hoje = useMemo(() => hojeISO(), [])
   const atendimentos = useMemo(
@@ -93,6 +102,20 @@ export default function Clientes() {
   function abrirEdicao(cliente: Cliente) {
     setEditando(cliente)
     setModalAberto(true)
+  }
+
+  /**
+   * Exclusão segura: cliente com interações CRM ou conversas de WhatsApp
+   * vinculadas não pode ser removido (seria órfão nesses módulos).
+   */
+  function tentarExcluir(cliente: Cliente) {
+    const interacoes = interacoesDoCliente(cliente.id).length
+    const mensagens = mensagensDoCliente(cliente.id).length
+    if (interacoes > 0 || mensagens > 0) {
+      setBloqueioExclusao({ cliente, interacoes, mensagens })
+      return
+    }
+    setExcluindo(cliente)
   }
 
   return (
@@ -159,6 +182,39 @@ export default function Clientes() {
           />
         </div>
       </div>
+
+      {bloqueioExclusao && (
+        <div
+          role="alert"
+          className="mt-4 flex flex-col gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="text-sm text-red-800">
+            <p className="font-bold">
+              Não foi possível excluir “{bloqueioExclusao.cliente.nome}”.
+            </p>
+            <p className="mt-1">
+              O cliente possui{' '}
+              {bloqueioExclusao.interacoes > 0 &&
+                `${bloqueioExclusao.interacoes} interação(ões) de CRM`}
+              {bloqueioExclusao.interacoes > 0 && bloqueioExclusao.mensagens > 0
+                ? ' e '
+                : ''}
+              {bloqueioExclusao.mensagens > 0 &&
+                `${bloqueioExclusao.mensagens} mensagem(ns) de WhatsApp`}
+              {' '}vinculada(s) ao cadastro. Excluir agora deixaria esses
+              registros sem cliente. Remova os registros em CRM/WhatsApp antes
+              de excluir, ou mantenha o cadastro.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBloqueioExclusao(null)}
+            className="shrink-0 self-start rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 sm:self-auto"
+          >
+            Entendi
+          </button>
+        </div>
+      )}
 
       {filtrados.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-10 text-center text-sm text-[#A99E85]">
@@ -270,7 +326,7 @@ export default function Clientes() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setExcluindo(cliente)}
+                    onClick={() => tentarExcluir(cliente)}
                     className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
                     aria-label={`Excluir ${cliente.nome}`}
                   >
