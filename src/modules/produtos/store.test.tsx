@@ -1,6 +1,10 @@
 ﻿import { act, render } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  avisosPersistencia,
+  limparAvisosPersistencia,
+} from '@/lib/persistencia'
 import { ProdutosProvider, useProdutos } from './store'
 
 const CHAVE = 'studio-audax:produtos:v1'
@@ -25,6 +29,7 @@ function montar() {
 
 beforeEach(() => {
   localStorage.clear()
+  limparAvisosPersistencia()
   ctx = undefined as unknown as ReturnType<typeof useProdutos>
 })
 
@@ -122,5 +127,32 @@ describe('Produtos — cadastro e validações', () => {
     expect(ctx.produtos).toHaveLength(1)
     expect(ctx.produtos[0].nome).toBe('Creme capilar')
     expect(ctx.produtos[0].preco).toBe(30)
+  })
+
+  it('JSON corrompido: preserva a cópia original, avisa e começa vazio', () => {
+    localStorage.setItem(CHAVE, '{isso não é json válido')
+    montar()
+    expect(ctx.produtos).toHaveLength(0)
+    expect(localStorage.getItem(`${CHAVE}:corrompido`)).toBe(
+      '{isso não é json válido',
+    )
+    expect(
+      avisosPersistencia().some((a) => a.tipo === 'dado_corrompido' && a.chave === CHAVE),
+    ).toBe(true)
+    limparAvisosPersistencia()
+  })
+
+  it('JSON com forma inesperada também é preservado e não apagado às cegas', () => {
+    localStorage.setItem(CHAVE, '{"não":"é uma lista"}')
+    montar()
+    expect(ctx.produtos).toHaveLength(0)
+    // a cópia corrompida fica intacta mesmo após o estado inicial ser regravado
+    expect(localStorage.getItem(`${CHAVE}:corrompido`)).toBe(
+      '{"não":"é uma lista"}',
+    )
+    expect(
+      avisosPersistencia().some((a) => a.tipo === 'dado_corrompido' && a.chave === CHAVE),
+    ).toBe(true)
+    limparAvisosPersistencia()
   })
 })

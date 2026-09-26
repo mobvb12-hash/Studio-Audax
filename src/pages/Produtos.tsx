@@ -4,7 +4,11 @@ import EntradaEstoqueModal from '@/components/EntradaEstoqueModal'
 import ProdutoFormModal from '@/components/ProdutoFormModal'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useEstoque } from '@/modules/estoque/store'
-import { ROTULO_STATUS, statusEstoque } from '@/modules/estoque/indicadores'
+import {
+  ROTULO_STATUS,
+  resumirEstoque,
+  statusEstoque,
+} from '@/modules/estoque/indicadores'
 import {
   ROTULO_TIPO_MOVIMENTACAO,
   type TipoMovimentacao,
@@ -64,6 +68,25 @@ function badgeStatus(produto: Produto): string {
   return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
 }
 
+function CardIndicador({
+  valor,
+  rotulo,
+  cor = 'text-[#1C1A15]',
+}: {
+  valor: string
+  rotulo: string
+  cor?: string
+}) {
+  return (
+    <div className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] px-3 py-3">
+      <p className={`text-xl leading-none font-bold ${cor}`}>{valor}</p>
+      <p className="mt-1.5 text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+        {rotulo}
+      </p>
+    </div>
+  )
+}
+
 export default function Produtos() {
   const { produtos, alternarAtivo } = useProdutos()
   const { movimentacoes } = useEstoque()
@@ -81,6 +104,8 @@ export default function Produtos() {
   const [fPeriodo, setFPeriodo] = useState<FiltroPeriodo>('tudo')
   const [fProduto, setFProduto] = useState('')
   const [fTipo, setFTipo] = useState<TipoMovimentacao | ''>('')
+
+  const resumo = useMemo(() => resumirEstoque(produtos), [produtos])
 
   const visiveis = useMemo(() => {
     const ordenados = [...produtos].sort((a, b) =>
@@ -126,8 +151,8 @@ export default function Produtos() {
             Produtos
           </h1>
           <p className="mt-2 text-[13px] text-[#4A4436]">
-            {produtos.length} produto(s) · {movimentacoes.length} movimentação(ões)
-            de estoque · histórico completo
+            {movimentacoes.length} movimentação(ões) de estoque · histórico
+            completo
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -146,6 +171,40 @@ export default function Produtos() {
             Movimentações
           </button>
         </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <CardIndicador
+          valor={String(resumo.total)}
+          rotulo="Total de produtos"
+        />
+        <CardIndicador
+          valor={String(resumo.ativos)}
+          rotulo="Produtos ativos"
+        />
+        <CardIndicador
+          valor={String(resumo.inativos)}
+          rotulo="Produtos inativos"
+        />
+        <CardIndicador
+          valor={String(resumo.unidades)}
+          rotulo="Unidades em estoque"
+        />
+        <CardIndicador
+          valor={String(resumo.estoqueBaixo)}
+          rotulo="Produtos com estoque baixo"
+          cor={resumo.estoqueBaixo > 0 ? 'text-amber-700' : undefined}
+        />
+        <CardIndicador
+          valor={String(resumo.semEstoque)}
+          rotulo="Produtos sem estoque"
+          cor={resumo.semEstoque > 0 ? 'text-red-600' : undefined}
+        />
+        <CardIndicador
+          valor={formatarBRL(resumo.valorEstimado)}
+          rotulo="Valor estimado do estoque"
+          cor="text-[#8A6A14]"
+        />
       </div>
 
       {aba === 'produtos' && (

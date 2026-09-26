@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import type { NovoProdutoInput, Produto } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:produtos:v1'
@@ -85,29 +86,20 @@ function normalizarProduto(bruto: Partial<Produto>): Produto | null {
 }
 
 function carregar(): Produto[] {
-  try {
-    const bruto = localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return []
-    const lista = JSON.parse(bruto) as Partial<Produto>[]
-    if (!Array.isArray(lista)) return []
-    const migrada = lista
-      .map(normalizarProduto)
-      .filter((p): p is Produto => p !== null)
-    return ordenar(migrada)
-  } catch {
-    return []
-  }
+  // JSON inválido é preservado em `<chave>:corrompido` com aviso visível
+  // (carregarJSON) e aqui caímos no fallback vazio — nada é apagado às cegas.
+  const lista = carregarJSON<Partial<Produto>[]>(CHAVE_STORAGE, [], Array.isArray)
+  const migrada = lista
+    .map(normalizarProduto)
+    .filter((p): p is Produto => p !== null)
+  return ordenar(migrada)
 }
 
 export function ProdutosProvider({ children }: { children: ReactNode }) {
   const [produtos, setProdutos] = useState<Produto[]>(() => carregar())
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(produtos))
-    } catch {
-      // armazenamento indisponível: mantém só em memória
-    }
+    salvarJSON(CHAVE_STORAGE, produtos)
   }, [produtos])
 
   const adicionar = useCallback(

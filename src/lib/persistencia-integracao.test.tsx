@@ -6,7 +6,7 @@ import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClubeProvider, useClube } from '@/modules/clube/store'
 import { ComissoesProvider, useComissoes } from '@/modules/comissoes/store'
 import { EstoqueProvider, useEstoque } from '@/modules/estoque/store'
-import { ProdutosProvider } from '@/modules/produtos/store'
+import { ProdutosProvider, useProdutos } from '@/modules/produtos/store'
 import type { Produto } from '@/modules/produtos/types'
 import { limparAvisosPersistencia } from './persistencia'
 
@@ -17,6 +17,7 @@ const CHAVE_AGENDAMENTOS = 'studio-audax:agendamentos:v1'
 const CHAVE_CONFIGS = 'studio-audax:comissoes:configs:v1'
 const CHAVE_MOVIMENTACOES = 'studio-audax:estoque:movimentacoes:v1'
 const CHAVE_CLUBE = 'studio-audax:clube:v1'
+const CHAVE_PRODUTOS = 'studio-audax:produtos:v1'
 
 const PRODUTO_TESTE: Produto = {
   id: 'prod-1',
@@ -38,6 +39,7 @@ function TelaCompleta() {
   const comissoes = useComissoes()
   const estoque = useEstoque()
   const clube = useClube()
+  const produtos = useProdutos()
   return (
     <div>
       <output data-testid="caixa">{JSON.stringify(caixa.lancamentos)}</output>
@@ -51,6 +53,7 @@ function TelaCompleta() {
       <output data-testid="assinaturas">
         {JSON.stringify(clube.assinaturas)}
       </output>
+      <output data-testid="produtos">{JSON.stringify(produtos.produtos)}</output>
       <button
         type="button"
         onClick={() =>
@@ -109,6 +112,20 @@ function TelaCompleta() {
         }
       >
         assinar
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          produtos.adicionar({
+            nome: 'Pomada modeladora',
+            preco: 40,
+            custo: 20,
+            estoque: 10,
+            estoqueMinimo: 2,
+          })
+        }
+      >
+        novo-produto
       </button>
     </div>
   )
@@ -187,6 +204,7 @@ function semearCorrupcao() {
   localStorage.setItem(CHAVE_CONFIGS, '{quebrado')
   localStorage.setItem(CHAVE_MOVIMENTACOES, '{quebrado')
   localStorage.setItem(CHAVE_CLUBE, '"nao-e-objeto"')
+  localStorage.setItem(CHAVE_PRODUTOS, '{quebrado')
 }
 
 beforeEach(() => {
@@ -206,6 +224,7 @@ describe('persistência — stores do escopo com dado corrompido', () => {
     expect(lista('configs')).toEqual([])
     expect(lista('movs')).toEqual([])
     expect(lista('assinaturas')).toEqual([])
+    expect(lista('produtos')).toEqual([])
 
     // cópia original preservada em cada chave de backup
     expect(localStorage.getItem(`${CHAVE_LANCAMENTOS}:corrompido`)).toBe(
@@ -222,6 +241,9 @@ describe('persistência — stores do escopo com dado corrompido', () => {
     )
     expect(localStorage.getItem(`${CHAVE_CLUBE}:corrompido`)).toBe(
       '"nao-e-objeto"',
+    )
+    expect(localStorage.getItem(`${CHAVE_PRODUTOS}:corrompido`)).toBe(
+      '{quebrado',
     )
 
     // aviso visível, sem bloquear a aplicação
@@ -242,6 +264,7 @@ describe('persistência — stores do escopo com dado corrompido', () => {
     fireEvent.click(screen.getByText('nova-config'))
     fireEvent.click(screen.getByText('entrada-inicial'))
     fireEvent.click(screen.getByText('assinar'))
+    fireEvent.click(screen.getByText('novo-produto'))
 
     // dados gravados normalmente nas chaves originais
     expect(lerJson(CHAVE_LANCAMENTOS)).toHaveLength(1)
@@ -250,6 +273,7 @@ describe('persistência — stores do escopo com dado corrompido', () => {
     expect(lerJson(CHAVE_MOVIMENTACOES)).toHaveLength(1)
     expect((lerJson(CHAVE_CLUBE) as { assinaturas: unknown[] }).assinaturas)
       .toHaveLength(1)
+    expect(lerJson(CHAVE_PRODUTOS)).toHaveLength(1)
 
     // F5: desmonta e monta de novo com o mesmo localStorage
     primeiro.unmount()
@@ -261,8 +285,12 @@ describe('persistência — stores do escopo com dado corrompido', () => {
     expect(lista('configs')).toHaveLength(1)
     expect(lista('movs')).toHaveLength(1)
     expect(lista('assinaturas')).toHaveLength(1)
+    expect(lista('produtos')).toHaveLength(1)
     // o backup do dado corrompido continua preservado
     expect(localStorage.getItem(`${CHAVE_LANCAMENTOS}:corrompido`)).toBe(
+      '{quebrado',
+    )
+    expect(localStorage.getItem(`${CHAVE_PRODUTOS}:corrompido`)).toBe(
       '{quebrado',
     )
   })
@@ -308,6 +336,8 @@ describe('persistência — falha de gravação', () => {
 
     fireEvent.click(screen.getByText('nova-despesa'))
     expect(lista('caixa')).toHaveLength(1)
+    fireEvent.click(screen.getByText('novo-produto'))
+    expect(lista('produtos')).toHaveLength(1)
 
     spy.mockRestore()
   })

@@ -36,6 +36,16 @@ function cartao(nome: string): HTMLElement {
   return alvo
 }
 
+function indicador(rotulo: string): HTMLElement {
+  const alvo = screen.getByText(rotulo).parentElement
+  if (!alvo) throw new Error(`Card de indicador não encontrado: ${rotulo}`)
+  return alvo
+}
+
+function valorIndicador(rotulo: string, esperado: string): void {
+  expect(within(indicador(rotulo)).getByText(esperado)).toBeTruthy()
+}
+
 describe('Página Produtos — cadastro mínimo', () => {
   it('renderiza estado vazio sem erros de console', () => {
     const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -102,5 +112,76 @@ describe('Página Produtos — cadastro mínimo', () => {
     fireEvent.click(within(cartao('Creme capilar')).getByText('Ativar'))
     expect(within(cartao('Creme capilar')).getByText('Ativo')).toBeTruthy()
     expect(screen.getAllByRole('listitem')).toHaveLength(1)
+  })
+})
+
+describe('Página Produtos — indicadores de estoque', () => {
+  it('estado vazio zera todos os indicadores', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    montar()
+    valorIndicador('Total de produtos', '0')
+    valorIndicador('Produtos ativos', '0')
+    valorIndicador('Produtos inativos', '0')
+    valorIndicador('Unidades em estoque', '0')
+    valorIndicador('Produtos com estoque baixo', '0')
+    valorIndicador('Produtos sem estoque', '0')
+    expect(
+      within(indicador('Valor estimado do estoque')).getByText(
+        /R\$\s*0,00/,
+      ),
+    ).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('mostra os indicadores com dados reais após cadastro com estoque e custo', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    montar()
+    fireEvent.click(screen.getByText('+ Novo produto'))
+    fireEvent.change(screen.getByLabelText('Nome *'), {
+      target: { value: 'Creme capilar' },
+    })
+    fireEvent.change(screen.getByLabelText('Preço de venda (R$) *'), {
+      target: { value: '30,00' },
+    })
+    fireEvent.change(screen.getByLabelText('Custo (R$)'), {
+      target: { value: '12,00' },
+    })
+    fireEvent.change(screen.getByLabelText('Estoque inicial'), {
+      target: { value: '10' },
+    })
+    fireEvent.click(screen.getByText('Cadastrar produto'))
+
+    valorIndicador('Total de produtos', '1')
+    valorIndicador('Produtos ativos', '1')
+    valorIndicador('Produtos inativos', '0')
+    valorIndicador('Unidades em estoque', '10')
+    valorIndicador('Produtos com estoque baixo', '0')
+    valorIndicador('Produtos sem estoque', '0')
+    expect(
+      within(indicador('Valor estimado do estoque')).getByText(
+        /R\$\s*120,00/,
+      ),
+    ).toBeTruthy()
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
+  })
+
+  it('produto sem estoque alimenta os alertas e some deles ao ficar inativo', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {})
+    montar()
+    criar('Sérum seco', '50,00')
+    valorIndicador('Produtos sem estoque', '1')
+    valorIndicador('Produtos com estoque baixo', '1')
+    valorIndicador('Produtos ativos', '1')
+
+    fireEvent.click(within(cartao('Sérum seco')).getByText('Desativar'))
+    valorIndicador('Produtos sem estoque', '0')
+    valorIndicador('Produtos com estoque baixo', '0')
+    valorIndicador('Produtos ativos', '0')
+    valorIndicador('Produtos inativos', '1')
+    valorIndicador('Unidades em estoque', '0')
+    expect(erros).not.toHaveBeenCalled()
+    erros.mockRestore()
   })
 })
