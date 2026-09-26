@@ -49,6 +49,9 @@ export function diasEntre(dataDe: string, dataAte: string): number {
 
 export type ServicoUtilizado = { nome: string; qtd: number }
 
+/** Produto comprado no caixa/PDV, agregado por nome */
+export type ProdutoComprado = { nome: string; qtd: number }
+
 export type PerfilCliente = {
   cliente: Cliente
   segmento: SegmentoCliente
@@ -64,6 +67,8 @@ export type PerfilCliente = {
   totalGasto: number
   /** Serviços mais usados pelo cliente, do mais para o menos usado */
   servicos: ServicoUtilizado[]
+  /** Produtos comprados (caixa/PDV), do mais para o menos comprado */
+  produtos: ProdutoComprado[]
   profissionalPreferido: string | null
 }
 
@@ -101,6 +106,43 @@ function contar(agendamentos: Agendamento[], campo: 'servico' | 'profissional') 
     mapa.set(valor, (mapa.get(valor) ?? 0) + 1)
   }
   return mapa
+}
+
+/**
+ * Produtos comprados pelo cliente no caixa/PDV: vendas de produto não
+ * estornadas, resolvidas por clienteId (quando existe) ou por nome.
+ * Itens do PDV contam um a um; lançamentos antigos usam produto/qtd.
+ */
+function produtosDoCliente(
+  lancamentos: Lancamento[],
+  cliente: Cliente,
+): ProdutoComprado[] {
+  const chave = normalizarBusca(cliente.nome)
+  const mapa = new Map<string, number>()
+  for (const l of lancamentos) {
+    if (l.origem !== 'produto' || l.estornado) continue
+    const dono = l.clienteId
+      ? l.clienteId === cliente.id
+      : l.cliente
+        ? normalizarBusca(l.cliente) === chave
+        : false
+    if (!dono) continue
+    const itens =
+      l.itens && l.itens.length > 0
+        ? l.itens
+        : l.produto
+          ? [{ produto: l.produto, quantidade: l.quantidade ?? 1 }]
+          : []
+    for (const item of itens) {
+      const nome = item.produto.trim()
+      const qtd = item.quantidade
+      if (!nome || qtd <= 0) continue
+      mapa.set(nome, (mapa.get(nome) ?? 0) + qtd)
+    }
+  }
+  return [...mapa.entries()]
+    .map(([nome, qtd]) => ({ nome, qtd }))
+    .sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 /**
@@ -147,6 +189,7 @@ export function montarPerfis(
       frequenciaDias: frequencia(datas),
       totalGasto: gastos.get(cliente.id) ?? 0,
       servicos: porServico,
+      produtos: produtosDoCliente(lancamentos, cliente),
       profissionalPreferido: profissionais[0]?.[0] ?? null,
     }
   })
@@ -215,4 +258,41 @@ export function proximaDataSugerida(
 ): string | null {
   if (!ultimoAtendimento || !frequenciaDias || frequenciaDias <= 0) return null
   return somarDias(ultimoAtendimento, frequenciaDias)
+}
+
+/**
+ * Dias até o próximo aniversário (0 = hoje). Cruza o ano quando já
+ * passou; nascimento inválido/ausente devolve null.
+ */
+export function diasParaAniversario(
+  nascimento: string,
+  hoje: string = hojeISO(),
+): number | null {
+  if (!nascimento || nascimento.length < 10) return null
+  const [, mes, dia] = nascimento.slice(0, 10).split('-').map(Number)
+  if (!mes || !dia) return null
+  const hojeMs = Date.parse(`${hoje.slice(0, 10)}T00:00:00Z`)
+  if (Number.isNaN(hojeMs)) return null
+  const ano = new Date(hojeMs).getUTCFullYear()
+  let alvo = Date.UTC(ano, mes - 1, dia)
+  if (alvo < hojeMs) alvo = Date.UTC(ano + 1, mes - 1, dia)
+  return Math.round((alvo - hojeMs) / 86_400_000)
+}
+
+/**
+ * Clientes com aniversário no mês corrente (ordenados por dia do mês).
+ * Cliente sem nascimento não entra.
+ */
+export function aniversariantesDoMes(
+  clientes: Cliente[],
+  hoje: string = hojeISO(),
+): Cliente[] {
+  const mes = hoje.slice(5, 7)
+  return clientes
+    .filter((c) => c.nascimento && c.nascimento.slice(5, 7) === mes)
+    .sort(
+      (a, b) =>
+        a.nascimento.slice(8, 10).localeCompare(b.nascimento.slice(8, 10)) ||
+        a.nome.localeCompare(b.nome, 'pt-BR'),
+    )
 }

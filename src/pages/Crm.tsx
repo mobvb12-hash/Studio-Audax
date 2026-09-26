@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import CrmClienteModal from '@/components/CrmClienteModal'
+import MarketingModal from '@/components/MarketingModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
@@ -8,6 +9,7 @@ import { useClientes } from '@/modules/clientes/store'
 import { useClube } from '@/modules/clube/store'
 import { assinaturaVigente } from '@/modules/clube/regras'
 import {
+  aniversariantesDoMes,
   filtrarPerfis,
   montarPerfis,
   resumoSegmentos,
@@ -60,6 +62,7 @@ export default function Crm() {
   const [segmento, setSegmento] = useState<FiltroSegmento>('todos')
   const [detalheDo, setDetalheDo] = useState<Cliente | null>(null)
   const [agendarPara, setAgendarPara] = useState<Cliente | null>(null)
+  const [marketingAberto, setMarketingAberto] = useState(false)
 
   const perfis = useMemo(
     () => montarPerfis(clientes, agendamentos, lancamentos),
@@ -70,12 +73,19 @@ export default function Crm() {
     [perfis, busca, segmento],
   )
   const resumo = useMemo(() => resumoSegmentos(perfis), [perfis])
+  const aniversariantes = useMemo(
+    () => aniversariantesDoMes(clientes),
+    [clientes],
+  )
   const hoje = useMemo(() => hojeISO(), [])
 
-  const kpis = SEGMENTOS_ORDEM.map((seg) => ({
-    rotulo: SEGMENTOS_ROTULO[seg],
-    valor: String(resumo[seg]),
-  }))
+  const kpis = [
+    ...SEGMENTOS_ORDEM.map((seg) => ({
+      rotulo: SEGMENTOS_ROTULO[seg],
+      valor: String(resumo[seg]),
+    })),
+    { rotulo: 'Aniversários', valor: String(aniversariantes.length) },
+  ]
 
   return (
     <div>
@@ -92,6 +102,13 @@ export default function Crm() {
             · {interacoes.length} interação(ões) registrada(s)
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setMarketingAberto(true)}
+          className="rounded-lg border border-[#8A6A14] bg-white px-3 py-2 text-sm font-medium text-[#8A6A14] hover:bg-[#F3ECDA]"
+        >
+          Marketing
+        </button>
       </div>
 
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
@@ -196,6 +213,14 @@ export default function Crm() {
                   >
                     {SEGMENTOS_ROTULO[perfil.segmento]}
                   </span>
+                  {cliente.nascimento &&
+                    cliente.nascimento.slice(5, 7) === hoje.slice(5, 7) && (
+                      <span className="rounded-full border border-pink-300 bg-pink-50 px-2.5 py-1 text-xs font-semibold text-pink-700">
+                        Aniversário{' '}
+                        {cliente.nascimento.slice(8, 10)}/
+                        {cliente.nascimento.slice(5, 7)}
+                      </span>
+                    )}
                   {assinatura && (
                     <span
                       className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
@@ -242,6 +267,10 @@ export default function Crm() {
             )
           })}
         </ul>
+      )}
+
+      {marketingAberto && (
+        <MarketingModal onFechar={() => setMarketingAberto(false)} />
       )}
 
       {detalheDo && (

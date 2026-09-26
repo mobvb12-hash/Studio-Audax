@@ -24,6 +24,7 @@ import {
   STATUS_ROTULO,
 } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
+import { useEsperaOpcional } from '@/modules/espera/store'
 import { useWhats } from '@/modules/whatsapp/store'
 import { formatarBRL } from '@/lib/moeda'
 
@@ -52,6 +53,7 @@ export default function Clientes() {
   const { agendamentos, renomearCliente: renomearNaAgenda } = useAgenda()
   const { lancamentos, renomearCliente: renomearNoCaixa } = useCaixa()
   const { assinaturaDoCliente, renomearCliente: renomearNoClube } = useClube()
+  const { renomearCliente: renomearNaEspera } = useEsperaOpcional()
   const { interacoesDoCliente } = useCrm()
   const { mensagensDoCliente } = useWhats()
   const [busca, setBusca] = useState('')
@@ -346,6 +348,7 @@ export default function Clientes() {
             renomearNaAgenda(antigo, novo)
             renomearNoCaixa(antigo, novo)
             renomearNoClube(antigo, novo)
+            renomearNaEspera(antigo, novo)
           }}
           onFechar={() => setModalAberto(false)}
         />

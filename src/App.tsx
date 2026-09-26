@@ -9,7 +9,9 @@ import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { CrmProvider } from '@/modules/crm/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
+import { EsperaProvider } from '@/modules/espera/store'
 import { IaProvider } from '@/modules/ia/store'
+import { MarketingProvider } from '@/modules/marketing/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
@@ -21,6 +23,7 @@ import Clube from '@/pages/Clube'
 import Comissoes from '@/pages/Comissoes'
 import Crm from '@/pages/Crm'
 import Dashboard from '@/pages/Dashboard'
+import Espera from '@/pages/Espera'
 import Financeiro from '@/pages/Financeiro'
 import Ia from '@/pages/Ia'
 import PDV from '@/pages/PDV'
@@ -68,6 +71,7 @@ function ModuloFuturo({ pagina }: { pagina: PaginaId }) {
 const IMPLEMENTADAS: PaginaId[] = [
   'painel',
   'agenda',
+  'fila',
   'caixa',
   'clientes',
   'crm',
@@ -109,6 +113,7 @@ function Conteudo() {
         />
       )}
       {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
+      {pagina === 'fila' && <Espera />}
       {pagina === 'caixa' && <Caixa />}
       {pagina === 'clientes' && <Clientes />}
       {pagina === 'crm' && <Crm />}
@@ -146,12 +151,16 @@ function App() {
                   <ComissoesProvider>
                     <ClubeProvider>
                       <CrmProvider>
-                        <WhatsProvider>
+                        <EsperaProvider>
+                          <MarketingProvider>
+                            <WhatsProvider>
               <IaProvider>
                 <AvisoPersistencia />
                 <Conteudo />
               </IaProvider>
-                        </WhatsProvider>
+                            </WhatsProvider>
+                          </MarketingProvider>
+                        </EsperaProvider>
                       </CrmProvider>
                     </ClubeProvider>
                   </ComissoesProvider>

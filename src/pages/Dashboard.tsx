@@ -11,6 +11,8 @@ import { linhasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
 import { useComissoes } from '@/modules/comissoes/store'
 import { pagamentosNoMes, situacoesAssinaturas } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
+import { comPosicao } from '@/modules/espera/regras'
+import { useEsperaOpcional } from '@/modules/espera/store'
 import { produtosComEstoqueBaixo } from '@/modules/estoque/indicadores'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -101,8 +103,10 @@ export default function Dashboard({
   const { configDe } = useComissoes()
   const { produtos } = useProdutos()
   const { assinaturas, pagamentos } = useClube()
+  const { pedidos } = useEsperaOpcional()
   const agendaHoje = porData(hojeISO())
   const totalHoje = agendaHoje.length
+  const fila = comPosicao(pedidos).filter((i) => i.posicao !== null)
 
   // Alerta real de horários livres hoje (expediente − agendamentos − bloqueios)
   const disponibilidade = horariosDisponiveis(
@@ -281,8 +285,36 @@ export default function Dashboard({
                 : `Próximos: ${disponibilidade.horarios.slice(0, 4).join(', ')}`}
             </p>
           </Cartao>
-          <Cartao titulo="Fila de espera agora" contador="0">
-            <CaixaVazia texto="Ninguém na fila." />
+          <Cartao
+            titulo="Fila de espera agora"
+            contador={String(fila.length)}
+          >
+            {fila.length === 0 ? (
+              <CaixaVazia texto="Ninguém na fila." />
+            ) : (
+              <ul className="divide-y divide-[#EFE7D3]">
+                {fila.slice(0, 4).map(({ pedido, posicao }) => (
+                  <li
+                    key={pedido.id}
+                    className="flex items-center justify-between gap-2 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-[#1C1A15]">
+                        #{posicao} {pedido.cliente}
+                      </p>
+                      <p className="truncate text-xs text-[#8A8171]">
+                        {pedido.servico} · {pedido.profissional || 'qualquer'}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {fila.length > 4 && (
+              <p className="mt-2 text-[11px] text-[#8A8171]">
+                + {fila.length - 4} na fila (ver Fila de espera)
+              </p>
+            )}
           </Cartao>
         </div>
 

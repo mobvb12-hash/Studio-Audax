@@ -4,6 +4,7 @@ import ConfirmarModal from '@/components/ConfirmarModal'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
+import { useEsperaOpcional } from '@/modules/espera/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Profissional } from '@/modules/profissionais/types'
 
@@ -11,6 +12,7 @@ export default function Profissionais() {
   const { profissionais, remover, alternarAtivo } = useProfissionais()
   const { agendamentos, renomearProfissional: renomearNaAgenda } = useAgenda()
   const { renomearProfissional: renomearNoCaixa } = useCaixa()
+  const { renomearProfissional: renomearNaEspera } = useEsperaOpcional()
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Profissional | null>(null)
   const [excluindo, setExcluindo] = useState<Profissional | null>(null)
@@ -123,6 +125,7 @@ export default function Profissionais() {
           aoRenomear={(antigo, novo) => {
             renomearNaAgenda(antigo, novo)
             renomearNoCaixa(antigo, novo)
+            renomearNaEspera(antigo, novo)
           }}
           onFechar={() => setModalAberto(false)}
         />

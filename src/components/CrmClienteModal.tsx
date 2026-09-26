@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
-import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import {
+  formatarDataCurta,
+  formatarDataLonga,
+  hojeISO,
+} from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClube } from '@/modules/clube/store'
-import { montarPerfis, proximoAgendamento } from '@/modules/crm/regras'
+import { montarPerfis, proximaDataSugerida, proximoAgendamento } from '@/modules/crm/regras'
 import { useCrm } from '@/modules/crm/store'
 import {
   SEGMENTOS_ROTULO,
@@ -222,6 +226,26 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                   {cliente.telefone}
                 </span>
               )}
+              {cliente.nascimento && (
+                <span className="rounded-full border border-pink-300 bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-700">
+                  Aniversário {cliente.nascimento.slice(8, 10)}/
+                  {cliente.nascimento.slice(5, 7)}
+                </span>
+              )}
+              {proximaDataSugerida(
+                perfil.ultimoAtendimento,
+                perfil.frequenciaDias,
+              ) && (
+                <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#4A4436]">
+                  Sugestão de retorno:{' '}
+                  {formatarDataCurta(
+                    proximaDataSugerida(
+                      perfil.ultimoAtendimento,
+                      perfil.frequenciaDias,
+                    )!,
+                  )}
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -288,6 +312,22 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-0.5 text-xs font-medium text-[#8A6A14]"
               >
                 {s.nome} ({s.qtd})
+              </span>
+            ))}
+          </div>
+        )}
+
+        {perfil.produtos.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+              Produtos comprados:
+            </span>
+            {perfil.produtos.map((p) => (
+              <span
+                key={p.nome}
+                className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#4A4436]"
+              >
+                {p.nome} ({p.qtd})
               </span>
             ))}
           </div>

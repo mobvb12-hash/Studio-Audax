@@ -3,6 +3,7 @@ import ConfirmarModal from '@/components/ConfirmarModal'
 import ServicoFormModal from '@/components/ServicoFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
+import { useEsperaOpcional } from '@/modules/espera/store'
 import { servicoEmUso } from '@/modules/servicos/regras'
 import { useServicos } from '@/modules/servicos/store'
 import type { Servico } from '@/modules/servicos/types'
@@ -12,6 +13,7 @@ export default function Servicos() {
   const { servicos, remover, alternarAtivo } = useServicos()
   const { agendamentos, renomearServico: renomearNaAgenda } = useAgenda()
   const { lancamentos, renomearServico: renomearNoCaixa } = useCaixa()
+  const { renomearServico: renomearNaEspera } = useEsperaOpcional()
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Servico | null>(null)
@@ -152,6 +154,7 @@ export default function Servicos() {
           aoRenomear={(antigo, novo) => {
             renomearNaAgenda(antigo, novo)
             renomearNoCaixa(antigo, novo)
+            renomearNaEspera(antigo, novo)
           }}
           onFechar={() => setModalAberto(false)}
         />

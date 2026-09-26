@@ -15,6 +15,7 @@ import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ClubeProvider } from '@/modules/clube/store'
 import { CrmProvider, useCrm } from '@/modules/crm/store'
+import { MarketingProvider } from '@/modules/marketing/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import { WhatsProvider, useWhats } from '@/modules/whatsapp/store'
@@ -52,10 +53,12 @@ function env(elemento: ReactNode) {
             <CaixaProvider>
               <ClubeProvider>
                 <CrmProvider>
-                  <WhatsProvider>
-                    <Captura />
-                    {elemento}
-                  </WhatsProvider>
+                  <MarketingProvider>
+                    <WhatsProvider>
+                      <Captura />
+                      {elemento}
+                    </WhatsProvider>
+                  </MarketingProvider>
                 </CrmProvider>
               </ClubeProvider>
             </CaixaProvider>
@@ -271,5 +274,110 @@ describe('CRM — WhatsApp preparado sem integração', () => {
     expect(mensagens[0].status).toBe('pendente')
     expect(mensagens[0].texto).toContain('Bruno Lima')
     expect(ctxWhats.mensagens[0].origem).toBe('crm')
+  })
+})
+
+describe('CRM — aniversariantes, produtos e marketing', () => {
+  it('KPI de aniversários e badge no card mostram quem faz aniversário no mês', () => {
+    env(<Crm />)
+    semear()
+    const mes = HOJE.slice(5, 7)
+    act(() => {
+      ctxClientes.adicionar({
+        nome: 'Clara Duarte',
+        telefone: '',
+        email: '',
+        observacao: '',
+        nascimento: `${HOJE.slice(0, 4)}-${mes}-15`,
+      })
+    })
+    const kpi = screen.getByText('Aniversários').parentElement as HTMLElement
+    expect(within(kpi).getByText('1')).toBeTruthy()
+    expect(
+      within(cardDe('Clara Duarte')).getByText(`Aniversário 15/${mes}`),
+    ).toBeTruthy()
+  })
+
+  it('detalhe exibe os produtos comprados derivados do caixa', () => {
+    localStorage.setItem(
+      'studio-audax:caixa:lancamentos:v1',
+      JSON.stringify([
+        {
+          id: 'l-prod-1',
+          tipo: 'receita',
+          origem: 'produto',
+          data: HOJE,
+          hora: '11:00',
+          descricao: 'Venda de produtos',
+          valor: 60,
+          desconto: 0,
+          valorLiquido: 60,
+          formaPagamento: 'pix',
+          cliente: 'Ana Souza',
+          itens: [{ produto: 'Pomada modeladora', quantidade: 2 }],
+          criadoEm: '2026-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+    env(<Crm />)
+    semear()
+    fireEvent.click(within(cardDe('Ana Souza')).getByText('Detalhe'))
+    expect(screen.getByText('Produtos comprados:')).toBeTruthy()
+    expect(screen.getByText('Pomada modeladora (2)')).toBeTruthy()
+  })
+
+  it('botão Marketing abre públicos e cria/remove listas de público', () => {
+    env(<Crm />)
+    semear()
+    fireEvent.click(screen.getByRole('button', { name: 'Marketing' }))
+    expect(
+      screen.getByRole('heading', { name: 'Marketing e campanhas' }),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('Mais de 90 dias sem visita — foco de reativação'),
+    ).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Nome da lista'), {
+      target: { value: 'Reativação' },
+    })
+    fireEvent.change(screen.getByLabelText('Público'), {
+      target: { value: 'inativos' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }))
+    const salvo: { nome: string; publico: string }[] = JSON.parse(
+      localStorage.getItem('studio-audax:marketing:v1') ?? '[]',
+    )
+    expect(salvo).toHaveLength(1)
+    expect(salvo[0]).toMatchObject({ nome: 'Reativação', publico: 'inativos' })
+
+    fireEvent.change(screen.getByLabelText('Nome da lista'), {
+      target: { value: 'reativação' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }))
+    expect(
+      screen.getByText('Já existe uma lista com este nome.'),
+    ).toBeTruthy()
+    expect(
+      JSON.parse(localStorage.getItem('studio-audax:marketing:v1') ?? '[]'),
+    ).toHaveLength(1)
+
+    fireEvent.change(screen.getByLabelText('Nome da lista'), {
+      target: { value: 'Recorrentes do mês' },
+    })
+    fireEvent.change(screen.getByLabelText('Público'), {
+      target: { value: 'recorrentes' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }))
+    const lista = screen
+      .getByText('Recorrentes do mês')
+      .closest('li') as HTMLElement
+    expect(within(lista).getByText('Ana Souza')).toBeTruthy()
+
+    fireEvent.click(within(lista).getByRole('button', { name: 'Remover' }))
+    expect(screen.queryByText('Recorrentes do mês')).toBeNull()
+    const depois: { nome: string }[] = JSON.parse(
+      localStorage.getItem('studio-audax:marketing:v1') ?? '[]',
+    )
+    expect(depois.map((l) => l.nome)).toEqual(['Reativação'])
   })
 })

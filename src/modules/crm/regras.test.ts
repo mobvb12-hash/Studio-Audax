@@ -4,10 +4,12 @@ import type { Agendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { preferenciasPadrao, type Cliente } from '@/modules/clientes/types'
 import {
+  aniversariantesDoMes,
   classificarSegmento,
   DIAS_ATIVO,
   DIAS_INATIVO,
   diasEntre,
+  diasParaAniversario,
   filtrarPerfis,
   montarPerfis,
   proximaDataSugerida,
@@ -298,5 +300,95 @@ describe('proximoAgendamento e proximaDataSugerida', () => {
     expect(proximaDataSugerida(somarDias(HOJE, -20), 20)).toBe(HOJE)
     expect(proximaDataSugerida('', 20)).toBeNull()
     expect(proximaDataSugerida(somarDias(HOJE, -20), null)).toBeNull()
+  })
+})
+
+describe('aniversariantes', () => {
+  it('diasParaAniversario: 0 no próprio dia, cruza o ano e valida entrada', () => {
+    expect(diasParaAniversario('1990-03-10', '2026-03-10')).toBe(0)
+    expect(diasParaAniversario('1990-03-11', '2026-03-10')).toBe(1)
+    expect(diasParaAniversario('1990-01-05', '2026-03-10')).toBe(301)
+    expect(diasParaAniversario('1990-12-25', '2026-03-10')).toBe(290)
+    expect(diasParaAniversario('', '2026-03-10')).toBeNull()
+    expect(diasParaAniversario('data-invalida', '2026-03-10')).toBeNull()
+  })
+
+  it('aniversariantesDoMes: só o mês corrente, sem nascimento fora, ordenados', () => {
+    const hoje = '2026-03-10'
+    const lista = [
+      cliente('c1', 'Ana Souza', { nascimento: '1990-03-25' }),
+      cliente('c2', 'Bruno Lima', { nascimento: '1985-03-05' }),
+      cliente('c3', 'Carla Dias', { nascimento: '1992-04-03' }),
+      cliente('c4', 'Davi Ramos'),
+    ]
+    expect(aniversariantesDoMes(lista, hoje).map((c) => c.nome)).toEqual([
+      'Bruno Lima',
+      'Ana Souza',
+    ])
+    expect(aniversariantesDoMes([], hoje)).toEqual([])
+  })
+})
+
+describe('produtos comprados no perfil', () => {
+  function venda(
+    id: string,
+    extras: Partial<Lancamento>,
+  ): Lancamento {
+    return {
+      id,
+      tipo: 'receita',
+      origem: 'produto',
+      data: HOJE,
+      hora: '11:00',
+      descricao: 'Venda',
+      valor: 60,
+      desconto: 0,
+      valorLiquido: 60,
+      formaPagamento: 'pix',
+      criadoEm: '2026-01-01T00:00:00.000Z',
+      ...extras,
+    }
+  }
+
+  it('agrega itens do PDV e produto legado; estorno e outros clientes ficam de fora', () => {
+    const ana = cliente('c1', 'Ana Souza')
+    const lancamentos = [
+      venda('l1', {
+        clienteId: 'c1',
+        itens: [
+          { produto: 'Pomada modeladora', quantidade: 2, preco: 30 },
+          { produto: 'Gel fixador', quantidade: 1, preco: 25 },
+        ],
+      }),
+      venda('l2', { clienteId: 'c1', produto: 'Pomada modeladora', quantidade: 1 }),
+      venda('l3', {
+        clienteId: 'c1',
+        estornado: true,
+        itens: [{ produto: 'Pomada modeladora', quantidade: 5, preco: 30 }],
+      }),
+      venda('l4', {
+        clienteId: 'outro',
+        itens: [{ produto: 'Pomada modeladora', quantidade: 9, preco: 30 }],
+      }),
+      venda('l5', { origem: 'atendimento', clienteId: 'c1' }),
+    ]
+    const perfil = montarPerfis([ana], [], lancamentos, HOJE)[0]
+    expect(perfil.produtos).toEqual([
+      { nome: 'Pomada modeladora', qtd: 3 },
+      { nome: 'Gel fixador', qtd: 1 },
+    ])
+  })
+
+  it('resolve por nome quando não há clienteId e devolve vazio sem compras', () => {
+    const ana = cliente('c1', 'Ana Souza')
+    const lancamentos = [
+      venda('l1', { cliente: 'Ana Souza', produto: 'Pomada', quantidade: 2 }),
+      venda('l2', { cliente: 'Outro Cliente', produto: 'Pomada', quantidade: 4 }),
+    ]
+    const perfil = montarPerfis([ana], [], lancamentos, HOJE)[0]
+    expect(perfil.produtos).toEqual([{ nome: 'Pomada', qtd: 2 }])
+    expect(
+      montarPerfis([cliente('c2', 'Sem Compras')], [], [], HOJE)[0].produtos,
+    ).toEqual([])
   })
 })
