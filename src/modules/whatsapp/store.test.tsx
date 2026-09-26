@@ -258,4 +258,44 @@ describe('WhatsApp store — mensagens pendentes', () => {
     expect(salvo[0].template).toBe('vencimento_clube')
     expect(salvo[0].origem).toBe('automacao')
   })
+
+  it('anti-duplicação: pendente idêntica é reutilizada, nunca copiada', () => {
+    montar()
+    let primeira: MensagemWhats | undefined
+    let segunda: MensagemWhats | undefined
+    act(() => {
+      primeira = criarPadrao()
+    })
+    act(() => {
+      segunda = criarPadrao()
+    })
+    expect(segunda?.id).toBe(primeira?.id)
+    expect(ctx.mensagens).toHaveLength(1)
+
+    // texto diferente cria outra mensagem
+    act(() => {
+      ctx.criar({
+        clienteId: 'c-1',
+        cliente: 'Ana Souza',
+        template: 'reativacao',
+        texto: 'Outro texto, outra mensagem pendente.',
+      })
+    })
+    expect(ctx.mensagens).toHaveLength(2)
+
+    // enviada não bloqueia uma nova pendente com o mesmo texto
+    act(() => {
+      ctx.registrarEnvioManual(primeira!.id)
+    })
+    let nova: MensagemWhats | undefined
+    act(() => {
+      nova = criarPadrao()
+    })
+    expect(nova?.id).not.toBe(primeira?.id)
+    expect(ctx.mensagens).toHaveLength(3)
+    const salvo: MensagemWhats[] = JSON.parse(
+      localStorage.getItem(CHAVE) ?? '[]',
+    )
+    expect(salvo).toHaveLength(3)
+  })
 })

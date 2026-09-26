@@ -10,6 +10,7 @@ export type PaginaId =
   | 'comandas'
   | 'clientes'
   | 'crm'
+  | 'whatsapp'
   | 'profissionais'
   | 'servicos'
   | 'comissoes'
@@ -44,6 +45,7 @@ const SECOES: Secao[] = [
       { id: 'comandas', rotulo: 'Comandas' },
       { id: 'clientes', rotulo: 'Clientes' },
       { id: 'crm', rotulo: 'CRM' },
+      { id: 'whatsapp', rotulo: 'WhatsApp' },
     ],
   },
   {

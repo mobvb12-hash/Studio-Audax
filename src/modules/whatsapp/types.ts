@@ -5,6 +5,7 @@
 export type IdTemplate =
   | 'confirmacao'
   | 'lembrete'
+  | 'retorno'
   | 'pos_atendimento'
   | 'reativacao'
   | 'cancelamento'
@@ -21,6 +22,14 @@ export const TEMPLATES_ORDEM: IdTemplate[] = [
   'reativacao',
 ]
 
+/** Templates oferecidos na Central de mensagens (Fase 9). */
+export const TEMPLATES_CENTRAL: IdTemplate[] = [
+  'confirmacao',
+  'lembrete',
+  'retorno',
+  'reativacao',
+]
+
 /** Templates criados apenas pelo motor de Automações (Fase 8). */
 export const TEMPLATES_AUTOMACAO: IdTemplate[] = [
   'cancelamento',
@@ -33,6 +42,7 @@ export const TEMPLATES_AUTOMACAO: IdTemplate[] = [
 export const TEMPLATES_ROTULO: Record<IdTemplate, string> = {
   confirmacao: 'Confirmação',
   lembrete: 'Lembrete',
+  retorno: 'Retorno',
   pos_atendimento: 'Pós-atendimento',
   reativacao: 'Reativação',
   cancelamento: 'Cancelamento',

@@ -56,6 +56,8 @@ export function textoTemplate(id: IdTemplate, d: DadosTemplate): string {
       const horario = exigir(d.horario, 'horário', id)
       return `Olá, ${nome}! Lembrete: você tem ${servico} com ${profissional} em ${formatarDataLonga(data)} às ${horario}. Se precisar remarcar, é só responder.`
     }
+    case 'retorno':
+      return `Olá, ${nome}! Aqui é o Studio Audax, retornando seu contato. Podemos reservar seu próximo horário?`
     case 'pos_atendimento': {
       const servico = exigir(d.servico, 'serviço', id)
       return `Oi, ${nome}! Obrigado por fazer ${servico} no Studio Audax. Esperamos que tenha gostado do resultado!`

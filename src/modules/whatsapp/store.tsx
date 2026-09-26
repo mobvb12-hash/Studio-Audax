@@ -110,6 +110,17 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
     if (texto.length < 3) {
       throw new Error('A mensagem precisa de um texto.')
     }
+    // Anti-duplicação: uma pendente idêntica (mesmo cliente, template,
+    // texto e vínculo) é reutilizada — nunca cria duas cópias iguais.
+    const existente = mensagens.find(
+      (m) =>
+        m.clienteId === clienteId &&
+        m.template === input.template &&
+        m.texto === texto &&
+        m.status === 'pendente' &&
+        (m.agendamentoId ?? '') === (input.agendamentoId ?? ''),
+    )
+    if (existente) return existente
     const nova: MensagemWhats = normalizarMensagem({
       id: gerarId(),
       clienteId,
@@ -123,7 +134,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
     })
     setMensagens((atual) => ordenar([nova, ...atual]))
     return nova
-  }, [])
+  }, [mensagens])
 
   const enviar = useCallback(
     async (id: string) => {

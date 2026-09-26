@@ -68,6 +68,13 @@ describe('Templates de WhatsApp — texto com dados reais', () => {
     expect(texto).toContain('47 dia(s)')
     expect(texto).toContain('01/09/2026')
   })
+
+  it('retorno usa o nome do cliente e o Studio Audax', () => {
+    const texto = textoTemplate('retorno', { nome: 'Ana Souza' })
+    expect(texto).toContain('Ana Souza')
+    expect(texto).toContain('Studio Audax')
+    expect(texto).toContain('retornando')
+  })
 })
 
 describe('Templates — recusa dados incompletos', () => {
@@ -115,6 +122,9 @@ describe('Templates — recusa dados incompletos', () => {
     expect(() =>
       textoTemplate('pos_atendimento', { nome: '   ', servico: 'Corte' }),
     ).toThrow(/cliente/)
+    expect(() => textoTemplate('retorno', { nome: '   ' })).toThrow(
+      /retorno: cliente/,
+    )
   })
 })
 

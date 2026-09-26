@@ -36,6 +36,7 @@ import Produtos from '@/pages/Produtos'
 import Profissionais from '@/pages/Profissionais'
 import Relatorios from '@/pages/Relatorios'
 import Servicos from '@/pages/Servicos'
+import Whats from '@/pages/Whats'
 
 const ROTULOS: Record<PaginaId, string> = {
   painel: 'Painel',
@@ -46,6 +47,7 @@ const ROTULOS: Record<PaginaId, string> = {
   comandas: 'Comandas',
   clientes: 'Clientes',
   crm: 'CRM',
+  whatsapp: 'WhatsApp',
   profissionais: 'Profissionais',
   comissoes: 'Comissões',
   servicos: 'Serviços',
@@ -80,6 +82,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'caixa',
   'clientes',
   'crm',
+  'whatsapp',
   'servicos',
   'profissionais',
   'comissoes',
@@ -122,6 +125,7 @@ function Conteudo() {
       {pagina === 'caixa' && <Caixa />}
       {pagina === 'clientes' && <Clientes />}
       {pagina === 'crm' && <Crm />}
+      {pagina === 'whatsapp' && <Whats />}
       {pagina === 'servicos' && <Servicos />}
       {pagina === 'profissionais' && <Profissionais />}
       {pagina === 'comissoes' && <Comissoes />}
