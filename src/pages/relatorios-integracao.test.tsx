@@ -122,6 +122,26 @@ function semear() {
   })
 }
 
+function semearTresAtendimentosComFracao() {
+  const valores = [40, 30, 30]
+  valores.forEach((valor, i) => {
+    act(() => {
+      ctxCaixa.registrarPagamento({
+        agendamentoId: `ag-f${i}`,
+        data: hojeISO(),
+        hora: '09:00',
+        cliente: 'Cliente Fração',
+        profissional: 'Audax',
+        servico: 'Corte',
+        valor,
+        desconto: 0,
+        formaPagamento: 'pix',
+        statusAgendamento: 'confirmado',
+      })
+    })
+  })
+}
+
 /** Normaliza o espaço não separável do toLocaleString('pt-BR'). */
 function norm(s: string | null | undefined): string {
   return (s ?? '').replace(/\u00a0/g, ' ')
@@ -208,6 +228,28 @@ describe('Integração Dashboard ↔ Relatórios', () => {
     expect(valorKpi(rel, 'Ticket médio')).toBe('R$ 65,00')
     // Comissões: Audax 40% de 80 = 32 · Diego 40% de 50 = 20 → 52
     expect(valorKpi(rel, 'Comissões a pagar')).toBe('R$ 52,00')
+  })
+})
+
+describe('Integração Dashboard ↔ Relatórios — ticket médio com arredondamento', () => {
+  it('ticket médio idêntico nos dois painéis quando há fração (100/3 = 33,33)', () => {
+    montar(
+      <div>
+        <div data-testid="rel">
+          <Relatorios />
+        </div>
+        <div data-testid="dash">
+          <Dashboard onNovo={() => undefined} />
+        </div>
+      </div>,
+    )
+    semearTresAtendimentosComFracao()
+
+    const rel = screen.getByTestId('rel')
+    const dash = screen.getByTestId('dash')
+
+    expect(valorKpi(rel, 'Ticket médio')).toBe(valorKpi(dash, 'Ticket médio'))
+    expect(valorKpi(rel, 'Ticket médio')).toBe('R$ 33,33')
   })
 })
 

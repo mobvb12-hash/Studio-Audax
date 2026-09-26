@@ -38,6 +38,10 @@ function soma(lista: Lancamento[]): number {
 /* Resumo financeiro                                                   */
 /* ------------------------------------------------------------------ */
 
+export function ticketMedio(receitaServicos: number, qtdAtendimentos: number): number {
+  return qtdAtendimentos > 0 ? arredondar(receitaServicos / qtdAtendimentos) : 0
+}
+
 export type ResumoFinanceiro = {
   receitaServicos: number
   receitaProdutos: number
@@ -81,10 +85,7 @@ export function resumoFinanceiro(
     despesas,
     estornos,
     resultado: arredondar(receitaTotal - despesas),
-    ticketMedio:
-      qtdAtendimentosPagos > 0
-        ? arredondar(receitaServicos / qtdAtendimentosPagos)
-        : 0,
+    ticketMedio: ticketMedio(receitaServicos, qtdAtendimentosPagos),
     qtdAtendimentosPagos,
     temDados: base.length > 0,
   }

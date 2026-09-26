@@ -13,6 +13,7 @@ import { pagamentosNoMes, situacoesAssinaturas } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
 import { comPosicao } from '@/modules/espera/regras'
 import { useEsperaOpcional } from '@/modules/espera/store'
+import { ticketMedio as ticketMedioOficial } from '@/modules/relatorios/calculos'
 import { produtosComEstoqueBaixo } from '@/modules/estoque/indicadores'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
@@ -130,11 +131,14 @@ export default function Dashboard({
     .reduce((soma, l) => soma + l.valorLiquido, 0)
   const atendimentosMes = doMes.filter((l) => l.origem === 'atendimento')
   const vendasMes = doMes.filter((l) => l.origem === 'produto')
-  const ticketMedio =
-    atendimentosMes.length > 0
-      ? atendimentosMes.reduce((soma, l) => soma + l.valorLiquido, 0) /
-        atendimentosMes.length
-      : 0
+  const receitaAtendimentosMes = atendimentosMes.reduce(
+    (soma, l) => soma + l.valorLiquido,
+    0,
+  )
+  const ticketMedio = ticketMedioOficial(
+    receitaAtendimentosMes,
+    atendimentosMes.length,
+  )
 
   const comissaoMes = totaisDoPeriodo(
     linhasDoPeriodo(lancamentos, profissionais, configDe, periodoMes()),
