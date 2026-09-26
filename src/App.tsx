@@ -1,7 +1,11 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import AvisoPersistencia from '@/components/AvisoPersistencia'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
+import TelaLogin from '@/components/TelaLogin'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
+import { AuthProvider } from '@/modules/auth/AuthProvider'
+import { useAuth } from '@/modules/auth/useAuth'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
@@ -140,6 +144,24 @@ function Conteudo() {
   )
 }
 
+/**
+ * Portão de acesso: sem Supabase configurado o conteúdo passa direto
+ * (comportamento atual de teste/desenvolvimento). Com Supabase ativo,
+ * exige sessão válida antes de mostrar qualquer página interna.
+ */
+function AreaProtegida({ children }: { children: ReactNode }) {
+  const { estado } = useAuth()
+  if (estado.status === 'carregando') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] text-sm text-[#8A8171]">
+        Verificando a sessão…
+      </div>
+    )
+  }
+  if (estado.status === 'deslogado') return <TelaLogin />
+  return <>{children}</>
+}
+
 function App() {
   return (
     <ClientesProvider>
@@ -157,8 +179,12 @@ function App() {
                             <AutomacoesProvider>
                               <WhatsProvider>
               <IaProvider>
-                <AvisoPersistencia />
-                <Conteudo />
+                <AuthProvider>
+                  <AvisoPersistencia />
+                  <AreaProtegida>
+                    <Conteudo />
+                  </AreaProtegida>
+                </AuthProvider>
               </IaProvider>
                               </WhatsProvider>
                             </AutomacoesProvider>

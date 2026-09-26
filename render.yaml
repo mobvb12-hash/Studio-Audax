@@ -1,0 +1,9 @@
+# Studio Audax — Render Blueprint (site estático)
+# Só descreve como construir/serve o build; não publica nada por conta própria
+# e não usa credenciais — as variáveis de produção entram depois no painel.
+name: studio-audax
+services:
+  - type: web
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
