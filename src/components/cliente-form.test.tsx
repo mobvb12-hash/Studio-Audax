@@ -273,6 +273,22 @@ describe('Formulário de cliente — validações', () => {
       screen.getByLabelText('Remover etiqueta VIP'),
     ).toBeTruthy()
   })
+
+  it('impede adicionar o mesmo telefone duas vezes na lista', () => {
+    montar()
+    preencherBasico('Lucas Mendes', '(81) 98888-7777')
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar telefone' }))
+    expect(
+      screen.getByLabelText('Remover telefone (81) 98888-7777'),
+    ).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Telefone *'), {
+      target: { value: '(81) 98888-7777' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar telefone' }))
+    expect(screen.getByText('Este telefone já foi adicionado.')).toBeTruthy()
+    expect(screen.getAllByLabelText(/^Remover telefone/)).toHaveLength(1)
+  })
 })
 
 describe('Formulário de cliente — edição', () => {

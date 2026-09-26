@@ -3,7 +3,7 @@
 import type { Agendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { normalizarTexto } from '@/lib/moeda'
-import type { Cliente } from './types'
+import { digitosDosTelefones, type Cliente } from './types'
 
 export type FiltroStatusCliente = 'todos' | 'ativos' | 'inativos'
 
@@ -29,7 +29,12 @@ export function filtrarClientes(
     if (!termo && !digitos) return true
     if (termo && normalizarBusca(cliente.nome).includes(termo)) return true
     if (termo && normalizarBusca(cliente.email).includes(termo)) return true
-    if (digitos && cliente.telefone.replace(/\D/g, '').includes(digitos))
+    if (
+      digitos &&
+      digitosDosTelefones(cliente.telefone, cliente.telefones).some((n) =>
+        n.includes(digitos),
+      )
+    )
       return true
     return false
   })

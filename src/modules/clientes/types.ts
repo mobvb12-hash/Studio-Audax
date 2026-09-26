@@ -73,6 +73,20 @@ export type Cliente = {
   atualizadoEm: string
 }
 
+/**
+ * Dígitos (sem formatação) de todos os telefones de um cadastro: principal
+ * + adicionais. Vazios são ignorados. Usado na busca e na trava de
+ * duplicidade pelo telefone.
+ */
+export function digitosDosTelefones(
+  telefone: string,
+  telefones: TelefoneCliente[] = [],
+): string[] {
+  return [telefone, ...telefones.map((t) => t.numero)]
+    .map((numero) => numero.replace(/\D/g, ''))
+    .filter(Boolean)
+}
+
 export type NovoClienteInput = {
   nome: string
   telefone: string

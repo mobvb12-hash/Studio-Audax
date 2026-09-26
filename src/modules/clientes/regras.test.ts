@@ -114,6 +114,21 @@ describe('Clientes — filtrarClientes (status e busca)', () => {
     expect(filtrarClientes([ativo, inativo], '99999', 'todos')).toHaveLength(0)
   })
 
+  it('busca por telefone adicional com ou sem formatação', () => {
+    const comAdicional = cliente({
+      telefone: '(11) 98888-7777',
+      telefones: [
+        { tipo: 'residencial', numero: '(11) 3232-1111' },
+        { tipo: 'comercial', numero: '(11) 3232-2222' },
+      ],
+    })
+    expect(filtrarClientes([comAdicional], '3232-2222', 'todos')).toHaveLength(1)
+    expect(filtrarClientes([comAdicional], '(11)32321111', 'todos')).toHaveLength(
+      1,
+    )
+    expect(filtrarClientes([comAdicional], '4444', 'todos')).toHaveLength(0)
+  })
+
   it('busca por e-mail', () => {
     expect(filtrarClientes([ativo, inativo], 'ana@email.com', 'todos')[0]?.id).toBe(
       'c2',

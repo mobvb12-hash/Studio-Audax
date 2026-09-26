@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import type { Cliente, NovoClienteInput } from './types'
-import { preferenciasPadrao } from './types'
+import { digitosDosTelefones, preferenciasPadrao } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:clientes:v1'
 
@@ -62,6 +62,18 @@ function ordenar(lista: Cliente[]): Cliente[] {
   return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
+/**
+ * Duplicidade pelo telefone: algum número novo (principal ou adicional)
+ * já pertence a outro cliente — inclusive como telefone adicional dele.
+ */
+function conflitoDeTelefone(novos: string[], lista: Cliente[]): boolean {
+  if (novos.length === 0) return false
+  return lista.some((c) => {
+    const doCliente = digitosDosTelefones(c.telefone, c.telefones)
+    return novos.some((n) => doCliente.includes(n))
+  })
+}
+
 function carregar(): Cliente[] {
   try {
     const bruto = localStorage.getItem(CHAVE_STORAGE)
@@ -87,13 +99,14 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
   const adicionar = useCallback(
     (input: NovoClienteInput) => {
       const nome = input.nome.trim()
-      const digitos = input.telefone.replace(/\D/g, '')
       if (clientes.some((c) => normalizar(c.nome) === normalizar(nome))) {
         throw new Error('Já existe um cliente com este nome.')
       }
       if (
-        digitos &&
-        clientes.some((c) => c.telefone.replace(/\D/g, '') === digitos)
+        conflitoDeTelefone(
+          digitosDosTelefones(input.telefone, input.telefones),
+          clientes,
+        )
       ) {
         throw new Error('Já existe um cliente com este telefone.')
       }
@@ -127,7 +140,6 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
   const atualizar = useCallback(
     (id: string, input: NovoClienteInput) => {
       const nome = input.nome.trim()
-      const digitos = input.telefone.replace(/\D/g, '')
       if (
         clientes.some(
           (c) => c.id !== id && normalizar(c.nome) === normalizar(nome),
@@ -135,10 +147,14 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
       ) {
         throw new Error('Já existe um cliente com este nome.')
       }
+      const existente = clientes.find((c) => c.id === id)
       if (
-        digitos &&
-        clientes.some(
-          (c) => c.id !== id && c.telefone.replace(/\D/g, '') === digitos,
+        conflitoDeTelefone(
+          digitosDosTelefones(
+            input.telefone,
+            input.telefones ?? existente?.telefones,
+          ),
+          clientes.filter((c) => c.id !== id),
         )
       ) {
         throw new Error('Já existe um cliente com este telefone.')

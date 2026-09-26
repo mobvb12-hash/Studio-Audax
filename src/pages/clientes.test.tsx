@@ -270,6 +270,39 @@ describe('Clientes — página (filtros, status e ações)', () => {
     const total = within(modal).getByText('Total gasto').parentElement as HTMLElement
     expect(norm(total.textContent)).toContain('R$ 100,00')
   })
+
+  it('perfil do cliente mostra a assinatura do Audax Club com plano e status', () => {
+    montar()
+    const id = criarCliente('Lucas Mendes', '(11) 98888-7777')
+    act(() => {
+      ctxClube.assinar({
+        clienteId: id,
+        cliente: 'Lucas Mendes',
+        plano: 'cabelo_barba',
+        valorMensal: 129.9,
+        dataAssinatura: DIA,
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Histórico' }))
+    const modal = screen.getByText('Histórico do cliente').closest(
+      '.fixed',
+    ) as HTMLElement
+    const secao = within(modal).getByText('Assinatura Audax Club')
+      .parentElement as HTMLElement
+    const texto = norm(secao.textContent)
+    expect(texto).toContain('Cabelo + Barba')
+    expect(texto).toContain('R$ 129,90')
+    expect(texto).toContain('próxima cobrança')
+    expect(within(secao).getByText('Ativa')).toBeTruthy()
+  })
+
+  it('perfil avisa quando o cliente não tem assinatura no Audax Club', () => {
+    montar()
+    criarCliente('Ana Souza', '(11) 97777-6666')
+    fireEvent.click(screen.getByRole('button', { name: 'Histórico' }))
+    expect(screen.getByText('Nenhuma assinatura registrada.')).toBeTruthy()
+  })
 })
 
 describe('Clientes — exclusão segura (CRM e WhatsApp vinculados)', () => {

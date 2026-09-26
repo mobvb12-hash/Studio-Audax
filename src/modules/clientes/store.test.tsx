@@ -156,6 +156,65 @@ describe('Clientes — store', () => {
     ).toThrow(/Já existe um cliente com este telefone/)
     expect(ctx.clientes).toHaveLength(1)
   })
+
+  it('rejeita telefone de outro cliente mesmo como telefone adicional', () => {
+    montar()
+    act(() => {
+      ctx.adicionar({
+        nome: 'Lucas Mendes',
+        telefone: '(11) 98888-7777',
+        email: '',
+        observacao: '',
+        telefones: [{ tipo: 'residencial', numero: '(11) 3232-1111' }],
+      })
+    })
+
+    // Principal igual a um telefone adicional já cadastrado
+    expect(() =>
+      ctx.adicionar({
+        nome: 'Ana Dias',
+        telefone: '(11) 3232-1111',
+        email: '',
+        observacao: '',
+      }),
+    ).toThrow(/Já existe um cliente com este telefone/)
+
+    // Adicional igual ao principal de outro cliente
+    expect(() =>
+      ctx.adicionar({
+        nome: 'Ana Dias',
+        telefone: '(11) 90000-0000',
+        email: '',
+        observacao: '',
+        telefones: [{ tipo: 'celular', numero: '(11) 98888-7777' }],
+      }),
+    ).toThrow(/Já existe um cliente com este telefone/)
+    expect(ctx.clientes).toHaveLength(1)
+
+    act(() => {
+      ctx.adicionar({
+        nome: 'Bruno Canto',
+        telefone: '(11) 91111-2222',
+        email: '',
+        observacao: '',
+      })
+    })
+
+    // Edição que passa a usar telefone de outro cliente também é recusada
+    const brunoId = ctx.clientes.find((c) => c.nome === 'Bruno Canto')!.id
+    expect(() =>
+      ctx.atualizar(brunoId, {
+        nome: 'Bruno Canto',
+        telefone: '(11) 3232-1111',
+        email: '',
+        observacao: '',
+      }),
+    ).toThrow(/Já existe um cliente com este telefone/)
+    expect(ctx.clientes.find((c) => c.id === brunoId)!.telefone).toBe(
+      '(11) 91111-2222',
+    )
+    expect(ctx.clientes).toHaveLength(2)
+  })
 })
 
 describe('Clientes — status ativo/inativo (sem apagar dados)', () => {

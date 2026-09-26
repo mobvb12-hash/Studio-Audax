@@ -1,9 +1,16 @@
 import { useEffect, useMemo } from 'react'
-import { formatarDataLonga } from '@/modules/agenda/catalogo'
+import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import type { StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import type { Cliente } from '@/modules/clientes/types'
+import {
+  statusAssinatura,
+  statusClasse,
+  STATUS_ROTULO as STATUS_ASSINATURA_ROTULO,
+} from '@/modules/clube/regras'
+import { useClube } from '@/modules/clube/store'
+import { PLANOS_ROTULO } from '@/modules/clube/types'
 import { formatarBRL, normalizarTexto } from '@/lib/moeda'
 
 type Props = {
@@ -33,6 +40,7 @@ function badgeStatus(status: StatusAgendamento): string {
 export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
   const { agendamentos } = useAgenda()
   const { lancamentos } = useCaixa()
+  const { assinaturas } = useClube()
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -71,6 +79,15 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
   )
   const comprasProdutos = recebido.filter((l) => l.origem === 'produto')
   const pagamentosClube = recebido.filter((l) => l.origem === 'clube')
+
+  const hoje = hojeISO()
+  const assinacoes = useMemo(
+    () =>
+      assinaturas
+        .filter((a) => a.clienteId === cliente.id)
+        .sort((a, b) => b.dataAssinatura.localeCompare(a.dataAssinatura)),
+    [assinaturas, cliente.id],
+  )
 
   const totalGasto = recebido.reduce((soma, l) => soma + l.valorLiquido, 0)
   const concluidos = historico.filter((ag) => ag.status === 'concluido').length
@@ -325,6 +342,46 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
                   </span>
                 </li>
               ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            Assinatura Audax Club
+          </p>
+          {assinacoes.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
+              Nenhuma assinatura registrada.
+            </div>
+          ) : (
+            <ul className="divide-y divide-[#EFE7D3]">
+              {assinacoes.map((a) => {
+                const status = statusAssinatura(a, hoje)
+                return (
+                  <li
+                    key={a.id}
+                    className="flex items-center justify-between gap-2 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-[#1C1A15]">
+                        {PLANOS_ROTULO[a.plano]} · {formatarBRL(a.valorMensal)}
+                        /mês
+                      </p>
+                      <p className="text-xs text-[#8A8171]">
+                        {a.cancelada
+                          ? `Cancelada em ${formatarDataLonga(a.canceladaEm ?? a.dataAssinatura)}`
+                          : `Desde ${formatarDataLonga(a.dataAssinatura)} · próxima cobrança em ${formatarDataLonga(a.proximoVencimento)}`}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasse(status)}`}
+                    >
+                      {STATUS_ASSINATURA_ROTULO[status]}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

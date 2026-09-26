@@ -129,6 +129,10 @@ export default function ClienteFormModal({
       setErro('Digite o telefone antes de adicionar.')
       return
     }
+    if (telefones.some((t) => digitos(t.numero) === digitos(numero))) {
+      setErro('Este telefone já foi adicionado.')
+      return
+    }
     setTelefones((atual) => [...atual, { tipo: tipoTelefone, numero }])
     setTelefone('')
     setErro('')
