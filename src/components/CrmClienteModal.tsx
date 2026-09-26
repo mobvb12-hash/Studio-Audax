@@ -22,6 +22,7 @@ import { dadosDoAgendamento, textoTemplate } from '@/modules/whatsapp/templates'
 import {
   TEMPLATES_ORDEM,
   TEMPLATES_ROTULO,
+  ORIGEM_ROTULO,
   STATUS_ROTULO,
   type IdTemplate,
   type MensagemWhats,
@@ -471,7 +472,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                       {STATUS_ROTULO[m.status]}
                     </span>
                     <span className="text-[11px] font-medium text-[#8A8171]">
-                      {TEMPLATES_ROTULO[m.template]} · {m.origem}
+                      {TEMPLATES_ROTULO[m.template]} · {ORIGEM_ROTULO[m.origem]}
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-[#4A4436]">{m.texto}</p>

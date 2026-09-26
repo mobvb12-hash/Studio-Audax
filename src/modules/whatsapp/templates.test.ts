@@ -129,3 +129,106 @@ describe('dadosDoAgendamento', () => {
     })
   })
 })
+
+describe('Templates de automação — texto com dados reais', () => {
+  it('cancelamento usa cliente, serviço, profissional, data e horário', () => {
+    const texto = textoTemplate('cancelamento', {
+      nome: 'Ana Souza',
+      servico: 'Corte Degradê',
+      profissional: 'Audax',
+      data: '2026-10-05',
+      horario: '14:30',
+    })
+    expect(texto).toContain('Ana Souza')
+    expect(texto).toContain('Corte Degradê')
+    expect(texto).toContain('Audax')
+    expect(texto).toContain('05/10/2026')
+    expect(texto).toContain('cancelado')
+  })
+
+  it('reagendamento anuncia o novo horário', () => {
+    const texto = textoTemplate('reagendamento', {
+      nome: 'Bruno Lima',
+      servico: 'Barba',
+      profissional: 'Diego',
+      data: '2026-10-06',
+      horario: '09:00',
+    })
+    expect(texto).toContain('Bruno Lima')
+    expect(texto).toContain('remarcado')
+    expect(texto).toContain('06/10/2026')
+    expect(texto).toContain('09:00')
+  })
+
+  it('aniversário só precisa do nome', () => {
+    const texto = textoTemplate('aniversario', { nome: 'Carla Dias' })
+    expect(texto).toContain('Carla Dias')
+    expect(texto).toContain('feliz aniversário')
+    expect(texto).toContain('Studio Audax')
+  })
+
+  it('vencimento do Clube avisa dias futuros, hoje e atraso', () => {
+    const futuro = textoTemplate('vencimento_clube', {
+      nome: 'Ana Souza',
+      plano: 'Cabelo + Barba',
+      data: '2026-10-05',
+      diasVencimento: 3,
+    })
+    expect(futuro).toContain('vence em 3 dia(s)')
+    expect(futuro).toContain('Cabelo + Barba')
+    expect(futuro).toContain('05/10/2026')
+
+    const hoje = textoTemplate('vencimento_clube', {
+      nome: 'Ana Souza',
+      plano: 'Barba',
+      data: '2026-10-05',
+      diasVencimento: 0,
+    })
+    expect(hoje).toContain('vence hoje')
+
+    const atraso = textoTemplate('vencimento_clube', {
+      nome: 'Ana Souza',
+      plano: 'Cabelo',
+      data: '2026-10-05',
+      diasVencimento: -2,
+    })
+    expect(atraso).toContain('venceu há 2 dia(s)')
+  })
+
+  it('horário liberado convida quem está na fila', () => {
+    const texto = textoTemplate('horario_liberado', {
+      nome: 'Bruno Lima',
+      servico: 'Corte',
+      profissional: 'Audax',
+      data: '2026-10-07',
+      horario: '11:00',
+    })
+    expect(texto).toContain('Bruno Lima')
+    expect(texto).toContain('Abriu um horário')
+    expect(texto).toContain('Corte')
+    expect(texto).toContain('07/10/2026')
+    expect(texto).toContain('11:00')
+  })
+
+  it('recusa dados incompletos dos novos templates', () => {
+    expect(() => textoTemplate('cancelamento', { nome: 'Ana' })).toThrow(
+      /cancelamento: serviço/,
+    )
+    expect(() => textoTemplate('reagendamento', { nome: 'Ana' })).toThrow(
+      /reagendamento: serviço/,
+    )
+    expect(() =>
+      textoTemplate('horario_liberado', { nome: 'Ana' }),
+    ).toThrow(/horario_liberado: serviço/)
+    expect(() =>
+      textoTemplate('vencimento_clube', { nome: 'Ana', plano: 'Cabelo' }),
+    ).toThrow(/vencimento_clube: data do vencimento/)
+    expect(() =>
+      textoTemplate('vencimento_clube', {
+        nome: 'Ana',
+        plano: 'Cabelo',
+        data: '2026-10-05',
+      }),
+    ).toThrow(/dias até o vencimento/)
+  })
+})

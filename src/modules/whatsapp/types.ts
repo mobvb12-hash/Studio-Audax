@@ -7,7 +7,13 @@ export type IdTemplate =
   | 'lembrete'
   | 'pos_atendimento'
   | 'reativacao'
+  | 'cancelamento'
+  | 'reagendamento'
+  | 'aniversario'
+  | 'vencimento_clube'
+  | 'horario_liberado'
 
+/** Templates com botões manuais no painel do cliente (CRM). */
 export const TEMPLATES_ORDEM: IdTemplate[] = [
   'confirmacao',
   'lembrete',
@@ -15,11 +21,30 @@ export const TEMPLATES_ORDEM: IdTemplate[] = [
   'reativacao',
 ]
 
+/** Templates criados apenas pelo motor de Automações (Fase 8). */
+export const TEMPLATES_AUTOMACAO: IdTemplate[] = [
+  'cancelamento',
+  'reagendamento',
+  'aniversario',
+  'vencimento_clube',
+  'horario_liberado',
+]
+
 export const TEMPLATES_ROTULO: Record<IdTemplate, string> = {
   confirmacao: 'Confirmação',
   lembrete: 'Lembrete',
   pos_atendimento: 'Pós-atendimento',
   reativacao: 'Reativação',
+  cancelamento: 'Cancelamento',
+  reagendamento: 'Reagendamento',
+  aniversario: 'Aniversário',
+  vencimento_clube: 'Vencimento do Clube',
+  horario_liberado: 'Horário liberado',
+}
+
+/** Valida ids de template (inclui os criados só por automação). */
+export function ehIdTemplate(valor: unknown): valor is IdTemplate {
+  return typeof valor === 'string' && valor in TEMPLATES_ROTULO
 }
 
 export type StatusMensagem = 'pendente' | 'enviada' | 'falhou'
@@ -31,7 +56,13 @@ export const STATUS_ROTULO: Record<StatusMensagem, string> = {
 }
 
 /** Onde a mensagem foi preparada (nunca é enviada sozinha) */
-export type OrigemMensagem = 'crm' | 'ia'
+export type OrigemMensagem = 'crm' | 'ia' | 'automacao'
+
+export const ORIGEM_ROTULO: Record<OrigemMensagem, string> = {
+  crm: 'crm',
+  ia: 'ia',
+  automacao: 'Automação',
+}
 
 export type MensagemWhats = {
   id: string

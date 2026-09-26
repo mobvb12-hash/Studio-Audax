@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from 'react'
 import type { ProvedorEnvio } from './provedor'
 import {
-  TEMPLATES_ORDEM,
+  ehIdTemplate,
   type IdTemplate,
   type MensagemWhats,
   type NovaMensagemInput,
@@ -24,15 +24,17 @@ export const ERRO_SEM_INTEGRACAO =
 
 /** Preenche campos ausentes (registros antigos) com os padrões atuais. */
 function normalizarMensagem(bruto: Partial<MensagemWhats>): MensagemWhats {
-  const template =
-    bruto.template && TEMPLATES_ORDEM.includes(bruto.template)
-      ? bruto.template
-      : ('confirmacao' as IdTemplate)
+  const template = ehIdTemplate(bruto.template)
+    ? bruto.template
+    : ('confirmacao' as IdTemplate)
   const status: StatusMensagem =
     bruto.status === 'enviada' || bruto.status === 'falhou'
       ? bruto.status
       : 'pendente'
-  const origem: OrigemMensagem = bruto.origem === 'ia' ? 'ia' : 'crm'
+  const origem: OrigemMensagem =
+    bruto.origem === 'ia' || bruto.origem === 'automacao'
+      ? bruto.origem
+      : 'crm'
   return {
     id: bruto.id ?? '',
     clienteId: bruto.clienteId ?? '',
@@ -102,7 +104,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
     if (!clienteId) {
       throw new Error('Selecione um cliente para criar a mensagem.')
     }
-    if (!input.template || !TEMPLATES_ORDEM.includes(input.template)) {
+    if (!ehIdTemplate(input.template)) {
       throw new Error('Template de mensagem inválido.')
     }
     if (texto.length < 3) {

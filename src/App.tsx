@@ -5,6 +5,7 @@ import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { AutomacoesProvider } from '@/modules/automacoes/store'
 import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { CrmProvider } from '@/modules/crm/store'
@@ -153,12 +154,14 @@ function App() {
                       <CrmProvider>
                         <EsperaProvider>
                           <MarketingProvider>
-                            <WhatsProvider>
+                            <AutomacoesProvider>
+                              <WhatsProvider>
               <IaProvider>
                 <AvisoPersistencia />
                 <Conteudo />
               </IaProvider>
-                            </WhatsProvider>
+                              </WhatsProvider>
+                            </AutomacoesProvider>
                           </MarketingProvider>
                         </EsperaProvider>
                       </CrmProvider>

@@ -208,4 +208,54 @@ describe('WhatsApp store — mensagens pendentes', () => {
     expect(ctx.mensagens[0].template).toBe('lembrete')
     expect(ctx.mensagens[0].texto).toBe('Mensagem antiga')
   })
+
+  it('reconhece templates e origem de automação sem apagar registros', () => {
+    localStorage.setItem(
+      CHAVE,
+      JSON.stringify([
+        {
+          id: 'm-1',
+          clienteId: 'c-1',
+          cliente: 'Ana',
+          template: 'aniversario',
+          texto: 'Feliz aniversário',
+          origem: 'automacao',
+        },
+        {
+          id: 'm-2',
+          clienteId: 'c-2',
+          cliente: 'Bruno',
+          template: 'desconhecido',
+          texto: 'Antiga',
+          origem: 'outra',
+        },
+      ]),
+    )
+    montar()
+    expect(ctx.mensagens[0].template).toBe('aniversario')
+    expect(ctx.mensagens[0].origem).toBe('automacao')
+    expect(ctx.mensagens[1].template).toBe('confirmacao')
+    expect(ctx.mensagens[1].origem).toBe('crm')
+  })
+
+  it('aceita criar mensagem com origem de automação', () => {
+    montar()
+    let nova: MensagemWhats | undefined
+    act(() => {
+      nova = ctx.criar({
+        clienteId: 'c-1',
+        cliente: 'Ana',
+        template: 'vencimento_clube',
+        texto: 'Seu plano vence em 3 dia(s).',
+        origem: 'automacao',
+      })
+    })
+    expect(nova?.status).toBe('pendente')
+    expect(nova?.origem).toBe('automacao')
+    const salvo: MensagemWhats[] = JSON.parse(
+      localStorage.getItem(CHAVE) ?? '[]',
+    )
+    expect(salvo[0].template).toBe('vencimento_clube')
+    expect(salvo[0].origem).toBe('automacao')
+  })
 })

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import AutomacoesModal from '@/components/AutomacoesModal'
 import CrmClienteModal from '@/components/CrmClienteModal'
 import MarketingModal from '@/components/MarketingModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
@@ -63,6 +64,7 @@ export default function Crm() {
   const [detalheDo, setDetalheDo] = useState<Cliente | null>(null)
   const [agendarPara, setAgendarPara] = useState<Cliente | null>(null)
   const [marketingAberto, setMarketingAberto] = useState(false)
+  const [automacoesAberto, setAutomacoesAberto] = useState(false)
 
   const perfis = useMemo(
     () => montarPerfis(clientes, agendamentos, lancamentos),
@@ -102,13 +104,22 @@ export default function Crm() {
             · {interacoes.length} interação(ões) registrada(s)
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setMarketingAberto(true)}
-          className="rounded-lg border border-[#8A6A14] bg-white px-3 py-2 text-sm font-medium text-[#8A6A14] hover:bg-[#F3ECDA]"
-        >
-          Marketing
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setAutomacoesAberto(true)}
+            className="rounded-lg border border-[#8A6A14] bg-white px-3 py-2 text-sm font-medium text-[#8A6A14] hover:bg-[#F3ECDA]"
+          >
+            Automações
+          </button>
+          <button
+            type="button"
+            onClick={() => setMarketingAberto(true)}
+            className="rounded-lg border border-[#8A6A14] bg-white px-3 py-2 text-sm font-medium text-[#8A6A14] hover:bg-[#F3ECDA]"
+          >
+            Marketing
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
@@ -267,6 +278,10 @@ export default function Crm() {
             )
           })}
         </ul>
+      )}
+
+      {automacoesAberto && (
+        <AutomacoesModal onFechar={() => setAutomacoesAberto(false)} />
       )}
 
       {marketingAberto && (
