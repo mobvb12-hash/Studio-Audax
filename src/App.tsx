@@ -37,6 +37,7 @@ import Profissionais from '@/pages/Profissionais'
 import Relatorios from '@/pages/Relatorios'
 import Servicos from '@/pages/Servicos'
 import Whats from '@/pages/Whats'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 const ROTULOS: Record<PaginaId, string> = {
   painel: 'Painel',
@@ -106,6 +107,9 @@ function Conteudo() {
 
   return (
     <AppLayout paginaAtual={pagina} onNavegar={setPagina}>
+      {/* Falha numa página não derruba o layout: a barreira por página
+          reseta ao trocar de módulo (key). */}
+      <ErrorBoundary key={pagina}>
       {pagina === 'painel' && (
         <Dashboard
           onNovo={() => abrirNovo()}
@@ -144,6 +148,7 @@ function Conteudo() {
           onFechar={() => setModalAberto(false)}
         />
       )}
+      </ErrorBoundary>
     </AppLayout>
   )
 }

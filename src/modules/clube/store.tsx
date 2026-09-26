@@ -11,6 +11,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, type FormaPagamento } from '@/modules/caixa/types'
@@ -355,10 +356,13 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
   const renomearCliente = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    // Propagação casa por chave normalizada (mesma regra do dedupe do
+    // cadastro): dado legado com caixa/acentos diferentes não engancha.
+    const chave = normalizarTexto(antigo)
     setEstado((atual) => ({
       ...atual,
       assinaturas: atual.assinaturas.map((a) =>
-        a.cliente === antigo ? { ...a, cliente: destino } : a,
+        normalizarTexto(a.cliente) === chave ? { ...a, cliente: destino } : a,
       ),
     }))
   }, [])

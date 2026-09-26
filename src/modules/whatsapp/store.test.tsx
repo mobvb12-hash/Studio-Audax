@@ -299,3 +299,25 @@ describe('WhatsApp store — mensagens pendentes', () => {
     expect(salvo).toHaveLength(3)
   })
 })
+
+describe('WhatsApp store — renomeação de cliente (normalização)', () => {
+  it('propaga por nome normalizado (dado legado com caixa/acentos)', () => {
+    montar()
+    act(() => {
+      ctx.criar({
+        clienteId: 'c-2',
+        cliente: 'ANA SOUZA',
+        template: 'reativacao',
+        texto: 'Olá! Já são 45 dia(s) desde seu último atendimento.',
+      })
+    })
+    act(() => {
+      ctx.renomearCliente('Ana Souza', 'Ana Souza Prado')
+    })
+    expect(ctx.mensagens[0].cliente).toBe('Ana Souza Prado')
+    const salvo: MensagemWhats[] = JSON.parse(
+      localStorage.getItem(CHAVE) ?? '[]',
+    )
+    expect(salvo[0].cliente).toBe('Ana Souza Prado')
+  })
+})

@@ -180,6 +180,33 @@ describe('Agenda — store', () => {
     expect(noStorage[0].cliente).toBe('Lucas')
   })
 
+  it('propagação casa por nome normalizado (dado legado com caixa/acentos)', () => {
+    const legado: Agendamento = {
+      id: 'ag-legado',
+      cliente: 'LUCAS MENDES',
+      telefone: '',
+      servico: 'CORTE DEGRADÊ',
+      profissional: 'AUDAX',
+      data: '2026-09-25',
+      horario: '09:00',
+      status: 'confirmado',
+      observacao: '',
+      criadoEm: '2026-09-01T00:00:00.000Z',
+      duracaoMin: 40,
+    }
+    localStorage.setItem(CHAVE, JSON.stringify([legado]))
+    montar()
+
+    fireEvent.click(screen.getByText('renomear-profissional'))
+    fireEvent.click(screen.getByText('renomear-servico'))
+    fireEvent.click(screen.getByText('renomear-cliente'))
+
+    const ag = lerLista()[0]
+    expect(ag.profissional).toBe('Audax Barbearia')
+    expect(ag.servico).toBe('Corte novo')
+    expect(ag.cliente).toBe('Lucas')
+  })
+
   it('renomear sem alteração ou com nome inexistente não muda nada', () => {
     montar()
     fireEvent.click(screen.getByText('criar'))

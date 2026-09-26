@@ -11,6 +11,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import { validarPedido } from './regras'
 import type {
   NovoPedidoInput,
@@ -156,20 +157,28 @@ export function EsperaProvider({ children }: { children: ReactNode }) {
     setPedidos((atual) => atual.filter((p) => p.id !== id))
   }, [])
 
+  // Propagação casa por chave normalizada (mesma regra do dedupe do
+  // cadastro): dado legado com caixa/acentos diferentes não engancha.
   const renomearCliente = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setPedidos((atual) =>
-      atual.map((p) => (p.cliente === antigo ? { ...p, cliente: destino } : p)),
+      atual.map((p) =>
+        normalizarTexto(p.cliente) === chave ? { ...p, cliente: destino } : p,
+      ),
     )
   }, [])
 
   const renomearProfissional = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setPedidos((atual) =>
       atual.map((p) =>
-        p.profissional === antigo ? { ...p, profissional: destino } : p,
+        normalizarTexto(p.profissional) === chave
+          ? { ...p, profissional: destino }
+          : p,
       ),
     )
   }, [])
@@ -177,8 +186,11 @@ export function EsperaProvider({ children }: { children: ReactNode }) {
   const renomearServico = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setPedidos((atual) =>
-      atual.map((p) => (p.servico === antigo ? { ...p, servico: destino } : p)),
+      atual.map((p) =>
+        normalizarTexto(p.servico) === chave ? { ...p, servico: destino } : p,
+      ),
     )
   }, [])
 

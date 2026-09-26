@@ -46,7 +46,8 @@ function abaClasse(ativa: boolean): string {
 }
 
 export default function PDV() {
-  const { lancamentos, registrarVenda, diaFechado } = useCaixa()
+  const { lancamentos, registrarVenda, desfazerLancamento, diaFechado } =
+    useCaixa()
   const { produtos } = useProdutos()
   const { saidaPorVenda } = useEstoque()
   const { clientes } = useClientes()
@@ -224,6 +225,7 @@ export default function PDV() {
     const cliente = clientes.find((c) => c.id === clienteId)
     const descontoTotal = Math.round((descontoAssinante + descontoNum) * 100) / 100
     finalizandoRef.current = true
+    let vendaId = ''
     try {
       const venda = registrarVenda({
         data: hoje,
@@ -239,6 +241,7 @@ export default function PDV() {
         clienteId: cliente?.id,
         profissional: profissional || undefined,
       })
+      vendaId = venda.id
       // Baixa automática de estoque — uma movimentação por produto da venda
       saidaPorVenda(venda.id, venda.data, venda.itens ?? [])
       setCarrinho([])
@@ -253,6 +256,10 @@ export default function PDV() {
         `Venda de ${formatarBRL(venda.valorLiquido)} registrada no caixa e estoque baixado.`,
       )
     } catch (e) {
+      // A baixa de estoque falhou depois da gravação no caixa: desfaz a
+      // receita recém-criada para não deixar venda sem baixa (e o retry
+      // não duplica). O carrinho fica intacto para nova tentativa.
+      if (vendaId) desfazerLancamento(vendaId)
       setErro(e instanceof Error ? e.message : 'Não foi possível finalizar a venda.')
     } finally {
       finalizandoRef.current = false

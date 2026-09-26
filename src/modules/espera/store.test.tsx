@@ -234,6 +234,28 @@ describe('Espera store — propagação de renomeações', () => {
       servico: 'Corte Degradê',
     })
   })
+
+  it('propagação casa por nome normalizado (dado legado com caixa/acentos)', () => {
+    montar()
+    act(() => {
+      ctx.adicionar({
+        ...BASE,
+        cliente: 'ANA SOUZA',
+        profissional: 'AUDAX',
+        servico: 'CORTE DEGRADÊ',
+      })
+    })
+    act(() => {
+      ctx.renomearCliente('Ana Souza', 'Ana Prado')
+      ctx.renomearProfissional('Audax', 'Carlos')
+      ctx.renomearServico('Corte Degradê', 'Corte Social')
+    })
+    expect(ctx.pedidos[0]).toMatchObject({
+      cliente: 'Ana Prado',
+      profissional: 'Carlos',
+      servico: 'Corte Social',
+    })
+  })
 })
 
 describe('useEsperaOpcional — árvore sem provider', () => {

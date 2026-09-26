@@ -20,7 +20,7 @@ const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
 export default function VendaProdutoModal({ data, onFechar }: Props) {
-  const { venderProduto, diaFechado } = useCaixa()
+  const { venderProduto, desfazerLancamento, diaFechado } = useCaixa()
   const { produtos } = useProdutos()
   const { saidaPorVenda } = useEstoque()
   const { profissionais } = useProfissionais()
@@ -68,6 +68,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       )
       return
     }
+    let vendaId = ''
     try {
       const lancamento = venderProduto({
         data,
@@ -79,6 +80,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
         profissional,
         observacao,
       })
+      vendaId = lancamento.id
       // Baixa automática de estoque
       saidaPorVenda(lancamento.id, data, [
         {
@@ -90,6 +92,9 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       ])
       onFechar()
     } catch (e) {
+      // Baixa de estoque falhou depois da gravação: desfaz o lançamento
+      // para a venda não ficar registrada sem estoque baixado.
+      if (vendaId) desfazerLancamento(vendaId)
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
     }
   }

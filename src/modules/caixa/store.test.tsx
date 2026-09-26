@@ -398,6 +398,28 @@ describe('Caixa — propagação de renomeações de cadastro', () => {
     })
     expect(JSON.stringify(ctx.lancamentos)).toBe(antes)
   })
+
+  it('propagação casa por nome normalizado (dado legado com caixa/acentos)', () => {
+    montar()
+    act(() => {
+      ctx.registrarPagamento(
+        pagamento({
+          cliente: 'ANA SOUZA',
+          profissional: 'ANA SILVA',
+          servico: 'CORTE DEGRADÊ',
+        }),
+      )
+    })
+    act(() => {
+      ctx.renomearProfissional('Ana Silva', 'Ana Silva Jr')
+      ctx.renomearServico('Corte Degradê', 'Corte Social')
+      ctx.renomearCliente('Ana Souza', 'Ana Souza Prado')
+    })
+    const l = ctx.lancamentos[0]
+    expect(l.profissional).toBe('Ana Silva Jr')
+    expect(l.servico).toBe('Corte Social')
+    expect(l.cliente).toBe('Ana Souza Prado')
+  })
 })
 
 describe('Caixa — persistência (F5)', () => {
@@ -490,5 +512,69 @@ describe('Caixa — lista corrompida (auditoria F14)', () => {
     montar()
     expect(ctx.lancamentos).toHaveLength(1)
     expect(localStorage.getItem(`${CHAVE_LANC}:corrompido`)).toBeNull()
+  })
+})
+
+// Auditoria Fase 11 — compensação: desfazerLancamento desfaz gravação de uma
+// venda/pagamento que falhou em cascata (ex.: baixa de estoque), sem tocar nos
+// demais lançamentos e sem virar estorno na auditoria.
+describe('Caixa — desfazerLancamento (compensação de falha em cascata)', () => {
+  it('remove só o lançamento informado e persiste a lista reduzida', () => {
+    montar()
+    let vendaId = ''
+    act(() => {
+      ctx.registrarPagamento(pagamento())
+      vendaId = ctx.venderProduto({
+        data: DIA,
+        produto: 'Pomada',
+        quantidade: 2,
+        preco: 30,
+        desconto: 0,
+        formaPagamento: 'pix',
+        profissional: 'Diego',
+      }).id
+    })
+    expect(ctx.lancamentos).toHaveLength(2)
+
+    act(() => {
+      ctx.desfazerLancamento(vendaId)
+    })
+
+    expect(ctx.lancamentos).toHaveLength(1)
+    expect(ctx.lancamentos[0].origem).toBe('atendimento')
+    expect(ctx.auditoria).toHaveLength(0)
+    expect(
+      JSON.parse(localStorage.getItem(CHAVE_LANC) ?? '[]'),
+    ).toHaveLength(1)
+  })
+
+  it('id inexistente não altera nada (idempotente)', () => {
+    montar()
+    act(() => {
+      ctx.registrarPagamento(pagamento())
+    })
+    const antes = JSON.stringify(ctx.lancamentos)
+    act(() => {
+      ctx.desfazerLancamento('id-que-nao-existe')
+    })
+    expect(JSON.stringify(ctx.lancamentos)).toBe(antes)
+  })
+
+  it('pagamento desfeito libera novo registro do mesmo atendimento (retry)', () => {
+    montar()
+    let pagamentoId = ''
+    act(() => {
+      pagamentoId = ctx.registrarPagamento(pagamento()).id
+    })
+    expect(() => ctx.registrarPagamento(pagamento())).toThrow(/já foi pago/)
+
+    act(() => {
+      ctx.desfazerLancamento(pagamentoId)
+    })
+    act(() => {
+      ctx.registrarPagamento(pagamento())
+    })
+    expect(ctx.lancamentos).toHaveLength(1)
+    expect(ctx.lancamentos[0].origem).toBe('atendimento')
   })
 })

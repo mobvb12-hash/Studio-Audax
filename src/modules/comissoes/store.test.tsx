@@ -299,4 +299,26 @@ describe('Comissões — renomeação profissional (auditoria F8)', () => {
     expect(ctx.auditoria).toHaveLength(1)
     expect(ctx.auditoria[0].profissionalNome).toBe('Audax')
   })
+
+  it('casa por nome normalizado (dado legado com caixa/acentos)', () => {
+    montar()
+    act(() => {
+      ctx.salvarConfig('prof-2', { percentual: 50, ativo: true })
+    })
+    act(() => {
+      ctx.fecharComissao({
+        profissionalId: 'prof-2',
+        profissionalNome: 'MARIA LIMA',
+        periodo: PERIODO,
+        qtdAtendimentos: 1,
+        producao: 80,
+        percentual: 50,
+        comissao: 40,
+      })
+    })
+    act(() => {
+      ctx.renomearProfissional('Maria Lima', 'Maria Lima Santos')
+    })
+    expect(ctx.fechamentos[0].profissionalNome).toBe('Maria Lima Santos')
+  })
 })

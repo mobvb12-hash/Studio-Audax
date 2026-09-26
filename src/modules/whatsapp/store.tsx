@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import type { ProvedorEnvio } from './provedor'
 import {
   ehIdTemplate,
@@ -208,8 +209,13 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
   const renomearCliente = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    // Propagação casa por chave normalizada (mesma regra do dedupe do
+    // cadastro): dado legado com caixa/acentos diferentes não engancha.
+    const chave = normalizarTexto(antigo)
     setMensagens((atual) =>
-      atual.map((m) => (m.cliente === antigo ? { ...m, cliente: destino } : m)),
+      atual.map((m) =>
+        normalizarTexto(m.cliente) === chave ? { ...m, cliente: destino } : m,
+      ),
     )
   }, [])
 

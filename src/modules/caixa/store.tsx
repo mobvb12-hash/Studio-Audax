@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import {
   FORMAS_PAGAMENTO,
   type EventoAuditoria,
@@ -68,6 +69,12 @@ export type CaixaContexto = {
   registrarReceitaClube: (input: NovaReceitaClubeInput) => Lancamento
   adicionarDespesa: (input: NovaDespesaInput) => Lancamento
   estornar: (id: string) => void
+  /**
+   * Compensação de uma venda/atendimento cujo passo seguinte falhou (baixa
+   * de estoque, status): remove o lançamento recém-criado pelo id exato
+   * para a operação não ficar parcial (caixa gravado sem estoque).
+   */
+  desfazerLancamento: (lancamentoId: string) => void
   fecharCaixa: (data: string) => Fechamento
   reabrirCaixa: (data: string, motivo: string) => void
   /** Propaga renomeações de cadastro para os lançamentos existentes */
@@ -117,6 +124,7 @@ const VAZIO: CaixaContexto = {
     throw new Error('useCaixa precisa do CaixaProvider.')
   },
   estornar: () => {},
+  desfazerLancamento: () => {},
   fecharCaixa: () => {
     throw new Error('useCaixa precisa do CaixaProvider.')
   },
@@ -443,6 +451,16 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [bloquearSeFechado],
   )
 
+  /**
+   * Compensação: quando um passo posterior à gravação falha (baixa de
+   * estoque no PDV/venda, status na agenda), desfaz o lançamento criado —
+   * a operação inteira volta ao estado anterior em vez de ficar parcial.
+   */
+  const desfazerLancamento = useCallback((lancamentoId: string): void => {
+    if (!lancamentoId) return
+    setLancamentos((atual) => atual.filter((l) => l.id !== lancamentoId))
+  }, [])
+
   const registrarReceitaClube = useCallback(
     (input: NovaReceitaClubeInput): Lancamento => {
       if (!input.descricao.trim()) throw new Error('Informe a descrição.')
@@ -580,12 +598,17 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [fechamentos],
   )
 
+  // Propagação compara por chave normalizada (mesma regra do dedupe do
+  // cadastro): dado legado com caixa/acentos diferentes não engancha.
   const renomearProfissional = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setLancamentos((atual) =>
       atual.map((l) =>
-        l.profissional === antigo ? { ...l, profissional: destino } : l,
+        normalizarTexto(l.profissional ?? '') === chave
+          ? { ...l, profissional: destino }
+          : l,
       ),
     )
   }, [])
@@ -593,9 +616,10 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
   const renomearServico = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setLancamentos((atual) =>
       atual.map((l) =>
-        l.servico === antigo ? { ...l, servico: destino } : l,
+        normalizarTexto(l.servico ?? '') === chave ? { ...l, servico: destino } : l,
       ),
     )
   }, [])
@@ -603,9 +627,10 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
   const renomearCliente = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setLancamentos((atual) =>
       atual.map((l) =>
-        l.cliente === antigo ? { ...l, cliente: destino } : l,
+        normalizarTexto(l.cliente ?? '') === chave ? { ...l, cliente: destino } : l,
       ),
     )
   }, [])
@@ -616,17 +641,20 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
   const renomearProduto = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setLancamentos((atual) =>
       atual.map((l) => {
-        const mudouProduto = l.produto === antigo
-        const mudouItens = l.itens?.some((i) => i.produto === antigo) ?? false
+        const mudouProduto = normalizarTexto(l.produto ?? '') === chave
+        const mudouItens = l.itens?.some((i) => normalizarTexto(i.produto) === chave) ?? false
         if (!mudouProduto && !mudouItens) return l
         return {
           ...l,
           produto: mudouProduto ? destino : l.produto,
           itens: mudouItens
             ? l.itens?.map((i) =>
-                i.produto === antigo ? { ...i, produto: destino } : i,
+                normalizarTexto(i.produto) === chave
+                  ? { ...i, produto: destino }
+                  : i,
               )
             : l.itens,
         }
@@ -647,6 +675,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       registrarPagamento,
       venderProduto,
       registrarVenda,
+      desfazerLancamento,
       registrarReceitaClube,
       adicionarDespesa,
       estornar,
@@ -669,6 +698,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       registrarPagamento,
       venderProduto,
       registrarVenda,
+      desfazerLancamento,
       registrarReceitaClube,
       adicionarDespesa,
       estornar,

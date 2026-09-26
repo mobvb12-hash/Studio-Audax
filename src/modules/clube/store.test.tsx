@@ -618,3 +618,26 @@ describe('Audax Club — cobrança com lançamento estornado (auditoria F6)', ()
     expect(ctxClube.pagamentos).toHaveLength(1)
   })
 })
+
+describe('Audax Club — renomeação de cliente (normalização)', () => {
+  it('propaga por nome normalizado (dado legado com caixa/acentos)', () => {
+    montar()
+    act(() => {
+      ctxClube.assinar({
+        clienteId: 'cli-1',
+        cliente: 'LUCAS MENDES',
+        plano: 'cabelo_barba',
+        valorMensal: 99.9,
+        dataAssinatura: DIA,
+      })
+    })
+    act(() => {
+      ctxClube.renomearCliente('Lucas Mendes', 'Lucas M. Prado')
+    })
+    expect(ctxClube.assinaturas[0].cliente).toBe('Lucas M. Prado')
+    const salvo = JSON.parse(
+      localStorage.getItem(CHAVE_CLUBE) ?? '{"assinaturas":[]}',
+    ) as { assinaturas: { cliente: string }[] }
+    expect(salvo.assinaturas[0].cliente).toBe('Lucas M. Prado')
+  })
+})

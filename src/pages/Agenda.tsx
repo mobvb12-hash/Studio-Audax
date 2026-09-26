@@ -379,6 +379,14 @@ export default function Agenda({ onNovo }: Props) {
       servicos.find((s) => s.nome === servico)?.duracaoMin ?? 30
   }, [servicos])
 
+  // Agendamentos que a grade não mostra: horário fora do expediente atual
+  // (encaixados antes de uma mudança de configuração, por exemplo).
+  // Somem da visualização — a lista abaixo da grade mantém o dado visível.
+  const foraDaGrade = useMemo(() => {
+    const lista = visual === 'dia' ? doDia : doSemana
+    return lista.filter((ag) => !slots.some((s) => s.hora === ag.horario))
+  }, [visual, doDia, doSemana, slots])
+
   const pendentes = doDia.filter((a) => a.status === 'pendente').length
   const confirmados = doDia.filter((a) => a.status === 'confirmado').length
 
@@ -803,6 +811,36 @@ export default function Agenda({ onNovo }: Props) {
                 Almoço — {expediente.almocoInicio} às {expediente.almocoFim}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {foraDaGrade.length > 0 && (
+        <div
+          className="mt-3 rounded-xl border border-[#E5C9A0] bg-[#FBF3E4] p-3"
+          data-testid="fora-do-expediente"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A6A14]">
+            Fora do expediente atual ({expediente.inicio} às {expediente.fim})
+          </p>
+          <p className="mt-1 text-xs text-[#8A8171]">
+            Estes agendamentos não aparecem na grade porque caem fora do
+            horário configurado. Clique para abrir ou remarcar.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {foraDaGrade.map((ag) => (
+              <button
+                key={ag.id}
+                type="button"
+                onClick={() => setSelecionado(ag)}
+                className={`rounded-lg border px-2.5 py-1.5 text-left text-xs ${estiloStatus(ag.status)}`}
+              >
+                <span className="font-bold">{ag.cliente}</span>
+                <span className="ml-2 opacity-90">
+                  {formatarDataCurta(ag.data)} · {ag.horario} · {ag.profissional}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}

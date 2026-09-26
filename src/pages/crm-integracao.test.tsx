@@ -199,6 +199,26 @@ describe('CRM — detalhe, interações e ações rápidas', () => {
     ).toBeTruthy()
   })
 
+  // Auditoria F18: o modal permanece aberto após salvar a nota — o clique
+  // duplo não pode duplicar a interação.
+  it('duplo clique em "Salvar interação" não duplica a nota', () => {
+    env(<Crm />)
+    semear()
+    fireEvent.click(within(cardDe('Ana Souza')).getByText('Detalhe'))
+    fireEvent.change(screen.getByLabelText('Nova interação'), {
+      target: { value: 'Cliente prefere atendimento pela manhã.' },
+    })
+    fireEvent.click(screen.getByText('Salvar interação'))
+    fireEvent.click(screen.getByText('Salvar interação'))
+
+    expect(ctxCrm.interacoes).toHaveLength(1)
+    expect(
+      screen.getByText('Informe a interação (mínimo 3 letras).'),
+    ).toBeTruthy()
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_CRM) ?? '[]')
+    expect(salvo).toHaveLength(1)
+  })
+
   it('ação rápida Agendar abre o modal de novo agendamento', () => {
     env(<Crm />)
     semear()

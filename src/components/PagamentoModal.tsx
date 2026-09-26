@@ -32,7 +32,12 @@ const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
 export default function PagamentoModal({ agendamento, onFechar }: Props) {
-  const { registrarPagamento, registrarVenda, diaFechado } = useCaixa()
+  const {
+    registrarPagamento,
+    registrarVenda,
+    desfazerLancamento,
+    diaFechado,
+  } = useCaixa()
   const { mudarStatus } = useAgenda()
   const { servicos } = useServicos()
   const { clientes } = useClientes()
@@ -196,9 +201,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       }
     }
     salvandoRef.current = true
-    let pagamentoFeito = false
+    let pagamentoId = ''
+    let vendaId = ''
     try {
-      registrarPagamento({
+      const pagamento = registrarPagamento({
         agendamentoId: agendamento.id,
         data: agendamento.data,
         hora: agendamento.horario,
@@ -212,7 +218,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
         statusAgendamento: agendamento.status,
         observacao,
       })
-      pagamentoFeito = true
+      pagamentoId = pagamento.id
       if (carrinho.length > 0) {
         // Receita de produto separada da receita de atendimento
         const venda = registrarVenda({
@@ -229,18 +235,19 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           clienteId,
           profissional: agendamento.profissional,
         })
+        vendaId = venda.id
         // Baixa de estoque — idempotente por venda, atômica por venda
         saidaPorVenda(venda.id, venda.data, venda.itens ?? [])
       }
       mudarStatus(agendamento.id, 'concluido')
       onFechar()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Não foi possível registrar.'
-      setErro(
-        pagamentoFeito
-          ? `Atendimento recebido, mas os produtos não puderam ser concluídos: ${msg}`
-          : msg,
-      )
+      // Rollback total: desfaz o que já foi gravado (pagamento e/ou venda
+      // de produtos) para a operação não ficar parcial — sem estado em
+      // meio termo, o usuário pode tentar de novo livremente.
+      if (vendaId) desfazerLancamento(vendaId)
+      if (pagamentoId) desfazerLancamento(pagamentoId)
+      setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
     } finally {
       salvandoRef.current = false
     }

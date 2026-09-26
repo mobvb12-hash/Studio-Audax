@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import { useCaixa } from '@/modules/caixa/store'
 import {
   EXPEDIENTE_PADRAO,
@@ -328,6 +329,34 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
     if (entrada.tipo === 'outro' && !motivo) {
       throw new Error('Descreva o motivo do bloqueio.')
     }
+    // Auditoria F18 (duplo clique): bloqueio com os mesmos dados já
+    // cadastrado não entra de novo — o formulário fica aberto para criar
+    // novos períodos, então a proteção é aqui, no dado.
+    const chave = [
+      profissional,
+      entrada.data,
+      entrada.dataFim || '',
+      entrada.inicio,
+      entrada.fim,
+      entrada.tipo,
+      motivo,
+    ].join('|')
+    if (
+      bloqueios.some(
+        (b) =>
+          [
+            b.profissional,
+            b.data,
+            b.dataFim ?? '',
+            b.inicio,
+            b.fim,
+            b.tipo,
+            b.motivo,
+          ].join('|') === chave,
+      )
+    ) {
+      throw new Error('Este bloqueio já foi cadastrado.')
+    }
     const novo: Bloqueio = {
       id: gerarId(),
       profissional,
@@ -345,7 +374,7 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
       ),
     )
     return novo
-  }, [])
+  }, [bloqueios])
 
   const removerBloqueio = useCallback((id: string) => {
     setBloqueios((atual) => atual.filter((b) => b.id !== id))
@@ -355,14 +384,21 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
     (antigo: string, novo: string) => {
       const destino = novo.trim()
       if (!antigo || !destino || antigo === destino) return
+      // Propagação casa por chave normalizada (mesma regra do dedupe do
+      // cadastro): dado legado com caixa/acentos diferentes não engancha.
+      const chave = normalizarTexto(antigo)
       setAgendamentos((atual) =>
         atual.map((ag) =>
-          ag.profissional === antigo ? { ...ag, profissional: destino } : ag,
+          normalizarTexto(ag.profissional) === chave
+            ? { ...ag, profissional: destino }
+            : ag,
         ),
       )
       setBloqueios((atual) =>
         atual.map((b) =>
-          b.profissional === antigo ? { ...b, profissional: destino } : b,
+          normalizarTexto(b.profissional) === chave
+            ? { ...b, profissional: destino }
+            : b,
         ),
       )
     },
@@ -372,9 +408,10 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   const renomearServico = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setAgendamentos((atual) =>
       atual.map((ag) =>
-        ag.servico === antigo ? { ...ag, servico: destino } : ag,
+        normalizarTexto(ag.servico) === chave ? { ...ag, servico: destino } : ag,
       ),
     )
   }, [])
@@ -382,9 +419,10 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   const renomearCliente = useCallback((antigo: string, novo: string) => {
     const destino = novo.trim()
     if (!antigo || !destino || antigo === destino) return
+    const chave = normalizarTexto(antigo)
     setAgendamentos((atual) =>
       atual.map((ag) =>
-        ag.cliente === antigo ? { ...ag, cliente: destino } : ag,
+        normalizarTexto(ag.cliente) === chave ? { ...ag, cliente: destino } : ag,
       ),
     )
   }, [])
