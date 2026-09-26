@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { useCaixa } from '@/modules/caixa/store'
 import {
   EXPEDIENTE_PADRAO,
   duracaoBase,
@@ -96,7 +97,24 @@ function ordenar(lista: Agendamento[]): Agendamento[] {
   )
 }
 
+/**
+ * Consulta o jaPago do CaixaProvider (pagamento não estornado do agendamento).
+ * Na app o AgendaProvider fica dentro do CaixaProvider; quando montado isolado,
+ * sem CaixaProvider por fora, a trava de pagamento fica desligada.
+ */
+function useJaPago(): (agendamentoId: string) => boolean {
+  let jaPago: ((agendamentoId: string) => boolean) | undefined
+  try {
+    const caixa = useCaixa()
+    jaPago = (id) => Boolean(caixa.jaPago(id))
+  } catch {
+    jaPago = undefined
+  }
+  return useCallback((id) => Boolean(jaPago?.(id)), [jaPago])
+}
+
 export function AgendaProvider({ children }: { children: ReactNode }) {
+  const jaPago = useJaPago()
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() =>
     carregarLista<Agendamento>(CHAVE_STORAGE),
   )
@@ -166,16 +184,29 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
 
   const mudarStatus = useCallback(
     (id: string, status: StatusAgendamento) => {
+      if (status === 'cancelado' && jaPago(id)) {
+        throw new Error(
+          'Este agendamento já foi pago. Estorne o pagamento no Caixa antes de cancelar.',
+        )
+      }
       setAgendamentos((atual) =>
         atual.map((ag) => (ag.id === id ? { ...ag, status } : ag)),
       )
     },
-    [],
+    [jaPago],
   )
 
-  const remover = useCallback((id: string) => {
-    setAgendamentos((atual) => atual.filter((ag) => ag.id !== id))
-  }, [])
+  const remover = useCallback(
+    (id: string) => {
+      if (jaPago(id)) {
+        throw new Error(
+          'Este agendamento já foi pago. Estorne o pagamento no Caixa antes de excluir.',
+        )
+      }
+      setAgendamentos((atual) => atual.filter((ag) => ag.id !== id))
+    },
+    [jaPago],
+  )
 
   const remarcar = useCallback(
     (id: string, novo: { data: string; horario: string; profissional: string }) => {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { AgendaProvider, useAgenda } from './store'
 import type { Agendamento } from './types'
 
@@ -523,5 +524,170 @@ describe('Agenda — remarcação', () => {
     fireEvent.click(screen.getByText('remarcar-para-11'))
     expect(screen.getByTestId('saida').textContent).toContain('Conflito:')
     expect(lerExtra().lista.find((a) => a.id === id)?.horario).toBe('10:00')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Trava de agendamento pago (jaPago do CaixaProvider)                */
+/* ------------------------------------------------------------------ */
+
+function TelaPagamento() {
+  const { agendamentos, adicionar, mudarStatus, remover } = useAgenda()
+  const { registrarPagamento, estornar } = useCaixa()
+  const [saida, setSaida] = useState('')
+  const [idLancamento, setIdLancamento] = useState('')
+
+  function tentar(rotulo: string, fn: () => unknown) {
+    try {
+      fn()
+      setSaida(`${rotulo}:ok`)
+    } catch (e) {
+      setSaida(`${rotulo}:${e instanceof Error ? e.message : 'erro'}`)
+    }
+  }
+
+  const ag = agendamentos[0]
+
+  return (
+    <div>
+      <output data-testid="saida">{saida}</output>
+      <output data-testid="lista">{JSON.stringify(agendamentos)}</output>
+      <button
+        type="button"
+        onClick={() =>
+          adicionar({
+            cliente: 'Ana Souza',
+            telefone: '',
+            servico: 'Corte Degradê',
+            profissional: 'Audax',
+            data: DIA,
+            horario: '10:00',
+            observacao: '',
+            duracaoMin: 40,
+          })
+        }
+      >
+        criar
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!ag) return
+          const l = registrarPagamento({
+            agendamentoId: ag.id,
+            data: DIA,
+            hora: ag.horario,
+            cliente: ag.cliente,
+            profissional: ag.profissional,
+            servico: ag.servico,
+            valor: 100,
+            desconto: 0,
+            formaPagamento: 'pix',
+            statusAgendamento: 'concluido',
+          })
+          setIdLancamento(l.id)
+        }}
+      >
+        pagar
+      </button>
+      <button
+        type="button"
+        onClick={() => tentar('estornar', () => estornar(idLancamento))}
+      >
+        estornar
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          tentar('cancelar', () => {
+            if (ag) mudarStatus(ag.id, 'cancelado')
+          })
+        }
+      >
+        cancelar
+      </button>
+      <button
+        type="button"
+        onClick={() => tentar('excluir', () => ag && remover(ag.id))}
+      >
+        excluir
+      </button>
+    </div>
+  )
+}
+
+function montarPagamento() {
+  return render(
+    <CaixaProvider>
+      <AgendaProvider>
+        <TelaPagamento />
+      </AgendaProvider>
+    </CaixaProvider>,
+  )
+}
+
+function lerSaida(): string {
+  return screen.getByTestId('saida').textContent ?? ''
+}
+
+function lerPagamentos(): Agendamento[] {
+  return JSON.parse(screen.getByTestId('lista').textContent ?? '[]')
+}
+
+describe('Agenda — agendamento pago não pode ser cancelado nem excluído', () => {
+  it('pago: cancelar é bloqueado orientando estornar no Caixa', () => {
+    montarPagamento()
+    fireEvent.click(screen.getByText('criar'))
+    fireEvent.click(screen.getByText('pagar'))
+
+    fireEvent.click(screen.getByText('cancelar'))
+    expect(lerSaida()).toContain('Estorne o pagamento no Caixa antes de cancelar')
+    expect(lerPagamentos()[0].status).not.toBe('cancelado')
+
+    // status original preservado
+    expect(lerPagamentos()[0].status).toBe('pendente')
+    expect(JSON.parse(localStorage.getItem(CHAVE) ?? '[]')[0].status).toBe(
+      'pendente',
+    )
+  })
+
+  it('pago: excluir é bloqueado orientando estornar no Caixa', () => {
+    montarPagamento()
+    fireEvent.click(screen.getByText('criar'))
+    fireEvent.click(screen.getByText('pagar'))
+
+    fireEvent.click(screen.getByText('excluir'))
+    expect(lerSaida()).toContain('Estorne o pagamento no Caixa antes de excluir')
+    expect(lerPagamentos()).toHaveLength(1)
+    expect(JSON.parse(localStorage.getItem(CHAVE) ?? '[]')).toHaveLength(1)
+  })
+
+  it('pagamento estornado: cancelar e excluir passam a ser permitidos', () => {
+    montarPagamento()
+    fireEvent.click(screen.getByText('criar'))
+    fireEvent.click(screen.getByText('pagar'))
+    fireEvent.click(screen.getByText('estornar'))
+
+    fireEvent.click(screen.getByText('cancelar'))
+    expect(lerSaida()).toBe('cancelar:ok')
+    expect(lerPagamentos()[0].status).toBe('cancelado')
+
+    fireEvent.click(screen.getByText('excluir'))
+    expect(lerSaida()).toBe('excluir:ok')
+    expect(lerPagamentos()).toHaveLength(0)
+  })
+
+  it('sem pagamento: cancelar e excluir continuam funcionando como antes', () => {
+    montarPagamento()
+    fireEvent.click(screen.getByText('criar'))
+
+    fireEvent.click(screen.getByText('cancelar'))
+    expect(lerSaida()).toBe('cancelar:ok')
+    expect(lerPagamentos()[0].status).toBe('cancelado')
+
+    fireEvent.click(screen.getByText('excluir'))
+    expect(lerSaida()).toBe('excluir:ok')
+    expect(lerPagamentos()).toHaveLength(0)
+    expect(JSON.parse(localStorage.getItem(CHAVE) ?? '[]')).toHaveLength(0)
   })
 })

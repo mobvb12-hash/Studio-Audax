@@ -140,8 +140,8 @@ function App() {
         <ProdutosProvider>
           <EstoqueProvider>
             <ServicosProvider>
-              <AgendaProvider>
-                <CaixaProvider>
+              <CaixaProvider>
+                <AgendaProvider>
                   <ComissoesProvider>
                     <ClubeProvider>
                       <CrmProvider>
@@ -153,8 +153,8 @@ function App() {
                       </CrmProvider>
                     </ClubeProvider>
                   </ComissoesProvider>
-                </CaixaProvider>
-              </AgendaProvider>
+                </AgendaProvider>
+              </CaixaProvider>
             </ServicosProvider>
           </EstoqueProvider>
         </ProdutosProvider>
