@@ -3,6 +3,7 @@ import { hojeISO, somarDias } from '@/modules/agenda/catalogo'
 import type { Agendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { preferenciasPadrao, type Cliente } from '@/modules/clientes/types'
+import type { MensagemWhats } from '@/modules/whatsapp/types'
 import {
   aniversariantesDoMes,
   classificarSegmento,
@@ -11,11 +12,15 @@ import {
   diasEntre,
   diasParaAniversario,
   filtrarPerfis,
+  montarHistorico,
   montarPerfis,
   proximaDataSugerida,
   proximoAgendamento,
+  resumoGrupos,
   resumoSegmentos,
+  segmentosDoGrupo,
 } from './regras'
+import type { Interacao } from './types'
 
 const HOJE = hojeISO()
 
@@ -390,5 +395,155 @@ describe('produtos comprados no perfil', () => {
     expect(
       montarPerfis([cliente('c2', 'Sem Compras')], [], [], HOJE)[0].produtos,
     ).toEqual([])
+  })
+})
+
+describe('montarHistorico — histórico completo do cliente', () => {
+  function interacao(texto: string, extras: Partial<Interacao> = {}): Interacao {
+    return {
+      id: `i-${texto}`,
+      clienteId: 'c-ana',
+      tipo: 'nota',
+      texto,
+      criadoEm: `${somarDias(HOJE, -1)}T10:00:00.000Z`,
+      ...extras,
+    }
+  }
+
+  function mensagem(
+    texto: string,
+    extras: Partial<MensagemWhats> = {},
+  ): MensagemWhats {
+    return {
+      id: `m-${texto}`,
+      clienteId: 'c-ana',
+      cliente: 'Ana Souza',
+      template: 'reativacao',
+      texto,
+      status: 'pendente',
+      origem: 'crm',
+      criadoEm: `${somarDias(HOJE, -2)}T09:00:00.000Z`,
+      ...extras,
+    }
+  }
+
+  it('agrega as quatro fontes em ordem decrescente com títulos prefixados', () => {
+    const ana = cliente('c-ana', 'Ana Souza')
+    const eventos = montarHistorico(ana, {
+      agendamentos: [
+        ag('Ana Souza', -5),
+        ag('Ana Souza', 3, { status: 'pendente' }),
+      ],
+      lancamentos: [lancamento('l-1', 'c-ana', 100)],
+      interacoes: [interacao('Cliente pediu contato.')],
+      mensagens: [mensagem('Mensagem de reativação.')],
+    })
+
+    expect(eventos.map((e) => e.tipo)).toEqual([
+      'agendamento',
+      'pagamento',
+      'interacao',
+      'mensagem',
+      'agendamento',
+    ])
+    expect(eventos[0]).toMatchObject({
+      titulo: 'Agendamento · Corte Degradê · Audax',
+      data: somarDias(HOJE, 3),
+      hora: '10:00',
+      statusAgendamento: 'pendente',
+    })
+    const pagamentos = eventos.filter((e) => e.tipo === 'pagamento')
+    expect(pagamentos[0]).toMatchObject({ valor: 100, estornado: false })
+    expect(
+      eventos.find((e) => e.tipo === 'interacao')?.titulo,
+    ).toBe('Nota · Cliente pediu contato.')
+    expect(
+      eventos.find((e) => e.tipo === 'mensagem')?.titulo,
+    ).toBe('WhatsApp · Reativação · Mensagem de reativação.')
+  })
+
+  it('não vaza dados de outro cliente e marca estorno e despesa', () => {
+    const ana = cliente('c-ana', 'Ana Souza')
+    const eventos = montarHistorico(ana, {
+      agendamentos: [ag('Ana Souza', -1), ag('Bruno Lima', -1)],
+      lancamentos: [
+        lancamento('l-outro', 'c-bruno', 50),
+        {
+          ...lancamento('l-nome', '', 60),
+          clienteId: '',
+          cliente: 'ANA SOUZA',
+          estornado: true,
+        },
+        { ...lancamento('l-despesa', 'c-ana', 10), tipo: 'despesa' },
+      ],
+      interacoes: [
+        interacao('minha nota'),
+        interacao('nota do outro', { clienteId: 'c-bruno' }),
+      ],
+      mensagens: [
+        mensagem('para ana'),
+        mensagem('para bruno', { clienteId: 'c-bruno' }),
+      ],
+    })
+
+    expect(eventos.filter((e) => e.tipo === 'agendamento')).toHaveLength(1)
+    expect(
+      eventos.every((e) => !e.titulo.includes('Bruno Lima')),
+    ).toBe(true)
+    const pagamentos = eventos.filter((e) => e.tipo === 'pagamento')
+    expect(pagamentos).toHaveLength(1)
+    expect(pagamentos[0]).toMatchObject({ valor: 60, estornado: true })
+    expect(eventos.filter((e) => e.tipo === 'interacao')).toHaveLength(1)
+    expect(eventos.filter((e) => e.tipo === 'mensagem')).toHaveLength(1)
+  })
+
+  it('devolve lista vazia quando o cliente não tem eventos', () => {
+    const eventos = montarHistorico(cliente('c-9', 'Sem Eventos'), {
+      agendamentos: [],
+      lancamentos: [],
+      interacoes: [],
+      mensagens: [],
+    })
+    expect(eventos).toEqual([])
+  })
+})
+
+describe('grupos de retorno — ativos, risco e inativos', () => {
+  it('segmentosDoGrupo define quem compõe cada grupo', () => {
+    expect(segmentosDoGrupo('ativos')).toEqual(['ativo', 'recorrente'])
+    expect(segmentosDoGrupo('risco')).toEqual(['sem_retorno'])
+    expect(segmentosDoGrupo('inativos')).toEqual(['inativo'])
+  })
+
+  it('filtrarPerfis aceita grupos e resumoGrupos soma os segmentos', () => {
+    const ana = cliente('c1', 'Ana Souza')
+    const bruno = cliente('c2', 'Bruno Lima')
+    const clara = cliente('c3', 'Clara Dias')
+    const diego = cliente('c4', 'Diego Alves')
+    const ags = [
+      ag('Ana Souza', -10),
+      ag('Ana Souza', -20),
+      ag('Ana Souza', -25),
+      ag('Bruno Lima', -50),
+      ag('Clara Dias', -120),
+    ]
+    const perfis = montarPerfis([ana, bruno, clara, diego], ags, [], HOJE)
+
+    expect(filtrarPerfis(perfis, '', 'ativos').map((p) => p.cliente.nome)).toEqual(
+      ['Ana Souza'],
+    )
+    expect(filtrarPerfis(perfis, '', 'risco').map((p) => p.cliente.nome)).toEqual(
+      ['Bruno Lima'],
+    )
+    expect(
+      filtrarPerfis(perfis, '', 'inativos').map((p) => p.cliente.nome),
+    ).toEqual(['Clara Dias'])
+    // novo (sem visita) não entra em nenhum grupo
+    expect(filtrarPerfis(perfis, '', 'ativos')).toHaveLength(1)
+    expect(resumoGrupos(resumoSegmentos(perfis))).toEqual({
+      ativos: 1,
+      risco: 1,
+      inativos: 1,
+    })
   })
 })

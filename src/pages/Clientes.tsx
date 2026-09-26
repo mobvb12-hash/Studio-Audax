@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
+import CrmClienteModal from '@/components/CrmClienteModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
@@ -61,6 +62,7 @@ export default function Clientes() {
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [historicoDo, setHistoricoDo] = useState<Cliente | null>(null)
+  const [crmDo, setCrmDo] = useState<Cliente | null>(null)
   const [excluindo, setExcluindo] = useState<Cliente | null>(null)
   const [agendarPara, setAgendarPara] = useState<Cliente | null>(null)
   const [bloqueioExclusao, setBloqueioExclusao] = useState<{
@@ -313,6 +315,14 @@ export default function Clientes() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setCrmDo(cliente)}
+                    aria-label={`CRM de ${cliente.nome}`}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  >
+                    CRM
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => abrirEdicao(cliente)}
                     className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
                   >
@@ -358,6 +368,13 @@ export default function Clientes() {
         <ClienteDetalheModal
           cliente={historicoDo}
           onFechar={() => setHistoricoDo(null)}
+        />
+      )}
+
+      {crmDo && (
+        <CrmClienteModal
+          cliente={crmDo}
+          onFechar={() => setCrmDo(null)}
         />
       )}
 

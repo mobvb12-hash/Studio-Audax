@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
 import AutomacoesModal from '@/components/AutomacoesModal'
+import ConfirmarModal from '@/components/ConfirmarModal'
 import CrmClienteModal from '@/components/CrmClienteModal'
 import MarketingModal from '@/components/MarketingModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
-import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import {
+  formatarDataCurta,
+  formatarDataLonga,
+  hojeISO,
+} from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
@@ -13,15 +18,22 @@ import {
   aniversariantesDoMes,
   filtrarPerfis,
   montarPerfis,
+  proximoAgendamento,
+  resumoGrupos,
   resumoSegmentos,
   type FiltroSegmento,
+  type PerfilCliente,
 } from '@/modules/crm/regras'
 import { useCrm } from '@/modules/crm/store'
 import {
+  GRUPOS_ORDEM,
+  GRUPOS_ROTULO,
   SEGMENTOS_ORDEM,
   SEGMENTOS_ROTULO,
 } from '@/modules/crm/types'
 import type { Cliente } from '@/modules/clientes/types'
+import { textoTemplate } from '@/modules/whatsapp/templates'
+import { useWhats } from '@/modules/whatsapp/store'
 import { formatarBRL } from '@/lib/moeda'
 
 function chipClasse(ativa: boolean): string {
@@ -58,11 +70,13 @@ export default function Crm() {
   const { agendamentos } = useAgenda()
   const { lancamentos } = useCaixa()
   const { assinaturaDoCliente } = useClube()
-  const { interacoes } = useCrm()
+  const { interacoes, adicionarInteracao } = useCrm()
+  const { mensagensDoCliente, criar } = useWhats()
   const [busca, setBusca] = useState('')
   const [segmento, setSegmento] = useState<FiltroSegmento>('todos')
   const [detalheDo, setDetalheDo] = useState<Cliente | null>(null)
   const [agendarPara, setAgendarPara] = useState<Cliente | null>(null)
+  const [reativando, setReativando] = useState<PerfilCliente | null>(null)
   const [marketingAberto, setMarketingAberto] = useState(false)
   const [automacoesAberto, setAutomacoesAberto] = useState(false)
 
@@ -75,11 +89,50 @@ export default function Crm() {
     [perfis, busca, segmento],
   )
   const resumo = useMemo(() => resumoSegmentos(perfis), [perfis])
+  const grupos = useMemo(() => resumoGrupos(resumo), [resumo])
   const aniversariantes = useMemo(
     () => aniversariantesDoMes(clientes),
     [clientes],
   )
   const hoje = useMemo(() => hojeISO(), [])
+
+  /** Mensagem de reativação já preparada (nunca duplica). */
+  function mensagemReativacaoPronta(clienteId: string): boolean {
+    return mensagensDoCliente(clienteId).some((m) => m.template === 'reativacao')
+  }
+
+  /**
+   * Ação de reativação: registra a interação no histórico do CRM e
+   * prepara a mensagem de reativação como PENDENTE (nada é enviado).
+   */
+  function executarReativacao(perfil: PerfilCliente) {
+    const { cliente } = perfil
+    const textoMensagem =
+      perfil.ultimoAtendimento && !mensagemReativacaoPronta(cliente.id)
+        ? textoTemplate('reativacao', {
+            nome: cliente.nome,
+            ultimoAtendimento: perfil.ultimoAtendimento,
+            diasSemAtendimento: perfil.diasDesdeUltimo ?? 0,
+          })
+        : null
+    adicionarInteracao({
+      clienteId: cliente.id,
+      tipo: 'reativacao',
+      texto:
+        perfil.diasDesdeUltimo !== null
+          ? `Reativação registrada — última visita há ${perfil.diasDesdeUltimo} dia(s).`
+          : 'Reativação registrada — cliente sem visita registrada.',
+    })
+    if (textoMensagem) {
+      criar({
+        clienteId: cliente.id,
+        cliente: cliente.nome,
+        template: 'reativacao',
+        texto: textoMensagem,
+        origem: 'crm',
+      })
+    }
+  }
 
   const kpis = [
     ...SEGMENTOS_ORDEM.map((seg) => ({
@@ -146,6 +199,16 @@ export default function Crm() {
           >
             Todos
           </button>
+          {GRUPOS_ORDEM.map((grupo) => (
+            <button
+              key={grupo}
+              type="button"
+              onClick={() => setSegmento(grupo)}
+              className={chipClasse(segmento === grupo)}
+            >
+              {GRUPOS_ROTULO[grupo]} ({grupos[grupo]})
+            </button>
+          ))}
           {SEGMENTOS_ORDEM.map((seg) => (
             <button
               key={seg}
@@ -187,6 +250,12 @@ export default function Crm() {
             const vigente = assinatura
               ? assinaturaVigente(assinatura, hoje)
               : false
+            const futuro = proximoAgendamento(agendamentos, cliente.nome, hoje)
+            const jaReativado = interacoes.some(
+              (i) => i.clienteId === cliente.id && i.tipo === 'reativacao',
+            )
+            const alvoDeReativacao =
+              perfil.segmento === 'sem_retorno' || perfil.segmento === 'inativo'
             return (
               <li
                 key={cliente.id}
@@ -206,13 +275,16 @@ export default function Crm() {
                   </p>
                   <p className="mt-0.5 truncate text-[13px] text-[#4A4436]">
                     {perfil.ultimoAtendimento
-                      ? `Último: ${formatarDataLonga(perfil.ultimoAtendimento)} · `
+                      ? `Última: ${formatarDataLonga(perfil.ultimoAtendimento)} · `
                       : 'Nunca atendido · '}
                     {perfil.frequenciaDias
                       ? `frequência ~${perfil.frequenciaDias} dia(s)`
                       : 'sem frequência definida'}
                     {perfil.profissionalPreferido
                       ? ` · prefere ${perfil.profissionalPreferido}`
+                      : ''}
+                    {futuro
+                      ? ` · próxima ${formatarDataCurta(futuro.data)} às ${futuro.horario}`
                       : ''}
                   </p>
                 </div>
@@ -224,6 +296,11 @@ export default function Crm() {
                   >
                     {SEGMENTOS_ROTULO[perfil.segmento]}
                   </span>
+                  {jaReativado && (
+                    <span className="rounded-full border border-orange-300 bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-800">
+                      Reativação registrada
+                    </span>
+                  )}
                   {cliente.nascimento &&
                     cliente.nascimento.slice(5, 7) === hoje.slice(5, 7) && (
                       <span className="rounded-full border border-pink-300 bg-pink-50 px-2.5 py-1 text-xs font-semibold text-pink-700">
@@ -259,6 +336,16 @@ export default function Crm() {
                   ))}
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                  {alvoDeReativacao && (
+                    <button
+                      type="button"
+                      aria-label={`Reativar ${cliente.nome}`}
+                      onClick={() => setReativando(perfil)}
+                      className="rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100"
+                    >
+                      Reativar
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setAgendarPara(cliente)}
@@ -299,6 +386,24 @@ export default function Crm() {
         <NovoAgendamentoModal
           clienteInicial={agendarPara.nome}
           onFechar={() => setAgendarPara(null)}
+        />
+      )}
+
+      {reativando && (
+        <ConfirmarModal
+          titulo="Reativar cliente"
+          texto={`Registra a ação de reativação de ${reativando.cliente.nome} no histórico do CRM${
+            reativando.ultimoAtendimento &&
+            !mensagemReativacaoPronta(reativando.cliente.id)
+              ? ' e prepara uma mensagem de reativação pendente (nada é enviado agora)'
+              : ''
+          }.`}
+          rotuloConfirmar="Reativar"
+          onConfirmar={() => {
+            executarReativacao(reativando)
+            setReativando(null)
+          }}
+          onFechar={() => setReativando(null)}
         />
       )}
     </div>

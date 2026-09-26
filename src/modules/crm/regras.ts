@@ -3,11 +3,22 @@
 // Nenhum dado é duplicado: tudo é calculado a partir de Clientes, Agenda
 // e Caixa que já existem no sistema.
 import { hojeISO, somarDias } from '@/modules/agenda/catalogo'
-import type { Agendamento } from '@/modules/agenda/types'
+import type { Agendamento, StatusAgendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { gastosPorCliente, normalizarBusca } from '@/modules/clientes/regras'
 import type { Cliente } from '@/modules/clientes/types'
-import type { SegmentoCliente } from './types'
+import {
+  TEMPLATES_ROTULO,
+  type MensagemWhats,
+  type StatusMensagem,
+} from '@/modules/whatsapp/types'
+import {
+  ehGrupoRetorno,
+  TIPOS_INTERACAO_ROTULO,
+  type GrupoRetorno,
+  type Interacao,
+  type SegmentoCliente,
+} from './types'
 
 /** Último atendimento há até N dias = cliente ainda ativo */
 export const DIAS_ATIVO = 30
@@ -195,9 +206,27 @@ export function montarPerfis(
   })
 }
 
-export type FiltroSegmento = SegmentoCliente | 'todos'
+export type FiltroSegmento = SegmentoCliente | GrupoRetorno | 'todos'
 
-/** Busca por nome/telefone/e-mail + filtro de segmento da lista do CRM. */
+/** Segmentos que compõem cada grupo de retorno. */
+export function segmentosDoGrupo(grupo: GrupoRetorno): SegmentoCliente[] {
+  if (grupo === 'ativos') return ['ativo', 'recorrente']
+  if (grupo === 'risco') return ['sem_retorno']
+  return ['inativo']
+}
+
+/** Contagem por grupo de retorno (ativos, risco de retorno, inativos). */
+export function resumoGrupos(
+  resumo: ResumoSegmentos,
+): Record<GrupoRetorno, number> {
+  return {
+    ativos: resumo.ativo + resumo.recorrente,
+    risco: resumo.sem_retorno,
+    inativos: resumo.inativo,
+  }
+}
+
+/** Busca por nome/telefone/e-mail + filtro de segmento ou grupo da lista do CRM. */
 export function filtrarPerfis(
   perfis: PerfilCliente[],
   busca: string,
@@ -205,8 +234,13 @@ export function filtrarPerfis(
 ): PerfilCliente[] {
   const termo = normalizarBusca(busca)
   const digitos = busca.replace(/\D/g, '')
+  const doGrupo = ehGrupoRetorno(segmento) ? segmentosDoGrupo(segmento) : null
   return perfis.filter((perfil) => {
-    if (segmento !== 'todos' && perfil.segmento !== segmento) return false
+    if (segmento !== 'todos') {
+      if (doGrupo) {
+        if (!doGrupo.includes(perfil.segmento)) return false
+      } else if (perfil.segmento !== segmento) return false
+    }
     if (!termo && !digitos) return true
     const { cliente } = perfil
     if (termo && normalizarBusca(cliente.nome).includes(termo)) return true
@@ -295,4 +329,118 @@ export function aniversariantesDoMes(
         a.nascimento.slice(8, 10).localeCompare(b.nascimento.slice(8, 10)) ||
         a.nome.localeCompare(b.nome, 'pt-BR'),
     )
+}
+
+// ---------------------------------------------------------------------------
+// Histórico completo — linha do tempo única do cliente (derivada, sem cópia)
+
+export type TipoEventoHistorico =
+  | 'agendamento'
+  | 'pagamento'
+  | 'interacao'
+  | 'mensagem'
+
+export const TIPOS_EVENTO_ROTULO: Record<TipoEventoHistorico, string> = {
+  agendamento: 'Atendimento',
+  pagamento: 'Pagamento',
+  interacao: 'Interação',
+  mensagem: 'WhatsApp',
+}
+
+export type EventoHistorico = {
+  id: string
+  tipo: TipoEventoHistorico
+  /** YYYY-MM-DD */
+  data: string
+  /** HH:MM (quando conhecido; '' caso contrário) */
+  hora: string
+  /** Título prefixado pela origem do evento */
+  titulo: string
+  /** Valor recebido (pagamentos) */
+  valor?: number
+  estornado?: boolean
+  statusAgendamento?: StatusAgendamento
+  statusMensagem?: StatusMensagem
+}
+
+export type EntradaHistorico = {
+  agendamentos: Agendamento[]
+  lancamentos: Lancamento[]
+  interacoes: Interacao[]
+  mensagens: MensagemWhats[]
+}
+
+/**
+ * Linha do tempo completa do cliente: visitas (agenda), pagamentos (caixa),
+ * interações (CRM) e mensagens (WhatsApp) em uma única lista do mais
+ * recente para o mais antigo. Derivada das fontes oficiais — nada é
+ * duplicado em armazenamento.
+ */
+export function montarHistorico(
+  cliente: Cliente,
+  entrada: EntradaHistorico,
+): EventoHistorico[] {
+  const chave = normalizarBusca(cliente.nome)
+  const eventos: EventoHistorico[] = []
+
+  for (const ag of entrada.agendamentos) {
+    if (normalizarBusca(ag.cliente) !== chave) continue
+    eventos.push({
+      id: `agendamento-${ag.id}`,
+      tipo: 'agendamento',
+      data: ag.data,
+      hora: ag.horario,
+      titulo: `Agendamento · ${ag.servico} · ${ag.profissional}`,
+      statusAgendamento: ag.status,
+    })
+  }
+
+  for (const l of entrada.lancamentos) {
+    if (l.tipo === 'despesa') continue
+    const dono = l.clienteId
+      ? l.clienteId === cliente.id
+      : l.cliente
+        ? normalizarBusca(l.cliente) === chave
+        : false
+    if (!dono) continue
+    eventos.push({
+      id: `pagamento-${l.id}`,
+      tipo: 'pagamento',
+      data: l.data,
+      hora: l.hora,
+      titulo: `Pagamento · ${l.descricao}`,
+      valor: l.valorLiquido,
+      estornado: Boolean(l.estornado),
+    })
+  }
+
+  for (const i of entrada.interacoes) {
+    if (i.clienteId !== cliente.id) continue
+    eventos.push({
+      id: `interacao-${i.id}`,
+      tipo: 'interacao',
+      data: i.criadoEm.slice(0, 10),
+      hora: i.criadoEm.slice(11, 16),
+      titulo: `${TIPOS_INTERACAO_ROTULO[i.tipo]} · ${i.texto}`,
+    })
+  }
+
+  for (const m of entrada.mensagens) {
+    if (m.clienteId !== cliente.id) continue
+    eventos.push({
+      id: `mensagem-${m.id}`,
+      tipo: 'mensagem',
+      data: m.criadoEm.slice(0, 10),
+      hora: m.criadoEm.slice(11, 16),
+      titulo: `WhatsApp · ${TEMPLATES_ROTULO[m.template]} · ${m.texto}`,
+      statusMensagem: m.status,
+    })
+  }
+
+  return eventos.sort((a, b) => {
+    const ka = `${a.data} ${a.hora}`
+    const kb = `${b.data} ${b.hora}`
+    if (ka !== kb) return kb.localeCompare(ka)
+    return b.id.localeCompare(a.id)
+  })
 }

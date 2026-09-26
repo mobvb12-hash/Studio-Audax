@@ -361,3 +361,22 @@ describe('Clientes — exclusão segura (CRM e WhatsApp vinculados)', () => {
     expect(screen.getByText('Excluir cliente')).toBeTruthy()
   })
 })
+
+describe('Clientes — atalho CRM do cliente', () => {
+  it('botão CRM abre o detalhe com histórico e interações e fecha', () => {
+    montar()
+    criarCliente('Ana Souza', '(11) 97777-6666')
+
+    fireEvent.click(screen.getByRole('button', { name: 'CRM de Ana Souza' }))
+
+    expect(screen.getByRole('heading', { name: 'Ana Souza' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Histórico completo' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Interações e notas' })).toBeTruthy()
+    expect(screen.getByText('Nenhum evento no histórico deste cliente.')).toBeTruthy()
+    expect(screen.getByText('0 evento(s)')).toBeTruthy()
+
+    fireEvent.click(screen.getByLabelText('Fechar'))
+    expect(screen.queryByRole('heading', { name: 'Ana Souza' })).toBeNull()
+    expect(screen.getByText('Ana Souza')).toBeTruthy()
+  })
+})

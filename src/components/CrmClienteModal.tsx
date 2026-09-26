@@ -7,10 +7,16 @@ import {
   hojeISO,
 } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
-import type { Agendamento } from '@/modules/agenda/types'
+import type { Agendamento, StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClube } from '@/modules/clube/store'
-import { montarPerfis, proximaDataSugerida, proximoAgendamento } from '@/modules/crm/regras'
+import {
+  montarHistorico,
+  montarPerfis,
+  proximaDataSugerida,
+  proximoAgendamento,
+  type EventoHistorico,
+} from '@/modules/crm/regras'
 import { useCrm } from '@/modules/crm/store'
 import { personalizarTexto } from '@/modules/ia/regras'
 import {
@@ -57,6 +63,42 @@ function corStatus(status: MensagemWhats['status']): string {
   if (status === 'falhou')
     return 'border-red-300 bg-red-50 text-red-700'
   return 'border-amber-300 bg-amber-100 text-amber-900'
+}
+
+const STATUS_AGENDAMENTO_ROTULO: Record<StatusAgendamento, string> = {
+  pendente: 'Pendente',
+  confirmado: 'Confirmado',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado',
+  nao_compareceu: 'Não compareceu',
+}
+
+function corStatusAgendamento(status: StatusAgendamento): string {
+  if (status === 'concluido' || status === 'confirmado')
+    return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
+  if (status === 'cancelado') return 'border-red-200 bg-red-50 text-red-600'
+  if (status === 'nao_compareceu')
+    return 'border-slate-300 bg-slate-100 text-slate-700'
+  return 'border-amber-300 bg-amber-100 text-amber-900'
+}
+
+/** Badge à direita de cada evento do histórico completo. */
+function badgeEvento(
+  evento: EventoHistorico,
+): { rotulo: string; classe: string } | null {
+  if (evento.estornado)
+    return { rotulo: 'Estornada', classe: 'border-red-200 bg-red-50 text-red-600' }
+  if (evento.statusAgendamento)
+    return {
+      rotulo: STATUS_AGENDAMENTO_ROTULO[evento.statusAgendamento],
+      classe: corStatusAgendamento(evento.statusAgendamento),
+    }
+  if (evento.statusMensagem)
+    return {
+      rotulo: STATUS_ROTULO[evento.statusMensagem],
+      classe: corStatus(evento.statusMensagem),
+    }
+  return null
 }
 
 function formatarISO(iso: string): string {
@@ -114,6 +156,16 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
   const futuro = useMemo(
     () => proximoAgendamento(agendamentos, cliente.nome, hoje),
     [agendamentos, cliente.nome, hoje],
+  )
+  const historico = useMemo(
+    () =>
+      montarHistorico(cliente, {
+        agendamentos,
+        lancamentos,
+        interacoes,
+        mensagens,
+      }),
+    [cliente, agendamentos, lancamentos, interacoes, mensagens],
   )
   const ultimoConcluido = useMemo(() => {
     const meus = agendamentos
@@ -317,7 +369,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
         </div>
 
         {/* Resumo do comportamento (derivado de agenda/caixa — sem cópia de dados) */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
             <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
               Último atendimento
@@ -326,6 +378,16 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
               {perfil.ultimoAtendimento
                 ? formatarDataLonga(perfil.ultimoAtendimento)
                 : 'Nunca'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
+            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+              Próxima visita
+            </p>
+            <p className="mt-1 text-sm font-bold text-[#1C1A15]">
+              {futuro
+                ? `${formatarDataLonga(futuro.data)} · ${futuro.horario}`
+                : 'Sem agendamento'}
             </p>
           </div>
           <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
@@ -390,6 +452,58 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
             ))}
           </div>
         )}
+
+        {/* Histórico completo — linha do tempo única (derivada das fontes) */}
+        <div className="mt-5 border-t border-[#E5DCC3] pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-[#1C1A15]">
+              Histórico completo
+            </h3>
+            <span className="text-[11px] text-[#8A8171]">
+              {historico.length} evento(s)
+            </span>
+          </div>
+          {historico.length === 0 ? (
+            <div className="mt-2 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
+              Nenhum evento no histórico deste cliente.
+            </div>
+          ) : (
+            <ul className="mt-2 divide-y divide-[#EFE7D3] rounded-lg border border-[#E5DCC3] bg-white px-3">
+              {historico.map((evento) => {
+                const badge = badgeEvento(evento)
+                return (
+                  <li
+                    key={evento.id}
+                    className="flex items-start justify-between gap-2 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-[#8A8171]">
+                        {formatarDataLonga(evento.data)} · {evento.hora}
+                      </p>
+                      <p className="mt-0.5 text-sm text-[#4A4436]">
+                        {evento.titulo}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {evento.valor !== undefined && (
+                        <span className="text-xs font-semibold text-[#8A6A14]">
+                          {formatarBRL(evento.valor)}
+                        </span>
+                      )}
+                      {badge && (
+                        <span
+                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badge.classe}`}
+                        >
+                          {badge.rotulo}
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button

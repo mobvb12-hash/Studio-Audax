@@ -110,4 +110,23 @@ describe('CRM store — interações', () => {
     expect(lista[0].criadoEm).toBeTruthy()
     expect(ctx.interacoes[0].texto).toBe('Nota antiga')
   })
+
+  it('aceita a ação de reativação como interação e persiste junto ao histórico', () => {
+    montar()
+    act(() => {
+      ctx.adicionarInteracao({
+        clienteId: 'c-1',
+        tipo: 'reativacao',
+        texto: 'Reativação registrada — última visita há 45 dia(s).',
+      })
+    })
+    expect(ctx.interacoes[0].tipo).toBe('reativacao')
+    const salvo = lerLista()
+    expect(salvo).toHaveLength(1)
+    expect(salvo[0].tipo).toBe('reativacao')
+    // recarregar (F5) preserva a ação no histórico
+    ctx = undefined as unknown as ReturnType<typeof useCrm>
+    montar()
+    expect(ctx.interacoes[0].tipo).toBe('reativacao')
+  })
 })

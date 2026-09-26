@@ -454,3 +454,170 @@ describe('CRM — assistente de texto da IA no WhatsApp', () => {
     expect(nada).toHaveLength(0)
   })
 })
+
+describe('CRM — próxima visita e histórico completo', () => {
+  it('exibe a próxima visita no card e no detalhe do cliente', async () => {
+    env(<Crm />)
+    semear()
+
+    expect(
+      within(cardDe('Ana Souza')).getByText(/próxima \d{2}\/\d{2} às 14:00/),
+    ).toBeTruthy()
+    expect(
+      within(cardDe('Bruno Lima')).queryByText(/próxima/),
+    ).toBeNull()
+
+    fireEvent.click(within(cardDe('Ana Souza')).getByText('Detalhe'))
+    const kpiAna = screen.getByText('Próxima visita').parentElement as HTMLElement
+    expect(within(kpiAna).getByText(/· 14:00/)).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Fechar'))
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Ana Souza' })).toBeNull(),
+    )
+
+    fireEvent.click(within(cardDe('Bruno Lima')).getByText('Detalhe'))
+    const kpiBruno = screen
+      .getByText('Próxima visita')
+      .parentElement as HTMLElement
+    expect(within(kpiBruno).getByText('Sem agendamento')).toBeTruthy()
+  })
+
+  it('histórico completo agrega visitas, pagamentos, interações e mensagens', () => {
+    localStorage.setItem(
+      'studio-audax:caixa:lancamentos:v1',
+      JSON.stringify([
+        {
+          id: 'l-hist-1',
+          tipo: 'receita',
+          origem: 'atendimento',
+          data: HOJE,
+          hora: '11:00',
+          descricao: 'Corte Degradê - Ana Souza',
+          valor: 80,
+          desconto: 0,
+          valorLiquido: 80,
+          formaPagamento: 'pix',
+          cliente: 'Ana Souza',
+          criadoEm: '2026-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+    env(<Crm />)
+    semear()
+    const idAna = ctxClientes.clientes.find((c) => c.nome === 'Ana Souza')!.id
+    act(() => {
+      ctxCrm.adicionarInteracao({
+        clienteId: idAna,
+        tipo: 'nota',
+        texto: 'Cliente quer lembrete por WhatsApp.',
+      })
+      ctxWhats.criar({
+        clienteId: idAna,
+        cliente: 'Ana Souza',
+        template: 'reativacao',
+        texto: 'Oi Ana, sentimos sua falta!',
+        origem: 'crm',
+      })
+    })
+
+    fireEvent.click(within(cardDe('Ana Souza')).getByText('Detalhe'))
+    expect(
+      screen.getByRole('heading', { name: 'Histórico completo' }),
+    ).toBeTruthy()
+    // 5 agendamentos + 1 pagamento + 1 interação + 1 mensagem
+    expect(screen.getByText('8 evento(s)')).toBeTruthy()
+    expect(
+      screen.getAllByText('Agendamento · Corte Degradê · Audax'),
+    ).toHaveLength(3)
+    expect(screen.getAllByText('Agendamento · Barba · Audax')).toHaveLength(2)
+    expect(
+      screen.getByText('Pagamento · Corte Degradê - Ana Souza'),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('Nota · Cliente quer lembrete por WhatsApp.'),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('WhatsApp · Reativação · Oi Ana, sentimos sua falta!'),
+    ).toBeTruthy()
+    // a nota pura continua única na seção de interações (sem duplicar texto)
+    expect(
+      screen.getAllByText('Cliente quer lembrete por WhatsApp.'),
+    ).toHaveLength(1)
+  })
+})
+
+describe('CRM — grupos de retorno (ativos, risco e inativos)', () => {
+  it('chips com contagem filtram a lista por grupo', () => {
+    env(<Crm />)
+    semear()
+
+    expect(screen.getByRole('button', { name: 'Ativos (1)' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Em risco de retorno (1)' }),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Inativos (0)' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ativos (1)' }))
+    expect(screen.getByText('Ana Souza')).toBeTruthy()
+    expect(screen.queryByText('Bruno Lima')).toBeNull()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Em risco de retorno (1)' }),
+    )
+    expect(screen.getByText('Bruno Lima')).toBeTruthy()
+    expect(screen.queryByText('Ana Souza')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inativos (0)' }))
+    expect(screen.queryByText('Ana Souza')).toBeNull()
+    expect(screen.queryByText('Bruno Lima')).toBeNull()
+    expect(screen.getByText('Nenhum cliente neste segmento.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+    expect(screen.getByText('Ana Souza')).toBeTruthy()
+    expect(screen.getByText('Bruno Lima')).toBeTruthy()
+  })
+})
+
+describe('CRM — ação de reativação', () => {
+  it('registra a interação, prepara mensagem pendente e não duplica', () => {
+    env(<Crm />)
+    semear()
+    const idBruno = ctxClientes.clientes.find(
+      (c) => c.nome === 'Bruno Lima',
+    )!.id
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar Bruno Lima' }))
+    expect(
+      screen.getByRole('heading', { name: 'Reativar cliente' }),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar' }))
+
+    expect(ctxCrm.interacoes).toHaveLength(1)
+    expect(ctxCrm.interacoes[0]).toMatchObject({
+      tipo: 'reativacao',
+      clienteId: idBruno,
+    })
+    const mensagens: { template: string; status: string }[] = JSON.parse(
+      localStorage.getItem(CHAVE_WHATS) ?? '[]',
+    )
+    expect(mensagens).toHaveLength(1)
+    expect(mensagens[0]).toMatchObject({
+      template: 'reativacao',
+      status: 'pendente',
+    })
+    expect(
+      within(cardDe('Bruno Lima')).getByText('Reativação registrada'),
+    ).toBeTruthy()
+    expect(screen.getByText(/1 interação\(ões\)/)).toBeTruthy()
+
+    // segunda ação: nova entrada no histórico, sem duplicar a mensagem
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar Bruno Lima' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar' }))
+    expect(ctxCrm.interacoes).toHaveLength(2)
+    const depois: unknown[] = JSON.parse(
+      localStorage.getItem(CHAVE_WHATS) ?? '[]',
+    )
+    expect(depois).toHaveLength(1)
+    expect(screen.getByText(/2 interação\(ões\)/)).toBeTruthy()
+  })
+})
