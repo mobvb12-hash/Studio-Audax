@@ -1,3 +1,10 @@
+// Acesso ao Supabase — perfis (usuário do painel).
+//
+// Ausência de Supabase (VITE_SUPABASE_URL / ANON_KEY vazias) mantém o app
+// 100% local: a leitura devolve null e nada é gravado — não é erro.
+// Falha de escrita NÃO é silenciosa: `criarPerfil` lança com a mensagem do
+// Supabase, para que a tela possa avisar em vez de tratar a criação do perfil
+// como concluída — mesmo padrão de clientes, profissionais e serviços.
 import { supabase } from '@/lib/supabase'
 
 export type PapelPerfil = 'admin' | 'recepcao' | 'profissional'
@@ -32,6 +39,11 @@ function paraPerfil(linha: {
   }
 }
 
+/** Erro de escrita com a mensagem do Supabase (ou um texto utilizável). */
+function erroDeEscrita(mensagem: string | undefined): Error {
+  return new Error(mensagem || 'Falha ao gravar o perfil no Supabase.')
+}
+
 export async function obterPerfil(userId: string): Promise<Perfil | null> {
   const cliente = supabase()
   if (!cliente) return null
@@ -57,7 +69,8 @@ export async function criarPerfil(
     .insert({ user_id: userId, nome, email, papel })
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita(undefined)
   return paraPerfil(data)
 }
 
