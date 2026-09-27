@@ -1,17 +1,16 @@
 import { useRef, useState } from 'react'
-import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import { hojeISO } from '@/modules/agenda/catalogo'
+import HistoricoVendas from '@/modules/caixa/components/HistoricoVendas'
+import ResumoPagamento from '@/modules/caixa/components/ResumoPagamento'
+import SelecaoCarrinho, {
+  type ItemCarrinho,
+} from '@/modules/caixa/components/SelecaoCarrinho'
 import { useCaixa } from '@/modules/caixa/store'
-import {
-  FORMAS_PAGAMENTO,
-  FORMAS_ROTULO,
-  type FormaPagamento,
-} from '@/modules/caixa/types'
+import { type FormaPagamento } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useComissoes } from '@/modules/comissoes/store'
 import {
   assinaturaVigente,
-  statusAssinatura,
-  STATUS_ROTULO,
   valorDescontoAssinante,
 } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
@@ -20,22 +19,9 @@ import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL, parseMoeda } from '@/lib/moeda'
-import {
-  CAMPO_FORM as campo,
-  ROTULO_FORM as rotulo,
-  chipClasse,
-} from '@/lib/apresentacao'
+import { chipClasse } from '@/lib/apresentacao'
 
 type AbaPdv = 'venda' | 'historico'
-
-type ItemCarrinho = {
-  produtoId: string
-  produto: string
-  quantidade: number
-  preco: number
-  /** estoque disponível no momento em que o item entrou no carrinho */
-  estoque: number
-}
 
 export default function PDV() {
   const { lancamentos, registrarVenda, desfazerLancamento, diaFechado } =
@@ -294,371 +280,49 @@ export default function PDV() {
           )}
 
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Seleção de produto + carrinho */}
-            <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-              <h2 className="text-[15px] font-bold text-[#1C1A15]">
-                Produtos
-              </h2>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="flex-1">
-                  <label className={rotulo} htmlFor="pdv-produto">
-                    Produto *
-                  </label>
-                  <select
-                    id="pdv-produto"
-                    className={campo}
-                    value={produtoSel}
-                    onChange={(e) => setProdutoSel(e.target.value)}
-                  >
-                    <option value="">Selecione um produto...</option>
-                    {produtosVendaveis.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome} · {formatarBRL(p.preco)} · estoque {p.estoque}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="sm:w-24">
-                  <label className={rotulo} htmlFor="pdv-qtd">
-                    Quantidade *
-                  </label>
-                  <input
-                    id="pdv-qtd"
-                    className={campo}
-                    inputMode="numeric"
-                    value={qtdTexto}
-                    onChange={(e) => setQtdTexto(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={adicionarAoCarrinho}
-                  className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-                >
-                  Adicionar ao carrinho
-                </button>
-              </div>
-
-              <h3 className="mt-5 text-[13px] font-bold text-[#1C1A15]">
-                Carrinho
-              </h3>
-              {carrinho.length === 0 ? (
-                <div className="mt-2 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
-                  Carrinho vazio.
-                </div>
-              ) : (
-                <div className="mt-2 overflow-x-auto">
-                  <table className="w-full min-w-[420px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                        <th className="px-2 py-2 font-semibold">Produto</th>
-                        <th className="px-2 py-2 text-right font-semibold">
-                          Qtd
-                        </th>
-                        <th className="px-2 py-2 text-right font-semibold">
-                          Estoque
-                        </th>
-                        <th className="px-2 py-2 text-right font-semibold">
-                          Unitário
-                        </th>
-                        <th className="px-2 py-2 text-right font-semibold">
-                          Total
-                        </th>
-                        <th className="px-2 py-2" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#EFE7D3]">
-                      {carrinho.map((i) => (
-                        <tr key={i.produtoId}>
-                          <td className="px-2 py-2 font-medium text-[#1C1A15]">
-                            {i.produto}
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                aria-label={`Diminuir ${i.produto}`}
-                                onClick={() => alterarQuantidade(i.produtoId, -1)}
-                                className="h-6 w-6 rounded border border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]"
-                              >
-                                −
-                              </button>
-                              <input
-                                aria-label={`Quantidade de ${i.produto}`}
-                                className="w-12 rounded border border-[#E5DCC3] bg-white px-1 py-0.5 text-right text-sm outline-none focus:border-[#8A6A14]"
-                                inputMode="numeric"
-                                value={i.quantidade}
-                                onChange={(e) =>
-                                  definirQuantidade(i.produtoId, e.target.value)
-                                }
-                              />
-                              <button
-                                type="button"
-                                aria-label={`Aumentar ${i.produto}`}
-                                onClick={() => alterarQuantidade(i.produtoId, 1)}
-                                className="h-6 w-6 rounded border border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </td>
-                          <td className="px-2 py-2 text-right text-[#8A8171]">
-                            {i.estoque}
-                          </td>
-                          <td className="px-2 py-2 text-right text-[#4A4436]">
-                            {formatarBRL(i.preco)}
-                          </td>
-                          <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
-                            {formatarBRL(i.quantidade * i.preco)}
-                          </td>
-                          <td className="px-2 py-2 text-right">
-                            <button
-                              type="button"
-                              aria-label={`Remover ${i.produto}`}
-                              onClick={() => removerItem(i.produtoId)}
-                              className="rounded px-1.5 text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            {/* Resumo e pagamento */}
-            <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-              <h2 className="text-[15px] font-bold text-[#1C1A15]">
-                Pagamento
-              </h2>
-
-              <div className="mt-4 divide-y divide-[#EFE7D3]">
-                <div className="flex items-center justify-between py-2 text-sm">
-                  <span className="text-[#4A4436]">Subtotal</span>
-                  <span className="font-semibold text-[#1C1A15]">
-                    {formatarBRL(subtotal)}
-                  </span>
-                </div>
-                {descontoAssinante > 0 && (
-                  <div className="flex items-center justify-between py-2 text-sm">
-                    <span className="text-[#4A4436]">
-                      Desconto assinante Audax Club (10%)
-                    </span>
-                    <span className="font-semibold text-[#6B8E5A]">
-                      − {formatarBRL(descontoAssinante)}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <label className="text-[#4A4436]" htmlFor="pdv-desconto">
-                    Desconto (R$)
-                  </label>
-                  <input
-                    id="pdv-desconto"
-                    className="w-28 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-right text-sm outline-none focus:border-[#8A6A14]"
-                    inputMode="decimal"
-                    value={descontoTexto}
-                    onChange={(e) => {
-                      setDescontoTexto(e.target.value)
-                      setSucesso('')
-                    }}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-2 text-sm">
-                  <span className="font-bold text-[#1C1A15]">
-                    Total da venda
-                  </span>
-                  <span className="text-lg leading-none font-bold text-[#8A6A14]">
-                    {formatarBRL(total)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3">
-                <div>
-                  <label className={rotulo} htmlFor="pdv-cliente">
-                    Cliente (opcional)
-                  </label>
-                  <select
-                    id="pdv-cliente"
-                    className={campo}
-                    value={clienteId}
-                    onChange={(e) => setClienteId(e.target.value)}
-                  >
-                    <option value="">Sem cliente</option>
-                    {clientes
-                      .filter((c) => c.ativo)
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nome}
-                        </option>
-                      ))}
-                  </select>
-                  {assinatura && assinanteVigente && (
-                    <p className="mt-1.5 text-xs font-medium text-[#3F6B33]">
-                      ✓ Assinante {STATUS_ROTULO[statusAssinatura(assinatura, hoje)]}{' '}
-                      — desconto de 10% aplicado.
-                    </p>
-                  )}
-                  {assinatura && !assinanteVigente && (
-                    <p className="mt-1.5 text-xs font-medium text-orange-700">
-                      Assinatura {STATUS_ROTULO[statusAssinatura(assinatura, hoje)].toLowerCase()}{' '}
-                      — sem desconto de assinante.
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className={rotulo} htmlFor="pdv-profissional">
-                    Profissional (opcional)
-                  </label>
-                  <select
-                    id="pdv-profissional"
-                    className={campo}
-                    value={profissional}
-                    onChange={(e) => setProfissional(e.target.value)}
-                  >
-                    <option value="">— Venda na loja —</option>
-                    {profissionaisAtivos.map((p) => (
-                      <option key={p.id} value={p.nome}>
-                        {p.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={rotulo} htmlFor="pdv-forma">
-                    Forma de pagamento *
-                  </label>
-                  <select
-                    id="pdv-forma"
-                    className={campo}
-                    value={forma}
-                    onChange={(e) =>
-                      setForma(e.target.value as FormaPagamento | '')
-                    }
-                  >
-                    <option value="">Selecione...</option>
-                    {FORMAS_PAGAMENTO.map((f) => (
-                      <option key={f} value={f}>
-                        {FORMAS_ROTULO[f]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {erro && (
-                <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
-                  {erro}
-                </p>
-              )}
-              {sucesso && (
-                <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
-                  {sucesso}
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={finalizar}
-                disabled={caixaFechado || carrinho.length === 0}
-                className="mt-4 w-full rounded-lg bg-[#8A6A14] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:bg-[#C9BC94]"
-              >
-                Finalizar venda
-              </button>
-            </section>
+            <SelecaoCarrinho
+              produtos={produtosVendaveis}
+              produtoSel={produtoSel}
+              aoProduto={setProdutoSel}
+              qtdTexto={qtdTexto}
+              aoQtd={setQtdTexto}
+              carrinho={carrinho}
+              aoAdicionar={adicionarAoCarrinho}
+              aoDefinirQuantidade={definirQuantidade}
+              aoAlterarQuantidade={alterarQuantidade}
+              aoRemover={removerItem}
+            />
+            <ResumoPagamento
+              subtotal={subtotal}
+              descontoAssinante={descontoAssinante}
+              descontoTexto={descontoTexto}
+              aoDesconto={(texto) => {
+                setDescontoTexto(texto)
+                setSucesso('')
+              }}
+              total={total}
+              clientes={clientes}
+              clienteId={clienteId}
+              aoCliente={setClienteId}
+              assinatura={assinatura}
+              assinanteVigente={assinanteVigente}
+              hoje={hoje}
+              profissionais={profissionaisAtivos}
+              profissional={profissional}
+              aoProfissional={setProfissional}
+              forma={forma}
+              aoForma={setForma}
+              erro={erro}
+              sucesso={sucesso}
+              caixaFechado={caixaFechado}
+              temItens={carrinho.length > 0}
+              aoFinalizar={finalizar}
+            />
           </div>
         </>
       )}
 
-      {aba === 'historico' && (
-        <section className="mt-4 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-          <h2 className="text-[15px] font-bold text-[#1C1A15]">
-            Histórico de vendas
-          </h2>
-          {vendas.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-8 text-center text-sm text-[#A99E85]">
-              Nenhuma venda registrada.
-            </div>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                    <th className="px-3 py-2 font-semibold">Data</th>
-                    <th className="px-3 py-2 font-semibold">Cliente</th>
-                    <th className="px-3 py-2 font-semibold">Profissional</th>
-                    <th className="px-3 py-2 font-semibold">Produtos</th>
-                    <th className="px-3 py-2 text-right font-semibold">Qtd</th>
-                    <th className="px-3 py-2 text-right font-semibold">
-                      Subtotal
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold">
-                      Desconto
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold">
-                      Total
-                    </th>
-                    <th className="px-3 py-2 font-semibold">Pagamento</th>
-                    <th className="px-3 py-2 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EFE7D3]">
-                  {vendas.map((v) => (
-                    <tr key={v.id}>
-                      <td className="px-3 py-2 text-[#4A4436]">
-                        {formatarDataLonga(v.data)} · {v.hora}
-                      </td>
-                      <td className="px-3 py-2 text-[#1C1A15]">
-                        {v.cliente || '—'}
-                      </td>
-                      <td className="px-3 py-2 text-[#1C1A15]">
-                        {v.profissional || '—'}
-                      </td>
-                      <td className="px-3 py-2 text-[#4A4436]">
-                        {v.itens
-                          ? v.itens
-                              .map((i) => `${i.quantidade}× ${i.produto}`)
-                              .join(', ')
-                          : v.descricao}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {v.quantidade ?? 0}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {formatarBRL(v.valor)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {formatarBRL(v.desconto)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
-                        {formatarBRL(v.valorLiquido)}
-                      </td>
-                      <td className="px-3 py-2 text-[#4A4436]">
-                        {FORMAS_ROTULO[v.formaPagamento]}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
-                            v.estornado
-                              ? 'border-red-200 bg-red-50 text-red-600'
-                              : 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-                          }`}
-                        >
-                          {v.estornado ? 'Estornado' : 'Concluída'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
+      {aba === 'historico' && <HistoricoVendas vendas={vendas} />}
     </div>
   )
 }

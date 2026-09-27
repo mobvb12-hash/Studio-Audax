@@ -2,70 +2,15 @@ import { useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import DespesaFormModal from '@/components/DespesaFormModal'
 import FechamentoCaixaModal from '@/components/FechamentoCaixaModal'
-import { Cartao, Vazio } from '@/components/PainelUi'
+import { Cartao, CelulaKpi, Vazio } from '@/components/PainelUi'
 import VendaProdutoModal from '@/components/VendaProdutoModal'
 import { formatarDataLonga, hojeISO, somarDias } from '@/modules/agenda/catalogo'
+import CartaoLancamentos from '@/modules/caixa/components/CartaoLancamentos'
 import { useCaixa } from '@/modules/caixa/store'
 import type { Lancamento } from '@/modules/caixa/types'
 import { FORMAS_ROTULO } from '@/modules/caixa/types'
 import { useEstoque } from '@/modules/estoque/store'
 import { formatarBRL } from '@/lib/moeda'
-
-function formatarHora(iso: string): string {
-  const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function LinhaLancamento({
-  l,
-  podeEstornar,
-  onEstornar,
-}: {
-  l: Lancamento
-  podeEstornar: boolean
-  onEstornar: (l: Lancamento) => void
-}) {
-  const despesa = l.tipo === 'despesa'
-  return (
-    <li
-      className={`flex items-center justify-between gap-3 py-2.5 ${l.estornado ? 'opacity-50' : ''}`}
-    >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-[#1C1A15]">
-          {despesa ? '' : `${formatarHora(l.criadoEm)} · `}
-          {l.descricao}
-          {l.profissional && (
-            <span className="text-[#8A8171]"> · {l.profissional}</span>
-          )}
-        </p>
-        <p className="text-xs text-[#8A8171]">
-          {FORMAS_ROTULO[l.formaPagamento]}
-          {despesa && l.categoria && ` · ${l.categoria}`}
-          {l.desconto > 0 && ` · desconto ${formatarBRL(l.desconto)}`}
-          {l.estornado && ' · estornado'}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span
-          className={`text-sm font-semibold ${
-            despesa ? 'text-red-700' : 'text-[#8A6A14]'
-          }`}
-        >
-          {despesa ? '−' : '+'} {formatarBRL(l.valorLiquido)}
-        </span>
-        {podeEstornar && !l.estornado && (
-          <button
-            type="button"
-            onClick={() => onEstornar(l)}
-            className="rounded-lg px-2 py-1 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-          >
-            Estornar
-          </button>
-        )}
-      </div>
-    </li>
-  )
-}
 
 export default function Caixa() {
   const {
@@ -206,62 +151,35 @@ export default function Caixa() {
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
         <div className="flex min-w-[640px] divide-x divide-[#E5DCC3]">
           {kpis.map((kpi) => (
-            <div key={kpi.rotulo} className="min-w-[150px] flex-1 px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-                {kpi.rotulo}
-              </p>
-              <p
-                className={`mt-1.5 text-[22px] leading-none font-bold ${
-                  'verde' in kpi && kpi.verde
-                    ? 'text-[#6B8E5A]'
-                    : 'text-[#8A6A14]'
-                }`}
-              >
-                {kpi.valor}
-              </p>
-            </div>
+            <CelulaKpi
+              key={kpi.rotulo}
+              rotulo={kpi.rotulo}
+              valor={kpi.valor}
+              destaque={'verde' in kpi && kpi.verde}
+            />
           ))}
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-4">
-          <Cartao
+          <CartaoLancamentos
             titulo="Recebimentos do dia"
             contador={`${receitas.filter((l) => !l.estornado).length} registro(s)`}
-          >
-            {receitas.length === 0 ? (
-              <Vazio texto="Nenhum recebimento neste dia." />
-            ) : (
-              <ul className="divide-y divide-[#EFE7D3]">
-                {receitas.map((l) => (
-                  <LinhaLancamento
-                    key={l.id}
-                    l={l}
-                    podeEstornar={!fechado}
-                    onEstornar={setEstornando}
-                  />
-                ))}
-              </ul>
-            )}
-          </Cartao>
+            lancamentos={receitas}
+            textoVazio="Nenhum recebimento neste dia."
+            podeEstornar={!fechado}
+            aoEstornar={setEstornando}
+          />
 
-          <Cartao titulo="Despesas do dia" contador={`${despesas.length} registro(s)`}>
-            {despesas.length === 0 ? (
-              <Vazio texto="Nenhuma despesa neste dia." />
-            ) : (
-              <ul className="divide-y divide-[#EFE7D3]">
-                {despesas.map((l) => (
-                  <LinhaLancamento
-                    key={l.id}
-                    l={l}
-                    podeEstornar={!fechado}
-                    onEstornar={setEstornando}
-                  />
-                ))}
-              </ul>
-            )}
-          </Cartao>
+          <CartaoLancamentos
+            titulo="Despesas do dia"
+            contador={`${despesas.length} registro(s)`}
+            lancamentos={despesas}
+            textoVazio="Nenhuma despesa neste dia."
+            podeEstornar={!fechado}
+            aoEstornar={setEstornando}
+          />
         </div>
 
         <div className="flex flex-col gap-4">
