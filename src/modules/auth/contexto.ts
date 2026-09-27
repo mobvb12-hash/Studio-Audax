@@ -1,5 +1,6 @@
 import { createContext } from 'react'
 import type { EstadoAuth } from './AuthProvider'
+import type { PerfilInfo } from './tipos'
 
 export type ContextoAuth = {
   estado: EstadoAuth
@@ -9,6 +10,8 @@ export type ContextoAuth = {
   entrando: boolean
   entrar: (email: string, senha: string) => Promise<boolean>
   sair: () => Promise<void>
+  /** Perfil do usuário autenticado (null = sem perfil ou não autenticado). */
+  perfil: PerfilInfo | null
 }
 
 export const ContextoAuth = createContext<ContextoAuth | null>(null)

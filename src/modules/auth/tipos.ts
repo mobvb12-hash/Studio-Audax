@@ -23,3 +23,15 @@ export type ClienteAuth = {
   entrar(email: string, senha: string): Promise<SessaoInfo>
   sair(): Promise<void>
 }
+
+export type PapelPerfil = 'admin' | 'recepcao' | 'profissional'
+
+export type PerfilInfo = {
+  id: string
+  userId: string
+  nome: string
+  email: string
+  papel: PapelPerfil
+  ativo: boolean
+  criadoEm: string
+}

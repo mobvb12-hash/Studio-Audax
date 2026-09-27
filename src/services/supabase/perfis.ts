@@ -1,0 +1,75 @@
+import { supabase } from '@/lib/supabase'
+
+export type PapelPerfil = 'admin' | 'recepcao' | 'profissional'
+
+export type Perfil = {
+  id: string
+  userId: string
+  nome: string
+  email: string
+  papel: PapelPerfil
+  ativo: boolean
+  criadoEm: string
+}
+
+function paraPerfil(linha: {
+  id: string
+  user_id: string
+  nome: string
+  email: string
+  papel: string
+  ativo: boolean
+  criado_em: string
+}): Perfil {
+  return {
+    id: linha.id,
+    userId: linha.user_id,
+    nome: linha.nome,
+    email: linha.email,
+    papel: linha.papel as PapelPerfil,
+    ativo: linha.ativo,
+    criadoEm: linha.criado_em,
+  }
+}
+
+export async function obterPerfil(userId: string): Promise<Perfil | null> {
+  const cliente = supabase()
+  if (!cliente) return null
+  const { data, error } = await cliente
+    .from('perfis')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error || !data) return null
+  return paraPerfil(data)
+}
+
+export async function criarPerfil(
+  userId: string,
+  nome: string,
+  email: string,
+  papel: PapelPerfil = 'admin',
+): Promise<Perfil | null> {
+  const cliente = supabase()
+  if (!cliente) return null
+  const { data, error } = await cliente
+    .from('perfis')
+    .insert({ user_id: userId, nome, email, papel })
+    .select()
+    .maybeSingle()
+  if (error || !data) return null
+  return paraPerfil(data)
+}
+
+export async function perfilAtivo(perfil: Perfil | null): Promise<boolean> {
+  return perfil !== null && perfil.ativo
+}
+
+export async function verificarPapel(
+  perfil: Perfil | null,
+  permitidos: PapelPerfil[],
+): Promise<boolean> {
+  if (!perfil) return false
+  if (!(await perfilAtivo(perfil))) return false
+  return permitidos.includes(perfil.papel)
+}

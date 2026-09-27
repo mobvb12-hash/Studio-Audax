@@ -8,7 +8,8 @@ import {
   sessaoExpirada,
 } from './regras'
 import { adaptarSupabase } from './supabaseAdapter'
-import type { ClienteAuth } from './tipos'
+import type { ClienteAuth, PerfilInfo } from './tipos'
+import { obterPerfil } from '@/services/supabase/perfis'
 
 /**
  * Estados do acesso ao painel:
@@ -21,7 +22,7 @@ export type EstadoAuth =
   | { status: 'desabilitado' }
   | { status: 'carregando' }
   | { status: 'deslogado'; aviso: string }
-  | { status: 'autenticado'; email: string }
+  | { status: 'autenticado'; email: string; perfil: PerfilInfo | null }
 
 type PropsAuthProvider = {
   children: ReactNode
@@ -48,6 +49,25 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
   const [erroEntrada, setErroEntrada] = useState('')
   const [entrando, setEntrando] = useState(false)
 
+  const carregarPerfil = useCallback(async () => {
+    const cliente = supabase()
+    if (!cliente) return
+    try {
+      const {
+        data: { user },
+      } = await cliente.auth.getUser()
+      if (!user) return
+      const perfil = await obterPerfil(user.id)
+      setEstado((atual) =>
+        atual.status === 'autenticado'
+          ? { ...atual, perfil }
+          : atual,
+      )
+    } catch {
+      // perfil não encontrado ou erro de rede — segue sem perfil
+    }
+  }, [])
+
   useEffect(() => {
     // `cliente` é estável (injetado uma única vez): o estado inicial já é
     // 'desabilitado' sem cliente e 'carregando' com cliente — nenhum
@@ -64,7 +84,8 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
         } else if (sessaoExpirada(sessao, agoraSegundos())) {
           setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
         } else {
-          setEstado({ status: 'autenticado', email: sessao.email })
+          setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
+          carregarPerfil()
         }
       })
       .catch(() => {
@@ -84,7 +105,8 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
         setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
         return
       }
-      setEstado({ status: 'autenticado', email: sessao.email })
+      setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
+      carregarPerfil()
     })
 
     return () => {
@@ -107,7 +129,8 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
           setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
           return false
         }
-        setEstado({ status: 'autenticado', email: sessao.email })
+        setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
+        carregarPerfil()
         return true
       } catch (erro) {
         setErroEntrada(mensagemErroEntrada(erro))
@@ -131,9 +154,11 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
     setEstado({ status: 'deslogado', aviso: '' })
   }, [cliente])
 
+  const perfil = estado.status === 'autenticado' ? estado.perfil : null
+
   const valor = useMemo(
-    () => ({ estado, erroEntrada, entrando, entrar, sair }),
-    [estado, erroEntrada, entrando, entrar, sair],
+    () => ({ estado, erroEntrada, entrando, entrar, sair, perfil }),
+    [estado, erroEntrada, entrando, entrar, sair, perfil],
   )
 
   return <ContextoAuth.Provider value={valor}>{children}</ContextoAuth.Provider>
