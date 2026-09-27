@@ -1,3 +1,4 @@
+import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
 import { useEffect, useState } from 'react'
 import { useClientes } from '@/modules/clientes/store'
 import type {
@@ -14,12 +15,6 @@ type Props = {
   /** Chamado quando o nome muda, para propagar aos módulos (Agenda/Caixa) */
   aoRenomear?: (antigo: string, novo: string) => void
 }
-
-const campo =
-  'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
-
-const rotulo =
-  'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
 const GENEROS: { valor: ClienteGenero; texto: string }[] = [
   { valor: 'nao_informado', texto: 'Não informado' },

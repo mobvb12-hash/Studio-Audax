@@ -41,3 +41,15 @@ export function iniciais(nome: string): string {
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
 }
+
+/** Classe padrão dos campos de texto dos formulários/modais. */
+export const CAMPO_FORM =
+  'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
+
+/** Classe padrão dos selects de filtro em páginas (sem largura full). */
+export const CAMPO_SELECT =
+  'rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
+
+/** Classe padrão dos rótulos (labels) dos formulários/modais. */
+export const ROTULO_FORM =
+  'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'

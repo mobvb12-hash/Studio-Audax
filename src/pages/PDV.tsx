@@ -20,6 +20,11 @@ import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL, parseMoeda } from '@/lib/moeda'
+import {
+  CAMPO_FORM as campo,
+  ROTULO_FORM as rotulo,
+  chipClasse,
+} from '@/lib/apresentacao'
 
 type AbaPdv = 'venda' | 'historico'
 
@@ -30,20 +35,6 @@ type ItemCarrinho = {
   preco: number
   /** estoque disponível no momento em que o item entrou no carrinho */
   estoque: number
-}
-
-const campo =
-  'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
-
-const rotulo =
-  'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
-
-function abaClasse(ativa: boolean): string {
-  return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-    ativa
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
-  }`
 }
 
 export default function PDV() {
@@ -278,14 +269,14 @@ export default function PDV() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={abaClasse(aba === 'venda')}
+            className={chipClasse(aba === 'venda')}
             onClick={() => setAba('venda')}
           >
             Nova venda
           </button>
           <button
             type="button"
-            className={abaClasse(aba === 'historico')}
+            className={chipClasse(aba === 'historico')}
             onClick={() => setAba('historico')}
           >
             Histórico de vendas

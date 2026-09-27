@@ -1,3 +1,4 @@
+import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
 import { useEffect, useState } from 'react'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { TIPOS_BLOQUEIO_ROTULO, rotuloBloqueio } from '@/modules/agenda/regras'
@@ -8,12 +9,6 @@ import type { TipoBloqueio } from '@/modules/agenda/types'
 type Props = {
   onFechar: () => void
 }
-
-const campo =
-  'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
-
-const rotulo =
-  'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
 
 const TIPOS = Object.keys(TIPOS_BLOQUEIO_ROTULO) as TipoBloqueio[]
 
