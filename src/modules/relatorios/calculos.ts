@@ -15,6 +15,7 @@ import { situacoesAssinaturas, type SituacoesClube } from '@/modules/clube/regra
 import { statusEstoque, type StatusEstoque } from '@/modules/estoque/indicadores'
 import type { Produto } from '@/modules/produtos/types'
 import { arredondar, dentroDoPeriodo } from '@/modules/comissoes/producao'
+import { normalizarTexto } from '@/lib/moeda'
 import type { FechamentoComissao, Periodo } from '@/modules/comissoes/types'
 
 type Fonte = { nome: string; criadoEm: string }
@@ -344,7 +345,7 @@ export function clientesDoPeriodo(
 
   const mapa = new Map<string, ClienteLinha>()
   for (const l of receitas) {
-    const chave = normalizar(l.cliente as string)
+    const chave = normalizarTexto(l.cliente as string)
     if (!chave) continue
     const atual = mapa.get(chave) ?? {
       chave,
@@ -433,19 +434,19 @@ export function produtosDoPeriodo(
         const receita =
           brutoTotal > 0 ? l.valorLiquido * (brutoItem / brutoTotal) : 0
         somar(
-          item.produtoId || normalizar(item.produto),
+          item.produtoId || normalizarTexto(item.produto),
           item.quantidade,
           receita,
         )
       }
     } else {
-      somar(normalizar(l.produto ?? ''), l.quantidade ?? 0, l.valorLiquido)
+      somar(normalizarTexto(l.produto ?? ''), l.quantidade ?? 0, l.valorLiquido)
     }
   }
 
   const linhas = produtos
     .map((p): ProdutoLinha => {
-      const v = mapa.get(p.id) ?? mapa.get(normalizar(p.nome)) ?? { qtd: 0, receita: 0 }
+      const v = mapa.get(p.id) ?? mapa.get(normalizarTexto(p.nome)) ?? { qtd: 0, receita: 0 }
       return {
         id: p.id,
         nome: p.nome,
@@ -590,10 +591,4 @@ export function variacaoPercentual(
   return Math.round(((atual - anterior) / Math.abs(anterior)) * 1000) / 10
 }
 
-function normalizar(texto: string): string {
-  return texto
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-}
+

@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import type { NovoProdutoInput, Produto } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:produtos:v1'
@@ -26,10 +27,6 @@ const Contexto = createContext<ProdutosContexto | null>(null)
 
 function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function normalizar(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
 
 function ordenar(lista: Produto[]): Produto[] {
@@ -110,7 +107,7 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
       const estoque = input.estoque ?? 0
       const minimo = input.estoqueMinimo ?? 0
       validar(nome, preco, custo, estoque, minimo)
-      if (produtos.some((p) => normalizar(p.nome) === normalizar(nome))) {
+      if (produtos.some((p) => normalizarTexto(p.nome) === normalizarTexto(nome))) {
         throw new Error('Já existe um produto com este nome.')
       }
       const agora = new Date().toISOString()
@@ -150,7 +147,7 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
       }
       if (
         produtos.some(
-          (p) => p.id !== id && normalizar(p.nome) === normalizar(nome),
+          (p) => p.id !== id && normalizarTexto(p.nome) === normalizarTexto(nome),
         )
       ) {
         throw new Error('Já existe um produto com este nome.')

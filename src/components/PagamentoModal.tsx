@@ -6,6 +6,7 @@ import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { FormaPagamento } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useEstoque } from '@/modules/estoque/store'
+import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
 import { useServicos } from '@/modules/servicos/store'
 import { formatarBRL, normalizarTexto, parseMoeda } from '@/lib/moeda'
@@ -119,18 +120,15 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       return
     }
     const q = Number(qtdTexto)
-    if (!Number.isInteger(q) || q < 1) {
-      setErro('Quantidade deve ser um número inteiro maior que zero.')
-      return
-    }
     const existente = carrinho.find((i) => i.produtoId === prod.id)
-    const soma = (existente?.quantidade ?? 0) + q
-    if (soma > prod.estoque) {
-      setErro(
-        existente
-          ? `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, no carrinho ${existente.quantidade} + ${q}.`
-          : `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, solicitado ${q}.`,
-      )
+    const erroEstoque = validarQuantidadeEstoque(
+      q,
+      prod.nome,
+      prod.estoque,
+      existente?.quantidade ?? 0,
+    )
+    if (erroEstoque) {
+      setErro(erroEstoque)
       return
     }
     setCarrinho((atual) => {

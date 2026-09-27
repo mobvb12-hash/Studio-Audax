@@ -3,6 +3,7 @@ import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { FormaPagamento } from '@/modules/caixa/types'
 import { useEstoque } from '@/modules/estoque/store'
+import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL, parseMoeda } from '@/lib/moeda'
@@ -65,10 +66,13 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       setErro('Selecione um produto do cadastro.')
       return
     }
-    if (prodSel.estoque < qtdNum) {
-      setErro(
-        `Estoque insuficiente para "${prodSel.nome}": disponível ${prodSel.estoque}, solicitado ${qtdNum}.`,
-      )
+    const erroEstoque = validarQuantidadeEstoque(
+      qtdNum,
+      prodSel.nome,
+      prodSel.estoque,
+    )
+    if (erroEstoque) {
+      setErro(erroEstoque)
       return
     }
     salvandoRef.current = true

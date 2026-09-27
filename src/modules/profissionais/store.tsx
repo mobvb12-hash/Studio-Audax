@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import { PROFISSIONAIS as SEED } from '@/modules/agenda/catalogo'
 import { validarProfissional } from './regras'
 import type { NovoProfissionalInput, Profissional } from './types'
@@ -48,7 +49,7 @@ function normalizar(partial: Partial<Profissional>): Profissional | null {
 }
 
 function nomeChave(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  return normalizarTexto(texto)
 }
 
 /** Id legível gerado para o seed da instalação nova */

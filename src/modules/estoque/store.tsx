@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
+import { normalizarTexto } from '@/lib/moeda'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { useProdutos } from '@/modules/produtos/store'
 import type { Produto } from '@/modules/produtos/types'
@@ -52,10 +53,6 @@ function gerarId(): string {
 function agoraHora(): string {
   const d = new Date()
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function normalizar(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
 
 function inteiroPositivo(valor: number): boolean {
@@ -272,8 +269,8 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         if (por) return por
       }
       if (item.produto) {
-        const chave = normalizar(item.produto)
-        const alvo = produtos.find((p) => normalizar(p.nome) === chave)
+        const chave = normalizarTexto(item.produto)
+        const alvo = produtos.find((p) => normalizarTexto(p.nome) === chave)
         if (alvo) return alvo
       }
       throw new Error(

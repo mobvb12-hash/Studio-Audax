@@ -9,7 +9,7 @@ export type FiltroStatusCliente = 'todos' | 'ativos' | 'inativos'
 
 /** Minúsculas, sem acentos e sem espaços nas pontas. */
 export function normalizarBusca(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  return normalizarTexto(texto)
 }
 
 /**

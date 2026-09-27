@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import { SERVICOS as SEED } from '@/modules/agenda/catalogo'
 import { validarServico } from './regras'
 import type { NovoServicoInput, Servico } from './types'
@@ -31,10 +32,6 @@ function gerarId(): string {
 
 function ordenar(lista: Servico[]): Servico[] {
   return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-}
-
-function normalizar(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
 
 /** Migração: registros antigos ganham categoria vazia e ativo: true. */
@@ -93,7 +90,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
       const categoria = input.categoria?.trim() ?? ''
       const erro = validarServico({ ...input, nome, categoria })
       if (erro) throw new Error(erro)
-      if (servicos.some((s) => normalizar(s.nome) === normalizar(nome))) {
+      if (servicos.some((s) => normalizarTexto(s.nome) === normalizarTexto(nome))) {
         throw new Error('Já existe um serviço com este nome.')
       }
       const agora = new Date().toISOString()
@@ -121,7 +118,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
       if (erro) throw new Error(erro)
       if (
         servicos.some(
-          (s) => s.id !== id && normalizar(s.nome) === normalizar(nome),
+          (s) => s.id !== id && normalizarTexto(s.nome) === normalizarTexto(nome),
         )
       ) {
         throw new Error('Já existe um serviço com este nome.')

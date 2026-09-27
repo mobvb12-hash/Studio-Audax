@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import { normalizarTexto } from '@/lib/moeda'
 import type { Cliente, NovoClienteInput } from './types'
 import { digitosDosTelefones, preferenciasPadrao } from './types'
 
@@ -55,10 +56,6 @@ function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function normalizar(texto: string): string {
-  return texto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
-}
-
 function ordenar(lista: Cliente[]): Cliente[] {
   return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
@@ -93,7 +90,7 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
   const adicionar = useCallback(
     (input: NovoClienteInput) => {
       const nome = input.nome.trim()
-      if (clientes.some((c) => normalizar(c.nome) === normalizar(nome))) {
+      if (clientes.some((c) => normalizarTexto(c.nome) === normalizarTexto(nome))) {
         throw new Error('Já existe um cliente com este nome.')
       }
       if (
@@ -136,7 +133,7 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
       const nome = input.nome.trim()
       if (
         clientes.some(
-          (c) => c.id !== id && normalizar(c.nome) === normalizar(nome),
+          (c) => c.id !== id && normalizarTexto(c.nome) === normalizarTexto(nome),
         )
       ) {
         throw new Error('Já existe um cliente com este nome.')
@@ -206,7 +203,7 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
 
   const porNome = useCallback(
     (nome: string) =>
-      clientes.find((c) => normalizar(c.nome) === normalizar(nome)),
+      clientes.find((c) => normalizarTexto(c.nome) === normalizarTexto(nome)),
     [clientes],
   )
 

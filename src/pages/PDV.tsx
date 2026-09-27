@@ -16,6 +16,7 @@ import {
 } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
 import { useEstoque } from '@/modules/estoque/store'
+import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL, parseMoeda } from '@/lib/moeda'
@@ -119,19 +120,16 @@ export default function PDV() {
       return
     }
     const q = Number(qtdTexto)
-    if (!Number.isInteger(q) || q < 1) {
-      setErro('Quantidade deve ser um número inteiro maior que zero.')
-      return
-    }
     // Validação contra o estoque atual (nunca negativo, nunca acima do disponível)
     const existente = carrinho.find((i) => i.produtoId === prod.id)
-    const soma = (existente?.quantidade ?? 0) + q
-    if (soma > prod.estoque) {
-      setErro(
-        existente
-          ? `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, no carrinho ${existente.quantidade} + ${q}.`
-          : `Estoque insuficiente para "${prod.nome}": disponível ${prod.estoque}, solicitado ${q}.`,
-      )
+    const erroEstoque = validarQuantidadeEstoque(
+      q,
+      prod.nome,
+      prod.estoque,
+      existente?.quantidade ?? 0,
+    )
+    if (erroEstoque) {
+      setErro(erroEstoque)
       return
     }
     setCarrinho((atual) => {
