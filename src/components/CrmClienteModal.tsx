@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatarISO } from '@/lib/apresentacao'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import {
@@ -99,18 +100,6 @@ function badgeEvento(
       classe: corStatus(evento.statusMensagem),
     }
   return null
-}
-
-function formatarISO(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 export default function CrmClienteModal({ cliente, onFechar }: Props) {

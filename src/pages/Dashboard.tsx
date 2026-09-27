@@ -19,6 +19,7 @@ import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { formatarBRL } from '@/lib/moeda'
 import Avatar from '@/components/Avatar'
+import { Cartao, Vazio as CaixaVazia } from '@/components/PainelUi'
 import type { PaginaId } from '@/layouts/AppLayout'
 
 const ACESSOS: { id: PaginaId; rotulo: string }[] = [
@@ -57,34 +58,6 @@ function statusClasse(status: StatusAgendamento): string {
     return 'border-slate-200 bg-slate-50 text-slate-600'
   if (status === 'cancelado') return 'border-red-200 bg-red-50 text-red-600'
   return 'border-[#E5DCC3] bg-[#F3ECDA] text-[#4A4436]'
-}
-
-function Cartao({
-  titulo,
-  contador,
-  children,
-}: {
-  titulo: string
-  contador: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-bold text-[#1C1A15]">{titulo}</h2>
-        <span className="text-sm font-semibold text-[#8A8171]">{contador}</span>
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  )
-}
-
-function CaixaVazia({ texto }: { texto: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
-      {texto}
-    </div>
-  )
 }
 
 export default function Dashboard({

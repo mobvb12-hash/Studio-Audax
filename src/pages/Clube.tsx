@@ -2,6 +2,7 @@
 // Status é sempre derivado do vencimento (nunca armazenado); cancelamento
 // preserva assinatura e pagamentos; pagamento renova o ciclo e entra no Caixa.
 import { useMemo, useState } from 'react'
+import { chipClasse } from '@/lib/apresentacao'
 import AssinaturaDetalheModal from '@/components/AssinaturaDetalheModal'
 import AssinaturaFormModal from '@/components/AssinaturaFormModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
@@ -38,14 +39,6 @@ const ORDEM_STATUS: Record<StatusAssinatura, number> = {
   proxima_vencimento: 2,
   ativa: 3,
   cancelada: 4,
-}
-
-function chipClasse(ativa: boolean): string {
-  return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-    ativa
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
-  }`
 }
 
 export default function Clube() {

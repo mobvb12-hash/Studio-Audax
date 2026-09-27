@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { chipClasse } from '@/lib/apresentacao'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import { formatarDataCurta } from '@/modules/agenda/catalogo'
@@ -25,14 +26,6 @@ import { useServicos } from '@/modules/servicos/store'
 
 const CLASSE_ENTRADA =
   'rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]'
-
-function chipClasse(ativa: boolean): string {
-  return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-    ativa
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
-  }`
-}
 
 function corStatus(status: StatusEspera): string {
   if (status === 'atendido')

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { chipClasse, iniciais } from '@/lib/apresentacao'
 import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
@@ -34,20 +35,6 @@ const FILTROS: { id: FiltroStatusCliente; rotulo: string }[] = [
   { id: 'ativos', rotulo: 'Ativos' },
   { id: 'inativos', rotulo: 'Inativos' },
 ]
-
-function chipClasse(ativa: boolean): string {
-  return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-    ativa
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
-  }`
-}
-
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/)
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
-}
 
 export default function Clientes() {
   const { clientes, remover, alternarAtivo } = useClientes()

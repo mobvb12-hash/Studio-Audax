@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { arquivoParaFoto } from '@/lib/imagem'
+import { iniciais } from '@/lib/apresentacao'
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Profissional } from '@/modules/profissionais/types'
 
@@ -16,13 +17,6 @@ const campo =
 
 const rotulo =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
-
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/)
-  if (!partes[0]) return '??'
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
-}
 
 export default function ProfissionalFormModal({
   profissional,

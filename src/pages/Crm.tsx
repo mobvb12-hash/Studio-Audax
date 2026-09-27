@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { chipClasse, iniciais } from '@/lib/apresentacao'
 import AutomacoesModal from '@/components/AutomacoesModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import CrmClienteModal from '@/components/CrmClienteModal'
@@ -36,14 +37,6 @@ import { textoTemplate } from '@/modules/whatsapp/templates'
 import { useWhats } from '@/modules/whatsapp/store'
 import { formatarBRL } from '@/lib/moeda'
 
-function chipClasse(ativa: boolean): string {
-  return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-    ativa
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
-  }`
-}
-
 function corSegmento(segmento: string): string {
   switch (segmento) {
     case 'novo':
@@ -57,12 +50,6 @@ function corSegmento(segmento: string): string {
     default:
       return 'border-slate-300 bg-slate-100 text-slate-700'
   }
-}
-
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/)
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
 }
 
 export default function Crm() {

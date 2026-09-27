@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatarISO } from '@/lib/apresentacao'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import CrmClienteModal from '@/components/CrmClienteModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
@@ -32,18 +33,6 @@ function corStatus(status: StatusMensagem): string {
     return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
   if (status === 'falhou') return 'border-red-300 bg-red-50 text-red-700'
   return 'border-amber-300 bg-amber-50 text-amber-800'
-}
-
-function formatarISO(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 function norm(s: string): string {

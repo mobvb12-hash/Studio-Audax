@@ -1,3 +1,5 @@
+import { iniciais } from '@/lib/apresentacao'
+
 type Props = {
   nome: string
   foto?: string
@@ -7,13 +9,6 @@ type Props = {
 const TAMANHOS = {
   sm: 'h-7 w-7 text-[11px]',
   md: 'h-11 w-11 text-sm',
-}
-
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/)
-  if (!partes[0]) return '??'
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
 }
 
 /** Avatar com foto do profissional; sem foto, mostra as iniciais. */

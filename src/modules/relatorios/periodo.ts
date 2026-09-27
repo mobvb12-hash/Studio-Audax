@@ -10,6 +10,24 @@ import type { Periodo } from '@/modules/comissoes/types'
 
 export { periodoHoje, periodoMes, periodoSemana, rotuloPeriodo }
 
+/** Tipos de período do filtro único das telas de relatório/financeiro. */
+export type TipoPeriodo =
+  | 'hoje'
+  | 'ontem'
+  | 'semana'
+  | 'mes'
+  | 'mesAnterior'
+  | 'custom'
+
+export const ROTULO_TIPO: Record<TipoPeriodo, string> = {
+  hoje: 'Hoje',
+  ontem: 'Ontem',
+  semana: 'Esta semana',
+  mes: 'Este mês',
+  mesAnterior: 'Mês anterior',
+  custom: 'Personalizado',
+}
+
 function iso(d: Date): string {
   const ano = d.getFullYear()
   const mes = String(d.getMonth() + 1).padStart(2, '0')

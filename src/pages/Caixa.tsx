@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import DespesaFormModal from '@/components/DespesaFormModal'
 import FechamentoCaixaModal from '@/components/FechamentoCaixaModal'
+import { Cartao, Vazio } from '@/components/PainelUi'
 import VendaProdutoModal from '@/components/VendaProdutoModal'
 import { formatarDataLonga, hojeISO, somarDias } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
@@ -13,36 +14,6 @@ import { formatarBRL } from '@/lib/moeda'
 function formatarHora(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function Cartao({
-  titulo,
-  contador,
-  children,
-}: {
-  titulo: string
-  contador?: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-bold text-[#1C1A15]">{titulo}</h2>
-        {contador && (
-          <span className="text-sm font-semibold text-[#8A8171]">{contador}</span>
-        )}
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  )
-}
-
-function Vazio({ texto }: { texto: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
-      {texto}
-    </div>
-  )
 }
 
 function LinhaLancamento({
