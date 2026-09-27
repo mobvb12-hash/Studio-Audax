@@ -101,6 +101,10 @@ export async function removerServico(id: string): Promise<boolean> {
   return !error
 }
 
+/**
+ * Envio das pendências locais: upsert por `id` (mesmo registro é atualizado,
+ * nada é recriado com outro id).
+ */
 export async function importarServicos(lista: Servico[]): Promise<number> {
   const cliente = supabase()
   if (!cliente || lista.length === 0) return 0
@@ -115,6 +119,7 @@ export async function importarServicos(lista: Servico[]): Promise<number> {
       criado_em: s.criadoEm,
       atualizado_em: s.atualizadoEm,
     })),
+    { onConflict: 'id' },
   )
   return error ? 0 : lista.length
 }

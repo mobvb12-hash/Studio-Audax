@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
@@ -19,6 +20,7 @@ import {
   atualizarProfissional,
   alternarAtivoProfissional,
   removerProfissional,
+  importarProfissionais,
 } from '@/services/supabase/profissionais'
 
 const CHAVE_STORAGE = 'studio-audax:profissionais:v1'
@@ -111,6 +113,148 @@ function carregar(): Profissional[] {
   }))
 }
 
+/**
+ * Assinatura do conteúdo (sem timestamps) — diferença de horário de gravação
+ * não é conflito: `profissionais` não tem coluna de edição no Supabase (C3).
+ */
+function assinatura(p: Profissional): string {
+  return JSON.stringify([
+    p.id,
+    p.nome,
+    p.telefone,
+    p.email,
+    p.foto,
+    p.ativo,
+  ])
+}
+
+function carimbo(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+function chavesBackup(prefixo: string): string[] {
+  const chaves: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const chave = localStorage.key(i)
+    if (chave?.startsWith(prefixo)) chaves.push(chave)
+  }
+  return chaves.sort()
+}
+
+/**
+ * Snapshot das versões que serão substituídas, antes de qualquer escrita.
+ * Mantém só as 3 cópias mais recentes; false = não gravou (nada muda).
+ */
+function criarSnapshot(perdedores: Profissional[]): boolean {
+  const chave = `${CHAVE_STORAGE}:backup:${carimbo()}`
+  try {
+    localStorage.setItem(chave, JSON.stringify(perdedores))
+    if (localStorage.getItem(chave) === null) return false
+    const antigas = chavesBackup(`${CHAVE_STORAGE}:backup:`)
+    antigas
+      .slice(0, Math.max(0, antigas.length - 3))
+      .forEach((chaveAntiga) => localStorage.removeItem(chaveAntiga))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Junta a lista oficial (integração) com o que aconteceu na tela durante a
+ * carga: mudança da sessão vence, registro criado no meio da carga não some
+ * e remoção da sessão é respeitada. Em instalação nova o seed do template
+ * não acompanha a lista — só o que a sessão alterou tem esse direito.
+ */
+function fundir(
+  base: Profissional[],
+  atual: Profissional[],
+  alterados: Set<string>,
+  removidos: Set<string>,
+  instalacaoNova: boolean,
+): Profissional[] {
+  const porId = new Map(base.map((p) => [p.id, p]))
+  for (const prof of atual) {
+    if (removidos.has(prof.id)) continue
+    if (alterados.has(prof.id)) {
+      porId.set(prof.id, prof)
+      continue
+    }
+    if (!instalacaoNova && !porId.has(prof.id)) porId.set(prof.id, prof)
+  }
+  for (const id of removidos) porId.delete(id)
+  return ordenar([...porId.values()])
+}
+
+/**
+ * Leitura remota + envio das pendências locais + união por id. Nenhum
+ * cadastro é descartado: o que só existe de um lado entra na lista final.
+ * Em divergência o registro local vence (a sessão é o que está na tela e a
+ * escrita é write-through) e a versão remota substituída fica no snapshot.
+ */
+async function integrarComRemoto(
+  locais: Profissional[],
+  instalacaoNova: boolean,
+): Promise<Profissional[]> {
+  const remotos = await listarProfissionais()
+  // Instalação nova (nenhuma lista local gravada): o seed do template não
+  // é enviado nem entra em conflito — o que já existe no Supabase é a fonte
+  if (instalacaoNova && remotos.length > 0) return ordenar(remotos)
+  const remotoPorId = new Map(remotos.map((p) => [p.id, p]))
+  const basePorId = new Map(remotos.map((p) => [p.id, p]))
+  const enviar: Profissional[] = []
+  const perdedores: Profissional[] = []
+
+  for (const local of locais) {
+    const remoto = remotoPorId.get(local.id)
+    if (!remoto) {
+      basePorId.set(local.id, local)
+      enviar.push(local)
+      continue
+    }
+    if (assinatura(local) === assinatura(remoto)) continue
+    perdedores.push(remoto)
+    basePorId.set(local.id, local)
+    enviar.push(local)
+  }
+
+  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+    // sem snapshot nada é sobrescrito: a versão local segue visível e as
+    // divergências continuam pendentes até a próxima carga
+    const divergentes = new Set(perdedores.map((p) => p.id))
+    for (let i = enviar.length - 1; i >= 0; i--) {
+      if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
+    }
+    console.warn(
+      '[profissionais] snapshot indisponível — divergências mantidas sem envio.',
+    )
+  }
+
+  if (enviar.length > 0) {
+    try {
+      const enviados = await importarProfissionais(enviar)
+      if (enviados < enviar.length) {
+        console.warn(
+          `[profissionais] envio incompleto: ${enviados} de ${enviar.length} registros — as pendências seguem para a próxima carga.`,
+        )
+      }
+    } catch (erro) {
+      console.warn(
+        '[profissionais] falha ao enviar pendências para o Supabase.',
+        erro,
+      )
+    }
+  }
+  return ordenar([...basePorId.values()])
+}
+
+/**
+ * Integração em andamento compartilhada: o StrictMode (React) executa o
+ * efeito duas vezes em desenvolvimento e uma única ida ao Supabase deve
+ * acontecer.
+ */
+let promessaIntegracao: Promise<Profissional[]> | null = null
+
 export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   const [profissionais, setProfissionais] = useState<Profissional[]>(() =>
     carregar(),
@@ -118,28 +262,65 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   const [sincronizado, setSincronizado] = useState(false)
 
   const temSupabase = supabase() !== null
+  // nenhuma lista local gravada nesta máquina = só existe o seed do template
+  const [instalacaoNova] = useState(
+    () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
+  )
+  const alterados = useRef<Set<string>>(new Set())
+  const removidos = useRef<Set<string>>(new Set())
+  const listaLocal = useRef<Profissional[]>(profissionais)
 
+  useEffect(() => {
+    listaLocal.current = profissionais
+  }, [profissionais])
+
+  // Supabase é a fonte oficial, mas a lista local nunca é substituída:
+  // a integração une os dois lados, reenvia as pendências locais e o
+  // resultado é mesclado com o que a tela fez durante a carga.
   useEffect(() => {
     if (!temSupabase) return
     let vivo = true
-    listarProfissionais()
-      .then((lista) => {
-        if (!vivo) return
-        if (lista.length > 0) {
-          setProfissionais(lista)
+    if (!promessaIntegracao) {
+      promessaIntegracao = integrarComRemoto(listaLocal.current, instalacaoNova)
+    }
+    promessaIntegracao
+      .then((base) => {
+        if (vivo) {
+          setProfissionais((atual) =>
+            fundir(
+              base,
+              atual,
+              alterados.current,
+              removidos.current,
+              instalacaoNova,
+            ),
+          )
         }
-        setSincronizado(true)
       })
-      .catch(() => {
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o fallback local intacto
+        if (vivo) {
+          console.warn(
+            '[profissionais] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaIntegracao = null
         if (vivo) setSincronizado(true)
       })
     return () => {
       vivo = false
     }
-  }, [temSupabase])
+  }, [temSupabase, instalacaoNova])
 
+  // Grava local quando está sem Supabase, quando já integrou ou quando
+  // existe alteração feita nesta sessão (nada que o usuário fez se perde).
   useEffect(() => {
-    if (temSupabase && !sincronizado) return
+    const temPendencia =
+      alterados.current.size > 0 || removidos.current.size > 0
+    if (temSupabase && !sincronizado && !temPendencia) return
     salvarJSON(CHAVE_STORAGE, profissionais)
   }, [profissionais, temSupabase, sincronizado])
 
@@ -166,6 +347,7 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         ativo: true,
         criadoEm: new Date().toISOString(),
       }
+      alterados.current.add(novo.id)
       setProfissionais((atual) => ordenar([...atual, novo]))
       if (temSupabase) {
         try {
@@ -195,6 +377,7 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
       ) {
         throw new Error('Já existe um profissional com este nome.')
       }
+      alterados.current.add(id)
       setProfissionais((atual) =>
         ordenar(
           atual.map((p) =>
@@ -227,6 +410,7 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
       const alvo = profissionais.find((p) => p.id === id)
       if (!alvo) return
       const novoAtivo = !alvo.ativo
+      alterados.current.add(id)
       setProfissionais((atual) =>
         atual.map((p) => (p.id === id ? { ...p, ativo: novoAtivo } : p)),
       )
@@ -243,6 +427,8 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
 
   const remover = useCallback(
     async (id: string) => {
+      removidos.current.add(id)
+      alterados.current.delete(id)
       setProfissionais((atual) => atual.filter((p) => p.id !== id))
       if (temSupabase) {
         try {

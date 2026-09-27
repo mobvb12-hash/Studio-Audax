@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
@@ -19,6 +20,7 @@ import {
   atualizarServico,
   alternarAtivoServico,
   removerServico,
+  importarServicos,
 } from '@/services/supabase/servicos'
 
 const CHAVE_STORAGE = 'studio-audax:servicos:v1'
@@ -85,33 +87,218 @@ function carregar(): Servico[] {
   )
 }
 
+/**
+ * Assinatura do conteúdo (sem timestamps) — diferença de horário de
+ * gravação não é conflito; o desempate é feito por `atualizadoEm`.
+ */
+function assinatura(s: Servico): string {
+  return JSON.stringify([
+    s.id,
+    s.nome,
+    s.preco,
+    s.duracaoMin,
+    s.categoria,
+    s.ativo,
+  ])
+}
+
+function carimbo(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+function chavesBackup(prefixo: string): string[] {
+  const chaves: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const chave = localStorage.key(i)
+    if (chave?.startsWith(prefixo)) chaves.push(chave)
+  }
+  return chaves.sort()
+}
+
+/**
+ * Snapshot das versões que serão substituídas, antes de qualquer escrita.
+ * Mantém só as 3 cópias mais recentes; false = não gravou (nada muda).
+ */
+function criarSnapshot(perdedores: Servico[]): boolean {
+  const chave = `${CHAVE_STORAGE}:backup:${carimbo()}`
+  try {
+    localStorage.setItem(chave, JSON.stringify(perdedores))
+    if (localStorage.getItem(chave) === null) return false
+    const antigas = chavesBackup(`${CHAVE_STORAGE}:backup:`)
+    antigas
+      .slice(0, Math.max(0, antigas.length - 3))
+      .forEach((chaveAntiga) => localStorage.removeItem(chaveAntiga))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Junta a lista oficial (integração) com o que aconteceu na tela durante a
+ * carga: mudança da sessão vence, registro criado no meio da carga não some
+ * e remoção da sessão é respeitada. Em instalação nova o seed do template
+ * não acompanha a lista — só o que a sessão alterou tem esse direito.
+ */
+function fundir(
+  base: Servico[],
+  atual: Servico[],
+  alterados: Set<string>,
+  removidos: Set<string>,
+  instalacaoNova: boolean,
+): Servico[] {
+  const porId = new Map(base.map((s) => [s.id, s]))
+  for (const servico of atual) {
+    if (removidos.has(servico.id)) continue
+    if (alterados.has(servico.id)) {
+      porId.set(servico.id, servico)
+      continue
+    }
+    if (!instalacaoNova && !porId.has(servico.id)) porId.set(servico.id, servico)
+  }
+  for (const id of removidos) porId.delete(id)
+  return ordenar([...porId.values()])
+}
+
+/**
+ * Leitura remota + envio das pendências locais + união por id. Nenhum
+ * cadastro é descartado: o que só existe de um lado entra na lista final.
+ * Em divergência vence o registro mais recente por `atualizadoEm` (mesma
+ * regra da migração de Clientes) e o perdedor fica no snapshot.
+ */
+async function integrarComRemoto(
+  locais: Servico[],
+  instalacaoNova: boolean,
+): Promise<Servico[]> {
+  const remotos = await listarServicos()
+  // Instalação nova (nenhuma lista local gravada): o seed do template não
+  // é enviado nem entra em conflito — o que já existe no Supabase é a fonte
+  if (instalacaoNova && remotos.length > 0) return ordenar(remotos)
+  const remotoPorId = new Map(remotos.map((s) => [s.id, s]))
+  const basePorId = new Map(remotos.map((s) => [s.id, s]))
+  const enviar: Servico[] = []
+  const perdedores: Servico[] = []
+
+  for (const local of locais) {
+    const remoto = remotoPorId.get(local.id)
+    if (!remoto) {
+      basePorId.set(local.id, local)
+      enviar.push(local)
+      continue
+    }
+    if (assinatura(local) === assinatura(remoto)) continue
+    if ((local.atualizadoEm || '') > (remoto.atualizadoEm || '')) {
+      perdedores.push(remoto)
+      basePorId.set(local.id, local)
+      enviar.push(local)
+    } else {
+      // remoto mais recente: mantém a versão oficial, a local fica no snapshot
+      perdedores.push(local)
+      basePorId.set(local.id, remoto)
+    }
+  }
+
+  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+    // sem snapshot nada é sobrescrito: a versão local segue visível e as
+    // divergências continuam pendentes até a próxima carga
+    const divergentes = new Set(perdedores.map((s) => s.id))
+    for (const local of locais) {
+      if (divergentes.has(local.id)) basePorId.set(local.id, local)
+    }
+    for (let i = enviar.length - 1; i >= 0; i--) {
+      if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
+    }
+    console.warn(
+      '[servicos] snapshot indisponível — divergências mantidas sem envio.',
+    )
+  }
+
+  if (enviar.length > 0) {
+    try {
+      const enviados = await importarServicos(enviar)
+      if (enviados < enviar.length) {
+        console.warn(
+          `[servicos] envio incompleto: ${enviados} de ${enviar.length} registros — as pendências seguem para a próxima carga.`,
+        )
+      }
+    } catch (erro) {
+      console.warn('[servicos] falha ao enviar pendências para o Supabase.', erro)
+    }
+  }
+  return ordenar([...basePorId.values()])
+}
+
+/**
+ * Integração em andamento compartilhada: o StrictMode (React) executa o
+ * efeito duas vezes em desenvolvimento e uma única ida ao Supabase deve
+ * acontecer.
+ */
+let promessaIntegracao: Promise<Servico[]> | null = null
+
 export function ServicosProvider({ children }: { children: ReactNode }) {
   const [servicos, setServicos] = useState<Servico[]>(() => carregar())
   const [sincronizado, setSincronizado] = useState(false)
 
   const temSupabase = supabase() !== null
+  // nenhuma lista local gravada nesta máquina = só existe o seed do template
+  const [instalacaoNova] = useState(
+    () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
+  )
+  const alterados = useRef<Set<string>>(new Set())
+  const removidos = useRef<Set<string>>(new Set())
+  const listaLocal = useRef<Servico[]>(servicos)
 
+  useEffect(() => {
+    listaLocal.current = servicos
+  }, [servicos])
+
+  // Supabase é a fonte oficial, mas a lista local nunca é substituída:
+  // a integração une os dois lados, reenvia as pendências locais e o
+  // resultado é mesclado com o que a tela fez durante a carga.
   useEffect(() => {
     if (!temSupabase) return
     let vivo = true
-    listarServicos()
-      .then((lista) => {
-        if (!vivo) return
-        if (lista.length > 0) {
-          setServicos(lista)
+    if (!promessaIntegracao) {
+      promessaIntegracao = integrarComRemoto(listaLocal.current, instalacaoNova)
+    }
+    promessaIntegracao
+      .then((base) => {
+        if (vivo) {
+          setServicos((atual) =>
+            fundir(
+              base,
+              atual,
+              alterados.current,
+              removidos.current,
+              instalacaoNova,
+            ),
+          )
         }
-        setSincronizado(true)
       })
-      .catch(() => {
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o fallback local intacto
+        if (vivo) {
+          console.warn(
+            '[servicos] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaIntegracao = null
         if (vivo) setSincronizado(true)
       })
     return () => {
       vivo = false
     }
-  }, [temSupabase])
+  }, [temSupabase, instalacaoNova])
 
+  // Grava local quando está sem Supabase, quando já integrou ou quando
+  // existe alteração feita nesta sessão (nada que o usuário fez se perde).
   useEffect(() => {
-    if (temSupabase && !sincronizado) return
+    const temPendencia =
+      alterados.current.size > 0 || removidos.current.size > 0
+    if (temSupabase && !sincronizado && !temPendencia) return
     salvarJSON(CHAVE_STORAGE, servicos)
   }, [servicos, temSupabase, sincronizado])
 
@@ -135,6 +322,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         criadoEm: agora,
         atualizadoEm: agora,
       }
+      alterados.current.add(novo.id)
       setServicos((atual) => ordenar([...atual, novo]))
       if (temSupabase) {
         try {
@@ -161,6 +349,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
       ) {
         throw new Error('Já existe um serviço com este nome.')
       }
+      alterados.current.add(id)
       setServicos((atual) =>
         ordenar(
           atual.map((s) =>
@@ -194,6 +383,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
       const alvo = servicos.find((s) => s.id === id)
       if (!alvo) return
       const novoAtivo = !alvo.ativo
+      alterados.current.add(id)
       setServicos((atual) =>
         atual.map((s) =>
           s.id === id
@@ -214,6 +404,8 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
 
   const remover = useCallback(
     async (id: string) => {
+      removidos.current.add(id)
+      alterados.current.delete(id)
       setServicos((atual) => atual.filter((s) => s.id !== id))
       if (temSupabase) {
         try {

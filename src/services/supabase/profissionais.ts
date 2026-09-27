@@ -98,6 +98,10 @@ export async function removerProfissional(id: string): Promise<boolean> {
   return !error
 }
 
+/**
+ * Envio das pendências locais: upsert por `id` (mesmo registro é atualizado,
+ * nada é recriado com outro id).
+ */
 export async function importarProfissionais(
   lista: Profissional[],
 ): Promise<number> {
@@ -113,6 +117,7 @@ export async function importarProfissionais(
       ativo: p.ativo,
       criado_em: p.criadoEm,
     })),
+    { onConflict: 'id' },
   )
   return error ? 0 : lista.length
 }
