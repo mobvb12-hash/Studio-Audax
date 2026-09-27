@@ -4,10 +4,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import {
   FORMAS_PAGAMENTO,
@@ -22,6 +27,24 @@ import {
   type NovaVendaProdutoInput,
   type ResumoFechamento,
 } from './types'
+import { supabase } from '@/lib/supabase'
+import {
+  atualizarFechamento,
+  atualizarLancamento,
+  criarEventoAuditoria,
+  criarFechamento,
+  criarLancamento,
+  importarAuditoria,
+  importarFechamentos,
+  importarLancamentos,
+  listarAuditoria,
+  listarFechamentos,
+  listarLancamentos,
+  linhaAuditoria,
+  linhaFechamento,
+  linhaLancamento,
+  removerLancamento,
+} from '@/services/supabase/caixa'
 
 const CHAVE_LANCAMENTOS = 'studio-audax:caixa:lancamentos:v1'
 const CHAVE_FECHAMENTOS = 'studio-audax:caixa:fechamentos:v1'
@@ -156,6 +179,252 @@ function ehListaDeLancamentos(valor: unknown): boolean {
   return Array.isArray(valor) && valor.every(ehLancamento)
 }
 
+// ---------------------------------------------------------------------------
+// Integração com o Supabase (mesmo padrão de Clientes/Profissionais/Serviços)
+// ---------------------------------------------------------------------------
+
+type Registro = { id: string }
+
+/** JSON com chaves ordenadas: o `jsonb` do Postgres não preserva a ordem. */
+function estavel(valor: unknown): string {
+  if (Array.isArray(valor)) return `[${valor.map(estavel).join(',')}]`
+  if (valor && typeof valor === 'object') {
+    const objeto = valor as Record<string, unknown>
+    return `{${Object.keys(objeto)
+      .sort()
+      .map((chave) => `${JSON.stringify(chave)}:${estavel(objeto[chave])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(valor) ?? 'null'
+}
+
+/** Assinatura do conteúdo: usa a MESMA linha que vai para o banco, então a
+ * comparação local × remota é a comparação de linhas, sem falso conflito. */
+function assinaturaLancamento(l: Lancamento): string {
+  return estavel(linhaLancamento(l))
+}
+
+function assinaturaFechamento(f: Fechamento): string {
+  return estavel(linhaFechamento(f))
+}
+
+function assinaturaAuditoria(a: EventoAuditoria): string {
+  return estavel(linhaAuditoria(a))
+}
+
+function carimbo(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+/**
+ * Snapshot das versões que serão substituídas, antes de qualquer escrita.
+ * Mantém as 3 cópias mais recentes; false = não gravou (nada é sobrescrito).
+ */
+function criarSnapshot(chave: string, perdedores: unknown[]): boolean {
+  const prefixo = `${chave}:backup:`
+  const destino = `${prefixo}${carimbo()}`
+  try {
+    localStorage.setItem(destino, JSON.stringify(perdedores))
+    if (localStorage.getItem(destino) === null) return false
+    const antigas: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const chave = localStorage.key(i)
+      if (chave?.startsWith(prefixo)) antigas.push(chave)
+    }
+    antigas.sort()
+    antigas
+      .slice(0, Math.max(0, antigas.length - 3))
+      .forEach((chaveAntiga) => localStorage.removeItem(chaveAntiga))
+    return true
+  } catch {
+    return false
+  }
+}
+
+type Integracao<T extends Registro> = {
+  rotulo: string
+  chave: string
+  locais: T[]
+  remotos: T[]
+  assinatura: (registro: T) => string
+  importar: (lista: T[]) => Promise<number>
+}
+
+/**
+ * União por id + reenvio das pendências locais. Nenhum registro é
+ * descartado: o que só existe de um lado entra na lista final. Em divergência
+ * vale o estado que a tela está usando (é dele que sai o resumo do dia) e a
+ * versão remota substituída fica no snapshot. O reenvio é `upsert` por `id`,
+ * então repetir não duplica lançamento, fechamento nem evento.
+ */
+async function integrar<T extends Registro>({
+  rotulo,
+  chave,
+  locais,
+  remotos,
+  assinatura,
+  importar,
+}: Integracao<T>): Promise<T[]> {
+  const remotoPorId = new Map(remotos.map((registro) => [registro.id, registro]))
+  const porId = new Map<string, T>()
+  const ordem: string[] = []
+  const enviar: T[] = []
+  const perdedores: T[] = []
+
+  for (const local of locais) {
+    const remoto = remotoPorId.get(local.id)
+    if (!remoto) {
+      porId.set(local.id, local)
+      ordem.push(local.id)
+      enviar.push(local)
+      continue
+    }
+    porId.set(local.id, remoto)
+    ordem.push(local.id)
+    if (assinatura(local) === assinatura(remoto)) continue
+    perdedores.push(remoto)
+    porId.set(local.id, local)
+    enviar.push(local)
+  }
+  // o que só existe no servidor (outro aparelho) entra no fim, já em ordem
+  // cronológica (a consulta ordena por criado_em/fechado_em)
+  for (const remoto of remotos) {
+    if (porId.has(remoto.id)) continue
+    porId.set(remoto.id, remoto)
+    ordem.push(remoto.id)
+  }
+
+  if (perdedores.length > 0 && !criarSnapshot(chave, perdedores)) {
+    const divergentes = new Set(perdedores.map((registro) => registro.id))
+    for (let i = enviar.length - 1; i >= 0; i--) {
+      if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
+    }
+    console.warn(
+      `[caixa] snapshot indisponível — divergências de ${rotulo} mantidas sem envio.`,
+    )
+  }
+
+  if (enviar.length > 0) {
+    try {
+      const enviados = await importar(enviar)
+      if (enviados < enviar.length) {
+        console.warn(
+          `[caixa] envio incompleto de ${rotulo}: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
+        )
+      }
+    } catch (erro) {
+      console.warn(`[caixa] falha ao enviar ${rotulo} para o Supabase.`, erro)
+    }
+  }
+
+  return ordem
+    .map((id) => porId.get(id))
+    .filter((registro): registro is T => registro !== undefined)
+}
+
+/**
+ * Junta a lista oficial (integração) com o que aconteceu na tela durante a
+ * carga: mudança da sessão vence, registro criado no meio da carga não some e
+ * remoção da sessão é respeitada. Em instalação nova só o que a sessão
+ * alterou acompanha a lista.
+ */
+function fundir<T extends Registro>(
+  base: T[],
+  atual: T[],
+  alterados: Set<string>,
+  removidos: Set<string>,
+  instalacaoNova: boolean,
+): T[] {
+  const porId = new Map(base.map((registro) => [registro.id, registro]))
+  const ordem = base.map((registro) => registro.id)
+  for (const registro of atual) {
+    if (removidos.has(registro.id)) continue
+    if (alterados.has(registro.id)) {
+      if (!porId.has(registro.id)) ordem.push(registro.id)
+      porId.set(registro.id, registro)
+      continue
+    }
+    if (porId.has(registro.id)) continue // base já tem a versão oficial
+    if (instalacaoNova) continue
+    ordem.push(registro.id)
+    porId.set(registro.id, registro)
+  }
+  for (const id of removidos) {
+    porId.delete(id)
+    const posicao = ordem.indexOf(id)
+    if (posicao >= 0) ordem.splice(posicao, 1)
+  }
+  return ordem
+    .map((id) => porId.get(id))
+    .filter((registro): registro is T => registro !== undefined)
+}
+
+type CaixaSupabase = {
+  lancamentos: Lancamento[]
+  fechamentos: Fechamento[]
+  auditoria: EventoAuditoria[]
+}
+
+/**
+ * Integração completa do Caixa. Uma falha de leitura em qualquer das três
+ * listas derruba a integração inteira (nada é aplicado pela metade e nada é
+ * reenviado) e o provider segue com o estado local.
+ */
+async function integrarCaixa(
+  lancamentosLocais: Lancamento[],
+  fechamentosLocais: Fechamento[],
+  auditoriaLocal: EventoAuditoria[],
+  instalacaoNova: boolean,
+): Promise<CaixaSupabase> {
+  const lancamentosRemotos = await listarLancamentos()
+  if (instalacaoNova && lancamentosRemotos.length > 0) {
+    // instalação nova (nada salvo aqui): o que já existe no servidor é a fonte
+    const [fechamentos, auditoria] = await Promise.all([
+      listarFechamentos(),
+      listarAuditoria(),
+    ])
+    return { lancamentos: lancamentosRemotos, fechamentos, auditoria }
+  }
+  const [fechamentosRemotos, auditoriaRemota] = await Promise.all([
+    listarFechamentos(),
+    listarAuditoria(),
+  ])
+  const [lancamentos, fechamentos, auditoria] = await Promise.all([
+    integrar<Lancamento>({
+      rotulo: 'lançamentos',
+      chave: CHAVE_LANCAMENTOS,
+      locais: lancamentosLocais,
+      remotos: lancamentosRemotos,
+      assinatura: assinaturaLancamento,
+      importar: importarLancamentos,
+    }),
+    integrar<Fechamento>({
+      rotulo: 'fechamentos',
+      chave: CHAVE_FECHAMENTOS,
+      locais: fechamentosLocais,
+      remotos: fechamentosRemotos,
+      assinatura: assinaturaFechamento,
+      importar: importarFechamentos,
+    }),
+    integrar<EventoAuditoria>({
+      rotulo: 'auditoria',
+      chave: CHAVE_AUDITORIA,
+      locais: auditoriaLocal,
+      remotos: auditoriaRemota,
+      assinatura: assinaturaAuditoria,
+      importar: importarAuditoria,
+    }),
+  ])
+  return { lancamentos, fechamentos, auditoria }
+}
+
+/**
+ * Integração em andamento compartilhada: o StrictMode (React) executa o
+ * efeito duas vezes em desenvolvimento e uma única ida ao Supabase deve
+ * acontecer.
+ */
+let promessaIntegracao: Promise<CaixaSupabase> | null = null
+
 export function CaixaProvider({ children }: { children: ReactNode }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>(() =>
     carregarJSON<Lancamento[]>(CHAVE_LANCAMENTOS, [], ehListaDeLancamentos),
@@ -166,18 +435,176 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
   const [auditoria, setAuditoria] = useState<EventoAuditoria[]>(() =>
     carregarJSON<EventoAuditoria[]>(CHAVE_AUDITORIA, [], Array.isArray),
   )
+  const [sincronizado, setSincronizado] = useState(false)
+
+  const temSupabase = supabase() !== null
+  // nenhuma das três listas gravada nesta máquina = instalação nova
+  const [instalacaoNova] = useState(
+    () =>
+      carregarJSON<unknown>(CHAVE_LANCAMENTOS, null, ehListaDeLancamentos) ===
+        null &&
+      carregarJSON<unknown>(CHAVE_FECHAMENTOS, null, Array.isArray) === null &&
+      carregarJSON<unknown>(CHAVE_AUDITORIA, null, Array.isArray) === null,
+  )
+  const alteradosLancamentos = useRef<Set<string>>(new Set())
+  const removidosLancamentos = useRef<Set<string>>(new Set())
+  const alteradosFechamentos = useRef<Set<string>>(new Set())
+  const alteradosAuditoria = useRef<Set<string>>(new Set())
+  const lancamentosLocais = useRef<Lancamento[]>(lancamentos)
+  const fechamentosLocais = useRef<Fechamento[]>(fechamentos)
+  const auditoriaLocal = useRef<EventoAuditoria[]>(auditoria)
 
   useEffect(() => {
-    salvarJSON(CHAVE_LANCAMENTOS, lancamentos)
+    lancamentosLocais.current = lancamentos
   }, [lancamentos])
-
   useEffect(() => {
-    salvarJSON(CHAVE_FECHAMENTOS, fechamentos)
+    fechamentosLocais.current = fechamentos
   }, [fechamentos])
+  useEffect(() => {
+    auditoriaLocal.current = auditoria
+  }, [auditoria])
+
+  // Supabase é a fonte oficial do Caixa, mas o local nunca é substituído: a
+  // integração une os dois lados, reenvia as pendências e o resultado é
+  // mesclado com o que a tela fez durante a carga.
+  useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    if (!promessaIntegracao) {
+      promessaIntegracao = integrarCaixa(
+        lancamentosLocais.current,
+        fechamentosLocais.current,
+        auditoriaLocal.current,
+        instalacaoNova,
+      )
+    }
+    promessaIntegracao
+      .then((base) => {
+        if (!vivo) return
+        setLancamentos((atual) =>
+          fundir(
+            base.lancamentos,
+            atual,
+            alteradosLancamentos.current,
+            removidosLancamentos.current,
+            instalacaoNova,
+          ),
+        )
+        setFechamentos((atual) =>
+          fundir(
+            base.fechamentos,
+            atual,
+            alteradosFechamentos.current,
+            new Set<string>(),
+            instalacaoNova,
+          ),
+        )
+        setAuditoria((atual) =>
+          fundir(
+            base.auditoria,
+            atual,
+            alteradosAuditoria.current,
+            new Set<string>(),
+            instalacaoNova,
+          ),
+        )
+      })
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o caixa local intacto e não
+        // reenvia nada (evita sobrescrever dado do servidor)
+        if (vivo) {
+          console.warn(
+            '[caixa] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaIntegracao = null
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase, instalacaoNova])
+
+  // Lido só dentro dos efeitos: a pendência mora em refs (lê-la no render
+  // quebraria a regra de refs do React).
+  const podeGravar = useCallback(() => {
+    if (!temSupabase) return true
+    if (sincronizado) return true
+    return (
+      alteradosLancamentos.current.size > 0 ||
+      removidosLancamentos.current.size > 0 ||
+      alteradosFechamentos.current.size > 0 ||
+      alteradosAuditoria.current.size > 0
+    )
+  }, [temSupabase, sincronizado])
+
+  // Grava local quando está sem Supabase, quando já integrou ou quando
+  // existe alteração feita nesta sessão (nada que o usuário fez se perde).
+  useEffect(() => {
+    if (!podeGravar()) return
+    salvarJSON(CHAVE_LANCAMENTOS, lancamentos)
+  }, [lancamentos, podeGravar])
 
   useEffect(() => {
+    if (!podeGravar()) return
+    salvarJSON(CHAVE_FECHAMENTOS, fechamentos)
+  }, [fechamentos, podeGravar])
+
+  useEffect(() => {
+    if (!podeGravar()) return
     salvarJSON(CHAVE_AUDITORIA, auditoria)
-  }, [auditoria])
+  }, [auditoria, podeGravar])
+
+  /**
+   * Escrita remota em segundo plano: o local já foi atualizado antes, então a
+   * falha só precisa ser informada. Estado local e pendência seguem salvos e a
+   * próxima carga reenvia.
+   */
+  const sincronizar = useCallback(
+    (chave: string, operacao: () => Promise<unknown>) => {
+      if (!temSupabase) return
+      void operacao().catch(() => {
+        avisarFalhaSincronizacao(chave)
+      })
+    },
+    [temSupabase],
+  )
+
+  /** grava um lançamento novo e agenda o envio pelo mesmo id */
+  const registrarLancamento = useCallback(
+    (novo: Lancamento) => {
+      alteradosLancamentos.current.add(novo.id)
+      setLancamentos((atual) => [...atual, novo])
+      sincronizar(CHAVE_LANCAMENTOS, () => criarLancamento(novo))
+      return novo
+    },
+    [sincronizar],
+  )
+
+  /**
+   * Renomeação em lote: o estado continua sendo atualizado por updater
+   * funcional (duas renomeações no mesmo lote se combinam), enquanto o envio
+   * leva os registros tocados por `upsert` — nenhum lançamento novo é criado
+   * e nenhum valor é contado duas vezes.
+   */
+  const propagarLancamentos = useCallback(
+    (transformar: (lista: Lancamento[]) => Lancamento[]) => {
+      const atuais = lancamentosLocais.current
+      const mudados = transformar(atuais).filter(
+        (registro, indice) => registro !== atuais[indice],
+      )
+      if (mudados.length === 0) return
+      for (const registro of mudados) {
+        alteradosLancamentos.current.add(registro.id)
+      }
+      setLancamentos((atual) => transformar(atual))
+      sincronizar(CHAVE_LANCAMENTOS, () => importarLancamentos(mudados))
+    },
+    [sincronizar],
+  )
 
   const fechamentoAtivo = useCallback(
     (data: string) =>
@@ -334,10 +761,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
         criadoEm: new Date().toISOString(),
       }
-      setLancamentos((atual) => [...atual, novo])
-      return novo
+      return registrarLancamento(novo)
     },
-    [jaPago, bloquearSeFechado],
+    [jaPago, bloquearSeFechado, registrarLancamento],
   )
 
   const venderProduto = useCallback(
@@ -378,10 +804,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
         criadoEm: new Date().toISOString(),
       }
-      setLancamentos((atual) => [...atual, novo])
-      return novo
+      return registrarLancamento(novo)
     },
-    [bloquearSeFechado],
+    [bloquearSeFechado, registrarLancamento],
   )
 
   const registrarVenda = useCallback(
@@ -445,10 +870,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
         criadoEm: new Date().toISOString(),
       }
-      setLancamentos((atual) => [...atual, novo])
-      return novo
+      return registrarLancamento(novo)
     },
-    [bloquearSeFechado],
+    [bloquearSeFechado, registrarLancamento],
   )
 
   /**
@@ -456,10 +880,15 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
    * estoque no PDV/venda, status na agenda), desfaz o lançamento criado —
    * a operação inteira volta ao estado anterior em vez de ficar parcial.
    */
-  const desfazerLancamento = useCallback((lancamentoId: string): void => {
-    if (!lancamentoId) return
-    setLancamentos((atual) => atual.filter((l) => l.id !== lancamentoId))
-  }, [])
+  const desfazerLancamento = useCallback(
+    (lancamentoId: string): void => {
+      if (!lancamentoId) return
+      removidosLancamentos.current.add(lancamentoId)
+      setLancamentos((atual) => atual.filter((l) => l.id !== lancamentoId))
+      sincronizar(CHAVE_LANCAMENTOS, () => removerLancamento(lancamentoId))
+    },
+    [sincronizar],
+  )
 
   const registrarReceitaClube = useCallback(
     (input: NovaReceitaClubeInput): Lancamento => {
@@ -489,10 +918,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
         criadoEm: new Date().toISOString(),
       }
-      setLancamentos((atual) => [...atual, novo])
-      return novo
+      return registrarLancamento(novo)
     },
-    [bloquearSeFechado],
+    [bloquearSeFechado, registrarLancamento],
   )
 
   const adicionarDespesa = useCallback(
@@ -521,10 +949,9 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
         criadoEm: new Date().toISOString(),
       }
-      setLancamentos((atual) => [...atual, novo])
-      return novo
+      return registrarLancamento(novo)
     },
-    [bloquearSeFechado],
+    [bloquearSeFechado, registrarLancamento],
   )
 
   const estornar = useCallback(
@@ -534,23 +961,29 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       if (alvo.estornado) throw new Error('Este lançamento já foi estornado.')
       bloquearSeFechado(alvo.data)
 
+      const estornadoEm = new Date().toISOString()
       const evento: EventoAuditoria = {
         id: gerarId(),
         acao: 'estorno',
         data: alvo.data,
         descricao: `${alvo.origem === 'despesa' ? 'Despesa' : 'Receita'}: ${alvo.descricao} — R$ ${alvo.valorLiquido.toFixed(2)}`,
-        criadoEm: new Date().toISOString(),
+        criadoEm: estornadoEm,
       }
+      const estornado: Lancamento = { ...alvo, estornado: true, estornadoEm }
+      alteradosLancamentos.current.add(id)
+      alteradosAuditoria.current.add(evento.id)
       setLancamentos((atual) =>
-        atual.map((l) =>
-          l.id === id
-            ? { ...l, estornado: true, estornadoEm: new Date().toISOString() }
-            : l,
-        ),
+        atual.map((l) => (l.id === id ? estornado : l)),
       )
       setAuditoria((atual) => [...atual, evento])
+      // estorno e evento de auditoria vão juntos; se o primeiro falhar, a
+      // integração da próxima carga reenvia os dois (upsert por id)
+      sincronizar(CHAVE_LANCAMENTOS, async () => {
+        await atualizarLancamento(id, estornado)
+        await criarEventoAuditoria(evento)
+      })
     },
-    [lancamentos, bloquearSeFechado],
+    [lancamentos, bloquearSeFechado, sincronizar],
   )
 
   const fecharCaixa = useCallback(
@@ -565,10 +998,12 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         fechadoEm: new Date().toISOString(),
         resumo,
       }
+      alteradosFechamentos.current.add(fechamento.id)
       setFechamentos((atual) => [...atual, fechamento])
+      sincronizar(CHAVE_FECHAMENTOS, () => criarFechamento(fechamento))
       return fechamento
     },
-    [diaFechado, resumoDoDia],
+    [diaFechado, resumoDoDia, sincronizar],
   )
 
   const reabrirCaixa = useCallback(
@@ -578,89 +1013,113 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       if (motivo.trim().length < 3) {
         throw new Error('Informe o motivo da reabertura (mín. 3 letras).')
       }
+      const reabertoEm = new Date().toISOString()
+      const reabertura: Fechamento = {
+        ...ativo,
+        reaberto: { em: reabertoEm, motivo: motivo.trim() },
+      }
       const evento: EventoAuditoria = {
         id: gerarId(),
         acao: 'reabertura',
         data,
         descricao: `Caixa de ${data} reaberto`,
         motivo: motivo.trim(),
-        criadoEm: new Date().toISOString(),
+        criadoEm: reabertoEm,
       }
+      alteradosFechamentos.current.add(ativo.id)
+      alteradosAuditoria.current.add(evento.id)
       setFechamentos((atual) =>
-        atual.map((f) =>
-          f.id === ativo.id
-            ? { ...f, reaberto: { em: new Date().toISOString(), motivo: motivo.trim() } }
-            : f,
-        ),
+        atual.map((f) => (f.id === ativo.id ? reabertura : f)),
       )
       setAuditoria((atual) => [...atual, evento])
+      sincronizar(CHAVE_FECHAMENTOS, async () => {
+        await atualizarFechamento(ativo.id, reabertura)
+        await criarEventoAuditoria(evento)
+      })
     },
-    [fechamentos],
+    [fechamentos, sincronizar],
   )
 
   // Propagação compara por chave normalizada (mesma regra do dedupe do
   // cadastro): dado legado com caixa/acentos diferentes não engancha.
-  const renomearProfissional = useCallback((antigo: string, novo: string) => {
-    const destino = novo.trim()
-    if (!antigo || !destino || antigo === destino) return
-    const chave = normalizarTexto(antigo)
-    setLancamentos((atual) =>
-      atual.map((l) =>
-        normalizarTexto(l.profissional ?? '') === chave
-          ? { ...l, profissional: destino }
-          : l,
-      ),
-    )
-  }, [])
+  const renomearProfissional = useCallback(
+    (antigo: string, novo: string) => {
+      const destino = novo.trim()
+      if (!antigo || !destino || antigo === destino) return
+      const chave = normalizarTexto(antigo)
+      propagarLancamentos((atual) =>
+        atual.map((l) =>
+          normalizarTexto(l.profissional ?? '') === chave
+            ? { ...l, profissional: destino }
+            : l,
+        ),
+      )
+    },
+    [propagarLancamentos],
+  )
 
-  const renomearServico = useCallback((antigo: string, novo: string) => {
-    const destino = novo.trim()
-    if (!antigo || !destino || antigo === destino) return
-    const chave = normalizarTexto(antigo)
-    setLancamentos((atual) =>
-      atual.map((l) =>
-        normalizarTexto(l.servico ?? '') === chave ? { ...l, servico: destino } : l,
-      ),
-    )
-  }, [])
+  const renomearServico = useCallback(
+    (antigo: string, novo: string) => {
+      const destino = novo.trim()
+      if (!antigo || !destino || antigo === destino) return
+      const chave = normalizarTexto(antigo)
+      propagarLancamentos((atual) =>
+        atual.map((l) =>
+          normalizarTexto(l.servico ?? '') === chave
+            ? { ...l, servico: destino }
+            : l,
+        ),
+      )
+    },
+    [propagarLancamentos],
+  )
 
-  const renomearCliente = useCallback((antigo: string, novo: string) => {
-    const destino = novo.trim()
-    if (!antigo || !destino || antigo === destino) return
-    const chave = normalizarTexto(antigo)
-    setLancamentos((atual) =>
-      atual.map((l) =>
-        normalizarTexto(l.cliente ?? '') === chave ? { ...l, cliente: destino } : l,
-      ),
-    )
-  }, [])
+  const renomearCliente = useCallback(
+    (antigo: string, novo: string) => {
+      const destino = novo.trim()
+      if (!antigo || !destino || antigo === destino) return
+      const chave = normalizarTexto(antigo)
+      propagarLancamentos((atual) =>
+        atual.map((l) =>
+          normalizarTexto(l.cliente ?? '') === chave
+            ? { ...l, cliente: destino }
+            : l,
+        ),
+      )
+    },
+    [propagarLancamentos],
+  )
 
   // Produto renomeado: atualiza a venda avulsa (campo `produto`) e o
   // nome exibido em cada item do PDV — o `produtoId` dos itens não muda,
   // então estoque e relatórios continuam vinculados.
-  const renomearProduto = useCallback((antigo: string, novo: string) => {
-    const destino = novo.trim()
-    if (!antigo || !destino || antigo === destino) return
-    const chave = normalizarTexto(antigo)
-    setLancamentos((atual) =>
-      atual.map((l) => {
-        const mudouProduto = normalizarTexto(l.produto ?? '') === chave
-        const mudouItens = l.itens?.some((i) => normalizarTexto(i.produto) === chave) ?? false
-        if (!mudouProduto && !mudouItens) return l
-        return {
-          ...l,
-          produto: mudouProduto ? destino : l.produto,
-          itens: mudouItens
-            ? l.itens?.map((i) =>
-                normalizarTexto(i.produto) === chave
-                  ? { ...i, produto: destino }
-                  : i,
-              )
-            : l.itens,
-        }
-      }),
-    )
-  }, [])
+  const renomearProduto = useCallback(
+    (antigo: string, novo: string) => {
+      const destino = novo.trim()
+      if (!antigo || !destino || antigo === destino) return
+      const chave = normalizarTexto(antigo)
+      propagarLancamentos((atual) =>
+        atual.map((l) => {
+          const mudouProduto = normalizarTexto(l.produto ?? '') === chave
+          const mudouItens =
+            l.itens?.some((i) => normalizarTexto(i.produto) === chave) ?? false
+          if (!mudouProduto && !mudouItens) return l
+          return {
+            ...l,
+            produto: mudouProduto ? destino : l.produto,
+            itens: mudouItens
+              ? l.itens?.map((i) =>
+                  normalizarTexto(i.produto) === chave
+                    ? { ...i, produto: destino }
+                    : i,
+                )
+              : l.itens,
+          }
+        }),
+      )
+    },
+    [propagarLancamentos],
+  )
 
   const valor = useMemo(
     () => ({
