@@ -17,6 +17,7 @@ const codigo = import.meta.glob(
     '../src/services/supabase/profissionais.ts',
     '../src/services/supabase/servicos.ts',
     '../src/services/supabase/comissoes.ts',
+    '../src/services/supabase/clube.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -119,6 +120,7 @@ describe('Supabase — migrations', () => {
       '../supabase/migrations/006_produtos_estoque.sql',
       '../supabase/migrations/007_agenda.sql',
       '../supabase/migrations/008_comissoes.sql',
+      '../supabase/migrations/009_clube.sql',
     ])
   })
 
@@ -353,5 +355,99 @@ describe('Supabase — comissões (a 008 espelha o que o app grava)', () => {
         new RegExp(`public\\.${tabela} alter column dados drop not null`),
       )
     }
+  })
+})
+
+describe('Supabase — Audax Club (a 009 espelha o que o app grava)', () => {
+  it('toda coluna lida pelo repositório do clube existe no schema', () => {
+    for (const [tabela, tipo] of [
+      ['clube_assinaturas', 'AssinaturaRow'],
+      ['clube_pagamentos', 'PagamentoRow'],
+    ] as const) {
+      for (const campo of camposLidosDoApp('clube.ts', tipo)) {
+        expect(
+          colunasDeclaradas(tabela).has(campo),
+          `${tabela}.${campo} é lido pelo app e não existe no schema`,
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('assinatura e pagamento têm a chave id do app (reenvio é o mesmo registro)', () => {
+    // Nenhuma mensalidade pode entrar duas vezes: o upsert do reenvio depende
+    // da chave primária ser o MESMO id gerado pelo app.
+    for (const tabela of ['clube_assinaturas', 'clube_pagamentos']) {
+      const cria = [...declaracoesPorScript(tabela)].find(
+        ([, declaracoes]) => declaracoes.cria,
+      )
+      expect(cria, tabela).toBeTruthy()
+      expect(
+        (cria?.[1].colunas ?? [])
+          .map(([coluna]) => coluna)
+          .includes('id'),
+        `${tabela} sem id do app`,
+      ).toBe(true)
+    }
+  })
+
+  it('status da assinatura não vira coluna (é sempre derivado)', () => {
+    // `statusAssinatura()` deriva de `proximo_vencimento` + `cancelada`.
+    // Guardar status no banco criaria a chance de estado financeiro
+    // inconsistente entre dispositivos.
+    for (const tabela of ['clube_assinaturas', 'clube_pagamentos']) {
+      const declaradas = colunasDeclaradas(tabela)
+      for (const coluna of ['status', 'status_assinatura']) {
+        expect(declaradas.has(coluna), `${tabela}.${coluna} não pode existir`).toBe(
+          false,
+        )
+      }
+    }
+  })
+
+  it('a trava de cobrança duplicada NÃO vira índice único no banco', () => {
+    // O app permite re-cobrar um ciclo cujo lançamento do Caixa foi estornado
+    // (o dinheiro voltou). Um unique em (assinatura, vencimento) recusaria
+    // esse caso legítimo, então a trava continua no app.
+    const texto = sql('../supabase/migrations/009_clube.sql')
+    expect(texto).not.toMatch(/unique/i)
+  })
+
+  it('a 009 completa as colunas ausentes na estrutura preliminar', () => {
+    const texto = sql('../supabase/migrations/009_clube.sql')
+    for (const [tabela, coluna] of [
+      ['clube_assinaturas', 'atualizado_em'],
+      ['clube_pagamentos', 'criado_em'],
+    ] as const) {
+      expect(
+        new RegExp(
+          `alter table public\\.${tabela}\\s+add column if not exists ${coluna}\\b`,
+          'i',
+        ).test(texto),
+        `${tabela}.${coluna} não é completada pela 009`,
+      ).toBe(true)
+    }
+    for (const tabela of ['clube_assinaturas', 'clube_pagamentos']) {
+      expect(texto).toMatch(
+        new RegExp(`public\\.${tabela} alter column dados drop not null`),
+      )
+      // preço dos planos e regra comercial continuam no app: a migration não
+      // inventa tabela de planos nem valor de mensalidade
+      expect(texto, tabela).not.toMatch(/create table if not exists public\.clube_planos/i)
+    }
+  })
+
+  it('a referência ao Caixa do pagamento não é foreign key (o lançamento pode estar pendente)', () => {
+    // O app grava o pagamento depois do lançamento do Caixa; exigir a
+    // referência no banco travaria o reenvio de um pagamento cujo lançamento
+    // ainda está pendente de envio.
+    const texto = sql('../supabase/migrations/009_clube.sql')
+    const bloco = /create table if not exists public\.clube_pagamentos \(([\s\S]*?)\n\);/.exec(
+      texto,
+    )
+    expect(bloco).toBeTruthy()
+    const linhas = (bloco?.[1] ?? '').split('\n')
+    const lancamento = linhas.find((linha) => linha.trim().startsWith('caixa_lancamento_id'))
+    expect(lancamento, 'caixa_lancamento_id não declarado').toBeTruthy()
+    expect(lancamento).not.toMatch(/references/i)
   })
 })

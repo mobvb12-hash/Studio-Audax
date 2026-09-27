@@ -1,4 +1,4 @@
-// Audax Club — tipos (sem backend: estado local + localStorage)
+// Audax Club — tipos (estado local + localStorage, espelhado no Supabase)
 import type { FormaPagamento } from '@/modules/caixa/types'
 
 export type PlanoClube = 'cabelo' | 'barba' | 'cabelo_barba'
@@ -27,6 +27,13 @@ export type AssinaturaClube = {
   canceladaEm?: string
   motivoCancelamento?: string
   criadoEm: string
+  /**
+   * Última alteração (ISO). Não é regra de negócio: é o carimbo que a
+   * sincronização usa para escolher a versão mais recente quando dois
+   * dispositivos mexem na mesma assinatura (edição, cancelamento ou
+   * renovação por pagamento).
+   */
+  atualizadoEm?: string
 }
 
 export type PagamentoClube = {

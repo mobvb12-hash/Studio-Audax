@@ -1,4 +1,4 @@
-// Audax Club — assinaturas + pagamentos (localStorage, mesmo padrão do projeto).
+// Audax Club — assinaturas + pagamentos (localStorage + espelho no Supabase).
 // Dependências: CaixaProvider (pagamento gera lançamento de receita "clube").
 import {
   createContext,
@@ -10,11 +10,24 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
+import { supabase } from '@/lib/supabase'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, type FormaPagamento } from '@/modules/caixa/types'
+import {
+  gravarAssinatura,
+  gravarPagamento,
+  importarAssinaturas,
+  importarPagamentos,
+  listarAssinaturas,
+  listarPagamentos,
+} from '@/services/supabase/clube'
 import {
   addMonthsISO,
   dataISOValida,
@@ -78,6 +91,251 @@ function carregarEstado(): EstadoClube {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Integração com o Supabase (mesmo padrão de Caixa/Agenda/Comissões)
+// ---------------------------------------------------------------------------
+
+/** JSON com chaves ordenadas: o `jsonb` do Postgres não preserva a ordem. */
+function estavel(valor: unknown): string {
+  if (Array.isArray(valor)) return `[${valor.map(estavel).join(',')}]`
+  if (valor && typeof valor === 'object') {
+    const objeto = valor as Record<string, unknown>
+    return `{${Object.keys(objeto)
+      .sort()
+      .map((chave) => `${JSON.stringify(chave)}:${estavel(objeto[chave])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(valor) ?? 'null'
+}
+
+function assinaturaAssinatura(a: AssinaturaClube): string {
+  return estavel({
+    id: a.id,
+    cliente_id: a.clienteId || null,
+    cliente: a.cliente,
+    plano: a.plano,
+    valor_mensal: a.valorMensal,
+    data_assinatura: a.dataAssinatura,
+    proximo_vencimento: a.proximoVencimento,
+    cancelada: a.cancelada,
+    cancelada_em: a.canceladaEm ?? null,
+    motivo_cancelamento: a.motivoCancelamento ?? null,
+  })
+}
+
+function assinaturaPagamento(p: PagamentoClube): string {
+  return estavel({
+    id: p.id,
+    assinatura_id: p.assinaturaId || null,
+    cliente_id: p.clienteId || null,
+    data: p.data,
+    valor: p.valor,
+    forma_pagamento: p.formaPagamento,
+    caixa_lancamento_id: p.caixaLancamentoId ?? null,
+    vencimento_coberto: p.vencimentoCoberto ?? null,
+  })
+}
+
+function carimbo(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+/** Snapshot do que será substituído; false = não gravou (nada muda). */
+function criarSnapshot(perdedores: unknown[]): boolean {
+  const prefixo = `${CHAVE_CLUBE}:backup:`
+  const destino = `${prefixo}${carimbo()}`
+  try {
+    localStorage.setItem(destino, JSON.stringify(perdedores))
+    if (localStorage.getItem(destino) === null) return false
+    const antigas: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const existente = localStorage.key(i)
+      if (existente?.startsWith(prefixo)) antigas.push(existente)
+    }
+    antigas.sort()
+    antigas
+      .slice(0, Math.max(0, antigas.length - 3))
+      .forEach((chaveAntiga) => localStorage.removeItem(chaveAntiga))
+    return true
+  } catch {
+    return false
+  }
+}
+
+type Integracao<T> = {
+  rotulo: string
+  id: (registro: T) => string
+  locais: T[]
+  remotos: T[]
+  assinatura: (registro: T) => string
+  /** em divergência, quem tem o carimbo mais novo vence */
+  maisRecente: (local: T, remoto: T) => boolean
+  importar: (lista: T[]) => Promise<number>
+}
+
+/**
+ * União por `id` + reenvio das pendências. O reenvio é `upsert` pela mesma
+ * chave do app: assinatura ou pagamento enviados três vezes continuam sendo UM
+ * registro cada — nenhuma mensalidade entra duas vezes. Em divergência vence o
+ * carimbo mais recente e o perdedor vai para o snapshot.
+ */
+async function integrar<T>({
+  rotulo,
+  id,
+  locais,
+  remotos,
+  assinatura,
+  maisRecente,
+  importar,
+}: Integracao<T>): Promise<T[]> {
+  const remotoPorId = new Map(remotos.map((registro) => [id(registro), registro]))
+  const porId = new Map<string, T>()
+  const ordem: string[] = []
+  const enviar: T[] = []
+  const perdedores: T[] = []
+
+  for (const local of locais) {
+    const remoto = remotoPorId.get(id(local))
+    if (!remoto) {
+      porId.set(id(local), local)
+      ordem.push(id(local))
+      enviar.push(local)
+      continue
+    }
+    porId.set(id(local), remoto)
+    ordem.push(id(local))
+    if (assinatura(local) === assinatura(remoto)) continue
+    if (maisRecente(local, remoto)) {
+      perdedores.push(remoto)
+      porId.set(id(local), local)
+      enviar.push(local)
+    } else {
+      perdedores.push(local)
+    }
+  }
+  for (const remoto of remotos) {
+    if (porId.has(id(remoto))) continue
+    porId.set(id(remoto), remoto)
+    ordem.push(id(remoto))
+  }
+
+  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+    const divergentes = new Set(perdedores.map((registro) => id(registro)))
+    for (let i = enviar.length - 1; i >= 0; i--) {
+      if (divergentes.has(id(enviar[i]))) enviar.splice(i, 1)
+    }
+    console.warn(
+      `[clube] snapshot indisponível — divergências de ${rotulo} mantidas sem envio.`,
+    )
+  }
+
+  if (enviar.length > 0) {
+    try {
+      const enviados = await importar(enviar)
+      if (enviados < enviar.length) {
+        console.warn(
+          `[clube] envio incompleto de ${rotulo}: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
+        )
+      }
+    } catch (erro) {
+      console.warn(`[clube] falha ao enviar ${rotulo} para o Supabase.`, erro)
+    }
+  }
+
+  return ordem
+    .map((chave) => porId.get(chave))
+    .filter((registro): registro is T => registro !== undefined)
+}
+
+/**
+ * Junta a lista oficial com o que a tela fez durante a carga: mudança da
+ * sessão vence, registro criado no meio da carga não some. Em instalação nova
+ * só o que a sessão alterou acompanha a lista.
+ */
+function fundir<T>(
+  base: T[],
+  atual: T[],
+  alterados: Set<string>,
+  instalacaoNova: boolean,
+  id: (registro: T) => string,
+): T[] {
+  const porId = new Map(base.map((registro) => [id(registro), registro]))
+  const ordem = base.map((registro) => id(registro))
+  for (const registro of atual) {
+    if (alterados.has(id(registro))) {
+      if (!porId.has(id(registro))) ordem.push(id(registro))
+      porId.set(id(registro), registro)
+      continue
+    }
+    if (porId.has(id(registro))) continue
+    if (instalacaoNova) continue
+    ordem.push(id(registro))
+    porId.set(id(registro), registro)
+  }
+  return ordem
+    .map((chave) => porId.get(chave))
+    .filter((registro): registro is T => registro !== undefined)
+}
+
+type ClubeSupabase = {
+  assinaturas: AssinaturaClube[]
+  pagamentos: PagamentoClube[]
+}
+
+/**
+ * Integração completa do clube. Falha de leitura em qualquer parte derruba a
+ * integração inteira: nada é aplicado pela metade e nada é reenviado — o
+ * estado local fica intacto.
+ */
+async function integrarClube(
+  assinaturasLocais: AssinaturaClube[],
+  pagamentosLocais: PagamentoClube[],
+  instalacaoNova: boolean,
+): Promise<ClubeSupabase> {
+  const [assinaturasRemotas, pagamentosRemotos] = await Promise.all([
+    listarAssinaturas(),
+    listarPagamentos(),
+  ])
+
+  // instalação nova (nada neste dispositivo): o servidor é a verdade e o que
+  // a tela criou durante a carga é re-aplicado pelo `fundir`
+  if (
+    instalacaoNova &&
+    (assinaturasRemotas.length > 0 || pagamentosRemotos.length > 0)
+  ) {
+    return { assinaturas: assinaturasRemotas, pagamentos: pagamentosRemotos }
+  }
+
+  const [assinaturas, pagamentos] = await Promise.all([
+    integrar<AssinaturaClube>({
+      rotulo: 'assinaturas',
+      id: (a) => a.id,
+      locais: assinaturasLocais,
+      remotos: assinaturasRemotas,
+      assinatura: assinaturaAssinatura,
+      // registro antigo (sem carimbo) não rebaixa a versão do servidor
+      maisRecente: (local, remoto) =>
+        (local.atualizadoEm ?? '') > (remoto.atualizadoEm ?? ''),
+      importar: importarAssinaturas,
+    }),
+    integrar<PagamentoClube>({
+      rotulo: 'pagamentos',
+      id: (p) => p.id,
+      locais: pagamentosLocais,
+      remotos: pagamentosRemotos,
+      assinatura: assinaturaPagamento,
+      // histórico: o registro mais novo (maior criadoEm) vence
+      maisRecente: (local, remoto) => local.criadoEm > remoto.criadoEm,
+      importar: importarPagamentos,
+    }),
+  ])
+
+  return { assinaturas, pagamentos }
+}
+
+/** Integração em andamento compartilhada (StrictMode executa o efeito 2x). */
+let promessaIntegracao: Promise<ClubeSupabase> | null = null
+
 export type NovaAssinaturaInput = {
   clienteId: string
   cliente: string
@@ -140,6 +398,14 @@ const Contexto = createContext<ClubeContexto | null>(null)
 export function ClubeProvider({ children }: { children: ReactNode }) {
   const { registrarReceitaClube, lancamentos } = useCaixa()
   const [estado, setEstado] = useState<EstadoClube>(carregarEstado)
+  const temSupabase = supabase() !== null
+  const [sincronizado, setSincronizado] = useState(false)
+  const [instalacaoNova] = useState(
+    () => carregarJSON<unknown>(CHAVE_CLUBE, null, ehEstadoClube) === null,
+  )
+  const alteradosAssinaturas = useRef<Set<string>>(new Set())
+  const alteradosPagamentos = useRef<Set<string>>(new Set())
+  const estadoLocal = useRef<EstadoClube>(estado)
 
   /**
    * Cobranças pagas no lote de estado atual (duplo clique/submit): duas
@@ -154,8 +420,89 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
   }, [estado])
 
   useEffect(() => {
-    salvarJSON(CHAVE_CLUBE, estado)
+    estadoLocal.current = estado
   }, [estado])
+
+  // O Supabase é a fonte oficial do clube, mas o estado local nunca é
+  // substituído: a integração une os dois lados, reenvia as pendências e o
+  // resultado é mesclado com o que a tela fez durante a carga.
+  useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    if (!promessaIntegracao) {
+      promessaIntegracao = integrarClube(
+        estadoLocal.current.assinaturas,
+        estadoLocal.current.pagamentos,
+        instalacaoNova,
+      )
+    }
+    promessaIntegracao
+      .then((base) => {
+        if (!vivo) return
+        setEstado((atual) => ({
+          assinaturas: fundir(
+            base.assinaturas,
+            atual.assinaturas,
+            alteradosAssinaturas.current,
+            instalacaoNova,
+            (a) => a.id,
+          ),
+          pagamentos: fundir(
+            base.pagamentos,
+            atual.pagamentos,
+            alteradosPagamentos.current,
+            instalacaoNova,
+            (p) => p.id,
+          ),
+        }))
+      })
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o clube local intacto e não
+        // reenvia nada (evita sobrescrever dado do servidor)
+        if (vivo) {
+          console.warn(
+            '[clube] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaIntegracao = null
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase, instalacaoNova])
+
+  /**
+   * Só trava a persistência local quando existe risco real de sobrescrever
+   * dado do servidor: sem Supabase, ou antes da carga com nada pendente.
+   */
+  const podeGravar = useCallback(() => {
+    if (!temSupabase) return true
+    if (sincronizado) return true
+    return (
+      alteradosAssinaturas.current.size > 0 ||
+      alteradosPagamentos.current.size > 0
+    )
+  }, [temSupabase, sincronizado])
+
+  useEffect(() => {
+    if (!podeGravar()) return
+    salvarJSON(CHAVE_CLUBE, estado)
+  }, [estado, podeGravar])
+
+  /** Escrita remota em segundo plano: o local já foi atualizado antes. */
+  const sincronizar = useCallback(
+    (chave: string, operacao: () => Promise<unknown>) => {
+      if (!temSupabase) return
+      void operacao().catch(() => {
+        avisarFalhaSincronizacao(chave)
+      })
+    },
+    [temSupabase],
+  )
 
   const assinaturaDoCliente = useCallback(
     (clienteId: string) =>
@@ -208,10 +555,13 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
         cancelada: false,
         criadoEm: new Date().toISOString(),
       }
+      nova.atualizadoEm = nova.criadoEm
+      alteradosAssinaturas.current.add(nova.id)
       setEstado((atual) => ({ ...atual, assinaturas: [...atual.assinaturas, nova] }))
+      sincronizar(CHAVE_CLUBE, () => gravarAssinatura(nova))
       return nova
     },
-    [podeAssinar],
+    [podeAssinar, sincronizar],
   )
 
   const atualizar = useCallback(
@@ -243,16 +593,19 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
         cliente,
         plano: plano as AssinaturaClube['plano'],
         valorMensal: Math.round(valorMensal * 100) / 100,
+        atualizadoEm: new Date().toISOString(),
       }
+      alteradosAssinaturas.current.add(assinaturaId)
       setEstado((atual) => ({
         ...atual,
         assinaturas: atual.assinaturas.map((a) =>
           a.id === assinaturaId ? atualizada : a,
         ),
       }))
+      sincronizar(CHAVE_CLUBE, () => gravarAssinatura(atualizada))
       return atualizada
     },
-    [estado.assinaturas, podeAssinar],
+    [estado.assinaturas, podeAssinar, sincronizar],
   )
 
   const cancelar = useCallback(
@@ -260,21 +613,25 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       const alvo = estado.assinaturas.find((a) => a.id === assinaturaId)
       if (!alvo) throw new Error('Assinatura não encontrada.')
       if (alvo.cancelada) throw new Error('Esta assinatura já foi cancelada.')
+      // cancelar não apaga nada: assinatura, vencimento e histórico de
+      // pagamentos permanecem, só o estado de cancelamento é acrescentado
+      const cancelada: AssinaturaClube = {
+        ...alvo,
+        cancelada: true,
+        canceladaEm: hojeISO(),
+        motivoCancelamento: motivo?.trim() || undefined,
+        atualizadoEm: new Date().toISOString(),
+      }
+      alteradosAssinaturas.current.add(assinaturaId)
       setEstado((atual) => ({
         ...atual,
         assinaturas: atual.assinaturas.map((a) =>
-          a.id === assinaturaId
-            ? {
-                ...a,
-                cancelada: true,
-                canceladaEm: hojeISO(),
-                motivoCancelamento: motivo?.trim() || undefined,
-              }
-            : a,
+          a.id === assinaturaId ? cancelada : a,
         ),
       }))
+      sincronizar(CHAVE_CLUBE, () => gravarAssinatura(cancelada))
     },
-    [estado.assinaturas],
+    [estado.assinaturas, sincronizar],
   )
 
   const registrarPagamento = useCallback(
@@ -341,31 +698,49 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
           ass.proximoVencimento,
           input.data,
         ),
+        atualizadoEm: new Date().toISOString(),
       }
+      alteradosAssinaturas.current.add(ass.id)
+      alteradosPagamentos.current.add(pagamento.id)
       setEstado((atual) => ({
         assinaturas: atual.assinaturas.map((a) =>
           a.id === ass.id ? atualizada : a,
         ),
         pagamentos: [...atual.pagamentos, pagamento],
       }))
+      // mesma chave do app: se o envio falhar, o reenvio da próxima carga é o
+      // MESMO registro — o pagamento não vira uma segunda mensalidade
+      sincronizar(CHAVE_CLUBE, () => gravarAssinatura(atualizada))
+      sincronizar(CHAVE_CLUBE, () => gravarPagamento(pagamento))
       return { assinatura: atualizada, pagamento }
     },
-    [estado.assinaturas, estado.pagamentos, registrarReceitaClube, lancamentos],
+    [estado.assinaturas, estado.pagamentos, registrarReceitaClube, lancamentos, sincronizar],
   )
 
-  const renomearCliente = useCallback((antigo: string, novo: string) => {
-    const destino = novo.trim()
-    if (!antigo || !destino || antigo === destino) return
-    // Propagação casa por chave normalizada (mesma regra do dedupe do
-    // cadastro): dado legado com caixa/acentos diferentes não engancha.
-    const chave = normalizarTexto(antigo)
-    setEstado((atual) => ({
-      ...atual,
-      assinaturas: atual.assinaturas.map((a) =>
-        normalizarTexto(a.cliente) === chave ? { ...a, cliente: destino } : a,
-      ),
-    }))
-  }, [])
+  const renomearCliente = useCallback(
+    (antigo: string, novo: string) => {
+      const destino = novo.trim()
+      if (!antigo || !destino || antigo === destino) return
+      // Propagação casa por chave normalizada (mesma regra do dedupe do
+      // cadastro): dado legado com caixa/acentos diferentes não engancha.
+      const chave = normalizarTexto(antigo)
+      const em = new Date().toISOString()
+      const mudar = (atual: AssinaturaClube[]) =>
+        atual.map((a) =>
+          normalizarTexto(a.cliente) === chave
+            ? { ...a, cliente: destino, atualizadoEm: em }
+            : a,
+        )
+      const mudadas = mudar(estadoLocal.current.assinaturas).filter(
+        (a, indice) => a !== estadoLocal.current.assinaturas[indice],
+      )
+      if (mudadas.length === 0) return
+      for (const a of mudadas) alteradosAssinaturas.current.add(a.id)
+      setEstado((atual) => ({ ...atual, assinaturas: mudar(atual.assinaturas) }))
+      sincronizar(CHAVE_CLUBE, () => importarAssinaturas(mudadas))
+    },
+    [sincronizar],
+  )
 
   const valor = useMemo(
     () => ({
