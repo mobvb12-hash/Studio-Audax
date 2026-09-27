@@ -17,6 +17,12 @@
 --
 -- Usuários do sistema: criar no dashboard do Supabase
 -- (Authentication → Users) com e-mail/senha. Nenhuma conta é semeada aqui.
+--
+-- • Para instalar ou atualizar a base, aplique `supabase/migrations` em ordem
+--   (001 perfis, 002 profissionais/serviços, 003 clientes, 004 compatibilidade):
+--   elas completam colunas em base já criada por este arquivo. `profissionais`
+--   e `servicos` seguem aqui o mesmo formato das migrations — colunas reais
+--   espelhando os tipos do app e `dados` opcional.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
@@ -40,9 +46,13 @@ create table if not exists clientes (
 create table if not exists profissionais (
   id text primary key,
   nome text not null,
+  telefone text not null default '',
+  email text not null default '',
+  foto text not null default '',
   ativo boolean not null default true,
-  criado_em timestamptz,
-  dados jsonb not null
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  dados jsonb                           -- opcional: o app grava coluna a coluna
 );
 
 create table if not exists servicos (
@@ -52,7 +62,9 @@ create table if not exists servicos (
   duracao_min integer not null default 0,
   categoria text not null default '',
   ativo boolean not null default true,
-  dados jsonb not null
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  dados jsonb                           -- opcional: o app grava coluna a coluna
 );
 
 create table if not exists produtos (
