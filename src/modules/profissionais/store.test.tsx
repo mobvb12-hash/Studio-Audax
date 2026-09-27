@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ProfissionaisProvider, useProfissionais } from './store'
@@ -24,7 +24,7 @@ function Lista() {
       <button
         type="button"
         onClick={() =>
-          adicionar({
+          void adicionar({
             nome: 'Luan Silva',
             telefone: '(11) 91234-5678',
             email: 'luan@email.com',
@@ -39,7 +39,7 @@ function Lista() {
         onClick={() => {
           const alvo = profissionais.find((p) => p.nome === 'Luan Silva')
           if (alvo)
-            atualizar(alvo.id, {
+            void atualizar(alvo.id, {
               nome: alvo.nome,
               telefone: '(11) 99999-0000',
               email: 'editado@email.com',
@@ -132,7 +132,6 @@ describe('Profissionais — store', () => {
     montar()
     const lista = lerLista()
     expect(lista.map((p) => p.nome)).toEqual(['Cleiton Silva', 'Ítalo Santos'])
-    // ids preservados: chaves de comissões e configs continuam valendo
     expect(lista.map((p) => p.id)).toEqual(['prof-audax', 'prof-diego'])
   })
 
@@ -158,42 +157,75 @@ describe('Profissionais — store', () => {
     expect(lista[0].telefone).toBe('(11) 91111-2222')
   })
 
-  it('cria funcionário com telefone, e-mail e foto e grava no localStorage', () => {
+  it('cria funcionário com telefone, e-mail e foto e grava no localStorage', async () => {
     montar()
-    fireEvent.click(screen.getByText('criar'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((p) => p.nome === 'Luan Silva')).toBeTruthy(),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (p: Profissional) => p.nome === 'Luan Silva',
+        )?.telefone,
+      ).toBe('(11) 91234-5678'),
+    )
     const salvo = lerLista().find((p) => p.nome === 'Luan Silva')
     expect(salvo).toBeTruthy()
     expect(salvo?.telefone).toBe('(11) 91234-5678')
     expect(salvo?.email).toBe('luan@email.com')
     expect(salvo?.foto).toBe('data:image/jpeg;base64,NOVA')
-
-    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
-    expect(
-      noStorage.find((p: Profissional) => p.nome === 'Luan Silva')?.telefone,
-    ).toBe('(11) 91234-5678')
   })
 
-  it('edita telefone/e-mail e remove foto, persistindo no localStorage', () => {
+  it('edita telefone/e-mail e remove foto, persistindo no localStorage', async () => {
     montar()
-    fireEvent.click(screen.getByText('criar'))
-    fireEvent.click(screen.getByText('editar-sem-foto'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((p) => p.nome === 'Luan Silva')).toBeTruthy(),
+    )
+    await act(async () => {
+      fireEvent.click(screen.getByText('editar-sem-foto'))
+    })
+    await waitFor(() =>
+      expect(
+        lerLista().find((p) => p.nome === 'Luan Silva')?.telefone,
+      ).toBe('(11) 99999-0000'),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (p: Profissional) => p.nome === 'Luan Silva',
+        )?.foto,
+      ).toBe(''),
+    )
     const salvo = lerLista().find((p) => p.nome === 'Luan Silva')
     expect(salvo?.telefone).toBe('(11) 99999-0000')
     expect(salvo?.email).toBe('editado@email.com')
     expect(salvo?.foto).toBe('')
-
-    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
-    const alvo = noStorage.find((p: Profissional) => p.nome === 'Luan Silva')
-    expect(alvo?.telefone).toBe('(11) 99999-0000')
-    expect(alvo?.foto).toBe('')
   })
 
-  it('simula F5: dados continuam corretos ao reabrir o sistema', () => {
+  it('simula F5: dados continuam corretos ao reabrir o sistema', async () => {
     const primeiro = montar()
-    fireEvent.click(screen.getByText('criar'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((p) => p.nome === 'Luan Silva')).toBeTruthy(),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (p: Profissional) => p.nome === 'Luan Silva',
+        ),
+      ).toBeTruthy(),
+    )
     primeiro.unmount()
 
-    montar() // nova montagem = página recarregada
+    montar()
     const lista = lerLista()
     const luan = lista.find((p) => p.nome === 'Luan Silva')
     expect(luan).toBeTruthy()
@@ -210,23 +242,23 @@ describe('Profissionais — store', () => {
     expect(lerLista()).toHaveLength(0)
   })
 
-  it('rejeita profissional duplicado por nome', () => {
+  it('rejeita profissional duplicado por nome', async () => {
     montar()
-    expect(() =>
+    await expect(
       ctx.adicionar({ nome: 'cleiton silva', telefone: '', email: '', foto: '' }),
-    ).toThrow(/Já existe um profissional com este nome/)
+    ).rejects.toThrow(/Já existe um profissional com este nome/)
 
-    act(() => {
+    await act(() =>
       ctx.adicionar({
         nome: 'Luan Silva',
         telefone: '',
         email: '',
         foto: '',
-      })
-    })
-    expect(() =>
+      }),
+    )
+    await expect(
       ctx.adicionar({ nome: 'Luan Silva', telefone: '', email: '', foto: '' }),
-    ).toThrow(/Já existe um profissional com este nome/)
+    ).rejects.toThrow(/Já existe um profissional com este nome/)
     expect(
       ctx.profissionais.filter((p) => p.nome === 'Luan Silva'),
     ).toHaveLength(1)
@@ -234,37 +266,37 @@ describe('Profissionais — store', () => {
 })
 
 describe('Profissionais — validação no store', () => {
-  it('rejeita nome curto, telefone curto e e-mail inválido sem salvar', () => {
+  it('rejeita nome curto, telefone curto e e-mail inválido sem salvar', async () => {
     montar()
-    expect(() =>
+    await expect(
       ctx.adicionar({ nome: ' D ', telefone: '', email: '', foto: '' }),
-    ).toThrow(/nome completo do profissional/)
-    expect(() =>
+    ).rejects.toThrow(/nome completo do profissional/)
+    await expect(
       ctx.adicionar({ nome: 'Luan', telefone: '123', email: '', foto: '' }),
-    ).toThrow(/telefone válido/)
-    expect(() =>
+    ).rejects.toThrow(/telefone válido/)
+    await expect(
       ctx.adicionar({ nome: 'Luan', telefone: '', email: 'erro', foto: '' }),
-    ).toThrow(/e-mail válido/)
+    ).rejects.toThrow(/e-mail válido/)
     expect(ctx.profissionais.some((p) => p.nome === 'Luan')).toBe(false)
   })
 
-  it('rejeita atualização inválida mantendo o cadastro intacto', () => {
+  it('rejeita atualização inválida mantendo o cadastro intacto', async () => {
     montar()
     const alvo = ctx.profissionais.find((p) => p.nome === 'Cleiton Silva')!
-    expect(() =>
+    await expect(
       ctx.atualizar(alvo.id, { nome: 'A', telefone: '', email: '', foto: '' }),
-    ).toThrow(/nome completo do profissional/)
+    ).rejects.toThrow(/nome completo do profissional/)
     expect(ctx.porId(alvo.id)?.nome).toBe('Cleiton Silva')
   })
 })
 
 describe('Profissionais — status ativo/inativo (sem apagar dados)', () => {
-  it('profissional nasce ativo e alternarAtivo inativa/reativa preservando tudo', () => {
+  it('profissional nasce ativo e alternarAtivo inativa/reativa preservando tudo', async () => {
     montar()
     const alvo = ctx.profissionais.find((p) => p.nome === 'Ítalo Santos')!
     expect(alvo.ativo).toBe(true)
 
-    act(() => ctx.alternarAtivo(alvo.id))
+    await act(() => ctx.alternarAtivo(alvo.id))
     const inativo = ctx.porId(alvo.id)!
     expect(inativo.ativo).toBe(false)
     expect(inativo.nome).toBe('Ítalo Santos')
@@ -276,16 +308,16 @@ describe('Profissionais — status ativo/inativo (sem apagar dados)', () => {
       noStorage.find((p: Profissional) => p.nome === 'Ítalo Santos')?.ativo,
     ).toBe(false)
 
-    act(() => ctx.alternarAtivo(alvo.id))
+    await act(() => ctx.alternarAtivo(alvo.id))
     expect(ctx.porId(alvo.id)?.ativo).toBe(true)
   })
 
-  it('atualizar preserva o status inativo do profissional', () => {
+  it('atualizar preserva o status inativo do profissional', async () => {
     montar()
     const alvo = ctx.profissionais.find((p) => p.nome === 'Ítalo Santos')!
-    act(() => ctx.alternarAtivo(alvo.id))
-    act(() => {
-      ctx.atualizar(alvo.id, {
+    await act(() => ctx.alternarAtivo(alvo.id))
+    await act(() => {
+      void ctx.atualizar(alvo.id, {
         nome: 'Ítalo Santos',
         telefone: '(11) 97777-6666',
         email: 'italo@email.com',
@@ -298,10 +330,10 @@ describe('Profissionais — status ativo/inativo (sem apagar dados)', () => {
     expect(atual.email).toBe('italo@email.com')
   })
 
-  it('profissionais criados nascem ativos por padrão', () => {
+  it('profissionais criados nascem ativos por padrão', async () => {
     montar()
-    act(() => {
-      ctx.adicionar({
+    await act(() => {
+      void ctx.adicionar({
         nome: 'Luan Silva',
         telefone: '(11) 91234-5678',
         email: '',

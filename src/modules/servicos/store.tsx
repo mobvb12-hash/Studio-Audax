@@ -12,15 +12,23 @@ import { normalizarTexto } from '@/lib/moeda'
 import { SERVICOS as SEED } from '@/modules/agenda/catalogo'
 import { validarServico } from './regras'
 import type { NovoServicoInput, Servico } from './types'
+import { supabase } from '@/lib/supabase'
+import {
+  listarServicos,
+  criarServico,
+  atualizarServico,
+  alternarAtivoServico,
+  removerServico,
+} from '@/services/supabase/servicos'
 
 const CHAVE_STORAGE = 'studio-audax:servicos:v1'
 
 type ServicosContexto = {
   servicos: Servico[]
-  adicionar: (input: NovoServicoInput) => Servico
-  atualizar: (id: string, input: NovoServicoInput) => void
-  alternarAtivo: (id: string) => void
-  remover: (id: string) => void
+  adicionar: (input: NovoServicoInput) => Promise<Servico>
+  atualizar: (id: string, input: NovoServicoInput) => Promise<void>
+  alternarAtivo: (id: string) => Promise<void>
+  remover: (id: string) => Promise<void>
   porId: (id: string) => Servico | undefined
 }
 
@@ -79,13 +87,36 @@ function carregar(): Servico[] {
 
 export function ServicosProvider({ children }: { children: ReactNode }) {
   const [servicos, setServicos] = useState<Servico[]>(() => carregar())
+  const [sincronizado, setSincronizado] = useState(false)
+
+  const temSupabase = supabase() !== null
 
   useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    listarServicos()
+      .then((lista) => {
+        if (!vivo) return
+        if (lista.length > 0) {
+          setServicos(lista)
+        }
+        setSincronizado(true)
+      })
+      .catch(() => {
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase])
+
+  useEffect(() => {
+    if (temSupabase && !sincronizado) return
     salvarJSON(CHAVE_STORAGE, servicos)
-  }, [servicos])
+  }, [servicos, temSupabase, sincronizado])
 
   const adicionar = useCallback(
-    (input: NovoServicoInput) => {
+    async (input: NovoServicoInput) => {
       const nome = input.nome.trim()
       const categoria = input.categoria?.trim() ?? ''
       const erro = validarServico({ ...input, nome, categoria })
@@ -105,13 +136,20 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         atualizadoEm: agora,
       }
       setServicos((atual) => ordenar([...atual, novo]))
+      if (temSupabase) {
+        try {
+          await criarServico(novo)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
       return novo
     },
-    [servicos],
+    [servicos, temSupabase],
   )
 
   const atualizar = useCallback(
-    (id: string, input: NovoServicoInput) => {
+    async (id: string, input: NovoServicoInput) => {
       const nome = input.nome.trim()
       const categoria = input.categoria?.trim() ?? ''
       const erro = validarServico({ ...input, nome, categoria })
@@ -139,24 +177,54 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
           ),
         ),
       )
+      if (temSupabase) {
+        try {
+          await atualizarServico(id, input)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
     },
-    [servicos],
+    [servicos, temSupabase],
   )
 
   /** Inativar/reativar nunca apaga o serviço nem o histórico dele. */
-  const alternarAtivo = useCallback((id: string) => {
-    setServicos((atual) =>
-      atual.map((s) =>
-        s.id === id
-          ? { ...s, ativo: !s.ativo, atualizadoEm: new Date().toISOString() }
-          : s,
-      ),
-    )
-  }, [])
+  const alternarAtivo = useCallback(
+    async (id: string) => {
+      const alvo = servicos.find((s) => s.id === id)
+      if (!alvo) return
+      const novoAtivo = !alvo.ativo
+      setServicos((atual) =>
+        atual.map((s) =>
+          s.id === id
+            ? { ...s, ativo: novoAtivo, atualizadoEm: new Date().toISOString() }
+            : s,
+        ),
+      )
+      if (temSupabase) {
+        try {
+          await alternarAtivoServico(id, novoAtivo)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
+    },
+    [servicos, temSupabase],
+  )
 
-  const remover = useCallback((id: string) => {
-    setServicos((atual) => atual.filter((s) => s.id !== id))
-  }, [])
+  const remover = useCallback(
+    async (id: string) => {
+      setServicos((atual) => atual.filter((s) => s.id !== id))
+      if (temSupabase) {
+        try {
+          await removerServico(id)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
+    },
+    [temSupabase],
+  )
 
   const porId = useCallback(
     (id: string) => servicos.find((s) => s.id === id),

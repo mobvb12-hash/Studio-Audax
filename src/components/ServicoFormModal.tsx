@@ -42,7 +42,7 @@ export default function ServicoFormModal({
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [onFechar])
 
-  function salvar() {
+  async function salvar() {
     if (nome.trim().length < 2) {
       setErro('Informe o nome do serviço.')
       return
@@ -71,10 +71,10 @@ export default function ServicoFormModal({
       if (servico) {
         const antigo = servico.nome
         const destino = nome.trim()
-        atualizar(servico.id, dados)
+        await atualizar(servico.id, dados)
         if (antigo !== destino) aoRenomear?.(antigo, destino)
       } else {
-        adicionar(dados)
+        await adicionar(dados)
       }
       onFechar()
     } catch (e) {

@@ -63,7 +63,7 @@ export default function ProfissionalFormModal({
     }
   }
 
-  function salvar() {
+  async function salvar() {
     if (nome.trim().length < 2) {
       setErro('Informe o nome completo do profissional.')
       return
@@ -77,10 +77,10 @@ export default function ProfissionalFormModal({
       if (profissional) {
         const antigo = profissional.nome
         const destino = nome.trim()
-        atualizar(profissional.id, dados)
+        await atualizar(profissional.id, dados)
         if (antigo !== destino) aoRenomear?.(antigo, destino)
       } else {
-        adicionar(dados)
+        await adicionar(dados)
       }
       onFechar()
     } catch (e) {

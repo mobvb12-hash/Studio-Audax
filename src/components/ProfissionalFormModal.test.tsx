@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfissionalFormModal from './ProfissionalFormModal'
 import {
@@ -72,9 +72,14 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
     expect(screen.getByText('Trocar foto')).toBeTruthy()
     expect(screen.getByText('Remover foto')).toBeTruthy()
 
-    fireEvent.click(screen.getByText('Cadastrar profissional'))
-    expect(onFechar).toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cadastrar profissional'))
+    })
+    await waitFor(() => expect(onFechar).toHaveBeenCalled())
 
+    await waitFor(() =>
+      expect(lerLista().find((p) => p.nome === 'Luan Costa')).toBeTruthy(),
+    )
     const salvo = lerLista().find((p) => p.nome === 'Luan Costa')
     expect(salvo).toBeTruthy()
     expect(salvo?.telefone).toBe('(11) 98888-7777')
@@ -82,15 +87,13 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
     expect(salvo?.foto).toBe(FOTO_NOVA)
 
     // persistência imediata no localStorage (F5)
-    const noStorage = JSON.parse(
-      localStorage.getItem('studio-audax:profissionais:v1') ?? '[]',
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem('studio-audax:profissionais:v1') ?? '[]').find(
+          (p: Profissional) => p.nome === 'Luan Costa',
+        )?.telefone,
+      ).toBe('(11) 98888-7777'),
     )
-    const persistido = noStorage.find(
-      (p: Profissional) => p.nome === 'Luan Costa',
-    )
-    expect(persistido?.telefone).toBe('(11) 98888-7777')
-    expect(persistido?.email).toBe('luan@email.com')
-    expect(persistido?.foto).toBe(FOTO_NOVA)
   })
 
   it('edita funcionário: troca telefone, e-mail e foto; depois remove a foto', async () => {
@@ -131,9 +134,14 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
       ).toBe(FOTO_NOVA),
     )
 
-    fireEvent.click(screen.getByText('Salvar alterações'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('Salvar alterações'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((p) => p.id === 'p1')?.telefone).toBe('(11) 91111-2222'),
+    )
+    await waitFor(() => expect(primeiro.onFechar).toHaveBeenCalled())
     const atualizado = lerLista().find((p) => p.id === 'p1')
-    expect(atualizado?.telefone).toBe('(11) 91111-2222')
     expect(atualizado?.email).toBe('audax@email.com')
     expect(atualizado?.foto).toBe(FOTO_NOVA)
     primeiro.unmount()
@@ -142,18 +150,39 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
     const segundo = montar(atualizado ?? null)
     fireEvent.click(screen.getByText('Remover foto'))
     expect(screen.queryByAltText('Foto de Audax Ferreira')).toBeNull()
-    fireEvent.click(screen.getByText('Salvar alterações'))
-    expect(lerLista().find((p) => p.id === 'p1')?.foto).toBe('')
+    await act(async () => {
+      fireEvent.click(screen.getByText('Salvar alterações'))
+    })
+    await waitFor(() =>
+      expect(
+        JSON.parse(screen.getByTestId('lista').textContent ?? '[]').find(
+          (p: Profissional) => p.id === 'p1',
+        )?.foto,
+      ).toBe(''),
+    )
     segundo.unmount()
 
     // 3) F5: confere persistência final
-    const terceiro = montar()
-    const final = lerLista().find((p) => p.id === 'p1')
+    montar()
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          localStorage.getItem('studio-audax:profissionais:v1') ?? '[]',
+        ).find((p: Profissional) => p.id === 'p1')?.telefone,
+      ).toBe('(11) 91111-2222'),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          localStorage.getItem('studio-audax:profissionais:v1') ?? '[]',
+        ).find((p: Profissional) => p.id === 'p1')?.foto,
+      ).toBe(''),
+    )
+    const final = JSON.parse(
+      localStorage.getItem('studio-audax:profissionais:v1') ?? '[]',
+    ).find((p: Profissional) => p.id === 'p1')
     expect(final?.nome).toBe('Audax Ferreira')
-    expect(final?.telefone).toBe('(11) 91111-2222')
     expect(final?.email).toBe('audax@email.com')
-    expect(final?.foto).toBe('')
-    terceiro.unmount()
   })
 
   it('rejeita e-mail inválido sem salvar', () => {

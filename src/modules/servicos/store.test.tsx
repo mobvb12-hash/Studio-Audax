@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ServicosProvider, useServicos } from './store'
@@ -25,7 +25,7 @@ function Tela() {
       <button
         type="button"
         onClick={() =>
-          adicionar({ nome: 'Pezinho', preco: 25, duracaoMin: 20 })
+          void adicionar({ nome: 'Pezinho', preco: 25, duracaoMin: 20 })
         }
       >
         criar
@@ -35,7 +35,7 @@ function Tela() {
           <button
             type="button"
             onClick={() =>
-              atualizar(alvo.id, {
+              void atualizar(alvo.id, {
                 nome: alvo.nome,
                 preco: 85,
                 duracaoMin: 45,
@@ -44,7 +44,7 @@ function Tela() {
           >
             editar
           </button>
-          <button type="button" onClick={() => remover(alvo.id)}>
+          <button type="button" onClick={() => void remover(alvo.id)}>
             excluir
           </button>
         </>
@@ -82,126 +82,169 @@ describe('Serviços — store', () => {
     expect(corte?.duracaoMin).toBe(40)
   })
 
-  it('cria serviço com nome, preço e duração e grava no localStorage', () => {
+  it('cria serviço com nome, preço e duração e grava no localStorage', async () => {
     montar()
-    fireEvent.click(screen.getByText('criar'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((s) => s.nome === 'Pezinho')).toBeTruthy(),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (s: Servico) => s.nome === 'Pezinho',
+        )?.preco,
+      ).toBe(25),
+    )
     const novo = lerLista().find((s) => s.nome === 'Pezinho')
     expect(novo).toBeTruthy()
     expect(novo?.preco).toBe(25)
     expect(novo?.duracaoMin).toBe(20)
-
-    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
-    expect(noStorage.find((s: Servico) => s.nome === 'Pezinho')?.preco).toBe(25)
   })
 
-  it('edita preço e duração (reflete em novos agendamentos)', () => {
+  it('edits preço e duração (reflete em novos agendamentos)', async () => {
     montar()
-    fireEvent.click(screen.getByText('criar'))
-    fireEvent.click(screen.getByText('editar'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((s) => s.nome === 'Pezinho')).toBeTruthy(),
+    )
+    await act(async () => {
+      fireEvent.click(screen.getByText('editar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((s) => s.nome === 'Pezinho')?.preco).toBe(85),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (s: Servico) => s.nome === 'Pezinho',
+        )?.duracaoMin,
+      ).toBe(45),
+    )
     const alvo = lerLista().find((s) => s.nome === 'Pezinho')
     expect(alvo?.preco).toBe(85)
     expect(alvo?.duracaoMin).toBe(45)
-
-    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
-    expect(noStorage.find((s: Servico) => s.nome === 'Pezinho')?.duracaoMin).toBe(
-      45,
-    )
   })
 
-  it('exclui serviço (exclusão onde permitido)', () => {
+  it('exclui serviço (exclusão onde permitido)', async () => {
     montar()
-    fireEvent.click(screen.getByText('criar'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((s) => s.nome === 'Pezinho')).toBeTruthy(),
+    )
     const antes = lerLista().length
-    fireEvent.click(screen.getByText('excluir'))
-    expect(lerLista()).toHaveLength(antes - 1)
+    await act(async () => {
+      fireEvent.click(screen.getByText('excluir'))
+    })
+    await waitFor(() => expect(lerLista()).toHaveLength(antes - 1))
   })
 
-  it('simula F5: dados continuam corretos ao reabrir o sistema', () => {
+  it('simulas F5: dados continuam corretos ao reabrir o sistema', async () => {
     const primeiro = montar()
-    fireEvent.click(screen.getByText('criar'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() =>
+      expect(lerLista().find((s) => s.nome === 'Pezinho')).toBeTruthy(),
+    )
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (s: Servico) => s.nome === 'Pezinho',
+        ),
+      ).toBeTruthy(),
+    )
     primeiro.unmount()
 
     montar()
     const novo = lerLista().find((s) => s.nome === 'Pezinho')
     expect(novo).toBeTruthy()
     expect(novo?.preco).toBe(25)
-    // catálogo original preservado
     expect(lerLista().map((s) => s.nome)).toContain('Corte Degradê')
   })
 
-  it('rejeita serviço duplicado por nome', () => {
+  it('rejeita serviço duplicado por nome', async () => {
     montar()
-    expect(() =>
+    await expect(
       ctx.adicionar({ nome: 'corte degradê', preco: 60, duracaoMin: 30 }),
-    ).toThrow(/Já existe um serviço com este nome/)
+    ).rejects.toThrow(/Já existe um serviço com este nome/)
 
-    act(() => {
-      ctx.adicionar({ nome: 'Pezinho', preco: 25, duracaoMin: 20 })
-    })
-    expect(() =>
+    await act(() =>
+      ctx.adicionar({ nome: 'Pezinho', preco: 25, duracaoMin: 20 }),
+    )
+    await expect(
       ctx.adicionar({ nome: 'Pezinho', preco: 30, duracaoMin: 15 }),
-    ).toThrow(/Já existe um serviço com este nome/)
+    ).rejects.toThrow(/Já existe um serviço com este nome/)
     expect(ctx.servicos.filter((s) => s.nome === 'Pezinho')).toHaveLength(1)
   })
 })
 
 describe('Serviços — validação no store', () => {
-  it('rejeita nome, preço e duração inválidos sem criar o serviço', () => {
+  it('rejeita nome, preço e duração inválidos sem criar o serviço', async () => {
     montar()
-    expect(() =>
+    await expect(
       ctx.adicionar({ nome: ' x', preco: 50, duracaoMin: 30 }),
-    ).toThrow(/Informe o nome do serviço/)
-    expect(() =>
+    ).rejects.toThrow(/Informe o nome do serviço/)
+    await expect(
       ctx.adicionar({ nome: 'Novo', preco: -5, duracaoMin: 30 }),
-    ).toThrow(/preço válido/)
-    expect(() =>
+    ).rejects.toThrow(/preço válido/)
+    await expect(
       ctx.adicionar({ nome: 'Novo', preco: Number.NaN, duracaoMin: 30 }),
-    ).toThrow(/preço válido/)
-    expect(() =>
+    ).rejects.toThrow(/preço válido/)
+    await expect(
       ctx.adicionar({ nome: 'Novo', preco: 50, duracaoMin: 4 }),
-    ).toThrow(/mínimo 5/)
+    ).rejects.toThrow(/mínimo 5/)
     expect(
       ctx.servicos.some((s) => s.nome === 'Novo'),
     ).toBe(false)
   })
 
-  it('rejeita atualização inválida mantendo o cadastro intacto', () => {
+  it('rejeita atualização inválida mantendo o cadastro intacto', async () => {
     montar()
     const alvo = ctx.servicos.find((s) => s.nome === 'Corte Degradê')!
-    expect(() =>
+    await expect(
       ctx.atualizar(alvo.id, { nome: alvo.nome, preco: -1, duracaoMin: 30 }),
-    ).toThrow(/preço válido/)
+    ).rejects.toThrow(/preço válido/)
     expect(ctx.porId(alvo.id)?.preco).toBe(70)
   })
 
-  it('categoria é opcional e fica salva no cadastro', () => {
+  it('categoria é opcional e fica salva no cadastro', async () => {
     montar()
-    act(() => {
+    await act(() =>
       ctx.adicionar({
         nome: 'Pezinho',
         preco: 25,
         duracaoMin: 20,
         categoria: 'Barba',
-      })
-    })
+      }),
+    )
     expect(ctx.servicos.find((s) => s.nome === 'Pezinho')?.categoria).toBe(
       'Barba',
     )
-    const noStorage = JSON.parse(localStorage.getItem(CHAVE) ?? '[]')
-    expect(
-      noStorage.find((s: Servico) => s.nome === 'Pezinho')?.categoria,
-    ).toBe('Barba')
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(CHAVE) ?? '[]').find(
+          (s: Servico) => s.nome === 'Pezinho',
+        )?.categoria,
+      ).toBe('Barba'),
+    )
   })
 })
 
 describe('Serviços — status ativo/inativo (sem apagar dados)', () => {
-  it('serviço nasce ativo e alternarAtivo inativa/reativa preservando tudo', () => {
+  it('serviço nasce ativo e alternarAtivo inativa/reativa preservando tudo', async () => {
     montar()
     fireEvent.click(screen.getByText('criar'))
+    await new Promise((r) => setTimeout(r, 0))
     const alvo = lerLista().find((s) => s.nome === 'Pezinho')!
     expect(alvo.ativo).toBe(true)
 
-    act(() => ctx.alternarAtivo(alvo.id))
+    await act(() => ctx.alternarAtivo(alvo.id))
     const inativo = lerLista().find((s) => s.id === alvo.id)!
     expect(inativo.ativo).toBe(false)
     expect(inativo.preco).toBe(25)
@@ -212,16 +255,16 @@ describe('Serviços — status ativo/inativo (sem apagar dados)', () => {
       noStorage.find((s: Servico) => s.nome === 'Pezinho')?.ativo,
     ).toBe(false)
 
-    act(() => ctx.alternarAtivo(alvo.id))
+    await act(() => ctx.alternarAtivo(alvo.id))
     expect(lerLista().find((s) => s.id === alvo.id)?.ativo).toBe(true)
   })
 
-  it('atualizar preserva o status inativo do serviço', () => {
+  it('atualizar preserva o status inativo do serviço', async () => {
     montar()
     const alvo = ctx.servicos.find((s) => s.nome === 'Corte Degradê')!
-    act(() => ctx.alternarAtivo(alvo.id))
-    act(() => {
-      ctx.atualizar(alvo.id, {
+    await act(() => ctx.alternarAtivo(alvo.id))
+    await act(() => {
+      void ctx.atualizar(alvo.id, {
         nome: alvo.nome,
         preco: 80,
         duracaoMin: alvo.duracaoMin,

@@ -12,15 +12,23 @@ import { normalizarTexto } from '@/lib/moeda'
 import { PROFISSIONAIS as SEED } from '@/modules/agenda/catalogo'
 import { validarProfissional } from './regras'
 import type { NovoProfissionalInput, Profissional } from './types'
+import { supabase } from '@/lib/supabase'
+import {
+  listarProfissionais,
+  criarProfissional,
+  atualizarProfissional,
+  alternarAtivoProfissional,
+  removerProfissional,
+} from '@/services/supabase/profissionais'
 
 const CHAVE_STORAGE = 'studio-audax:profissionais:v1'
 
 type ProfissionaisContexto = {
   profissionais: Profissional[]
-  adicionar: (input: NovoProfissionalInput) => Profissional
-  atualizar: (id: string, input: NovoProfissionalInput) => void
-  alternarAtivo: (id: string) => void
-  remover: (id: string) => void
+  adicionar: (input: NovoProfissionalInput) => Promise<Profissional>
+  atualizar: (id: string, input: NovoProfissionalInput) => Promise<void>
+  alternarAtivo: (id: string) => Promise<void>
+  remover: (id: string) => Promise<void>
   porId: (id: string) => Profissional | undefined
 }
 
@@ -107,13 +115,36 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
   const [profissionais, setProfissionais] = useState<Profissional[]>(() =>
     carregar(),
   )
+  const [sincronizado, setSincronizado] = useState(false)
+
+  const temSupabase = supabase() !== null
 
   useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    listarProfissionais()
+      .then((lista) => {
+        if (!vivo) return
+        if (lista.length > 0) {
+          setProfissionais(lista)
+        }
+        setSincronizado(true)
+      })
+      .catch(() => {
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase])
+
+  useEffect(() => {
+    if (temSupabase && !sincronizado) return
     salvarJSON(CHAVE_STORAGE, profissionais)
-  }, [profissionais])
+  }, [profissionais, temSupabase, sincronizado])
 
   const adicionar = useCallback(
-    (input: NovoProfissionalInput) => {
+    async (input: NovoProfissionalInput) => {
       const nome = input.nome.trim()
       const erro = validarProfissional({
         nome,
@@ -136,13 +167,20 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         criadoEm: new Date().toISOString(),
       }
       setProfissionais((atual) => ordenar([...atual, novo]))
+      if (temSupabase) {
+        try {
+          await criarProfissional(novo)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
       return novo
     },
-    [profissionais],
+    [profissionais, temSupabase],
   )
 
   const atualizar = useCallback(
-    (id: string, input: NovoProfissionalInput) => {
+    async (id: string, input: NovoProfissionalInput) => {
       const nome = input.nome.trim()
       const erro = validarProfissional({
         nome,
@@ -172,20 +210,50 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
           ),
         ),
       )
+      if (temSupabase) {
+        try {
+          await atualizarProfissional(id, input)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
     },
-    [profissionais],
+    [profissionais, temSupabase],
   )
 
   /** Inativar/reativar nunca apaga o profissional nem o histórico dele. */
-  const alternarAtivo = useCallback((id: string) => {
-    setProfissionais((atual) =>
-      atual.map((p) => (p.id === id ? { ...p, ativo: !p.ativo } : p)),
-    )
-  }, [])
+  const alternarAtivo = useCallback(
+    async (id: string) => {
+      const alvo = profissionais.find((p) => p.id === id)
+      if (!alvo) return
+      const novoAtivo = !alvo.ativo
+      setProfissionais((atual) =>
+        atual.map((p) => (p.id === id ? { ...p, ativo: novoAtivo } : p)),
+      )
+      if (temSupabase) {
+        try {
+          await alternarAtivoProfissional(id, novoAtivo)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
+    },
+    [profissionais, temSupabase],
+  )
 
-  const remover = useCallback((id: string) => {
-    setProfissionais((atual) => atual.filter((p) => p.id !== id))
-  }, [])
+  const remover = useCallback(
+    async (id: string) => {
+      setProfissionais((atual) => atual.filter((p) => p.id !== id))
+      if (temSupabase) {
+        try {
+          await removerProfissional(id)
+        } catch {
+          // falha de rede — localStorage já tem o dado
+        }
+      }
+    },
+    [temSupabase],
+  )
 
   const porId = useCallback(
     (id: string) => profissionais.find((p) => p.id === id),

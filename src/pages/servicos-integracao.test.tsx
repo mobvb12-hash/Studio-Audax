@@ -148,12 +148,10 @@ describe('Serviços inativos × novos agendamentos', () => {
     expect(salvo[0].servico).toBe('Corte Degradê')
   })
 
-  it('inativar com o modal aberto recusa salvar serviço inativo', () => {
+  it('inativar com o modal aberto recusa salvar serviço inativo', async () => {
     const onFechar = vi.fn()
     montarModal(onFechar)
-    act(() => {
-      ctxServicos.alternarAtivo(idDoServico('Barba'))
-    })
+    await act(() => ctxServicos.alternarAtivo(idDoServico('Barba')))
     expect(
       (screen.getByLabelText('Serviço') as HTMLSelectElement).value,
     ).not.toBe('Barba')

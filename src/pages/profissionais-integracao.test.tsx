@@ -260,7 +260,7 @@ describe('Agenda — profissional inativo preserva histórico', () => {
 })
 
 describe('Página Profissionais — inativar sem apagar', () => {
-  it('inativar/reativar preserva cadastro, contagem e histórico', () => {
+  it('inativar/reativar preserva cadastro, contagem e histórico', async () => {
     semearProfissionais([
       { nome: 'Audax', ativo: true },
       { nome: 'Diego', ativo: true },
@@ -273,6 +273,7 @@ describe('Página Profissionais — inativar sem apagar', () => {
     expect(within(alvo).getByText('Ativo')).toBeTruthy()
 
     fireEvent.click(within(alvo).getByLabelText('Inativar Diego'))
+    await new Promise((r) => setTimeout(r, 0))
     expect(within(alvo).getByText('Inativo')).toBeTruthy()
     expect(within(alvo).getByText('1 atendimento(s)')).toBeTruthy()
     expect(within(alvo).getByLabelText('Reativar Diego')).toBeTruthy()
@@ -285,6 +286,7 @@ describe('Página Profissionais — inativar sem apagar', () => {
     )
 
     fireEvent.click(within(alvo).getByLabelText('Reativar Diego'))
+    await new Promise((r) => setTimeout(r, 0))
     expect(within(alvo).getByText('Ativo')).toBeTruthy()
     expect(
       ctxProfissionais.profissionais.find((p) => p.nome === 'Diego')?.ativo,
@@ -293,11 +295,9 @@ describe('Página Profissionais — inativar sem apagar', () => {
 })
 
 describe('PDV — profissional inativo do cadastro', () => {
-  it('não oferece profissional inativo no select do atendimento', () => {
+  it('não oferece profissional inativo no select do atendimento', async () => {
     envPdv()
-    act(() => {
-      ctxProfissionais.alternarAtivo(idDoProfissional('Cleiton Silva'))
-    })
+    await act(() => ctxProfissionais.alternarAtivo(idDoProfissional('Cleiton Silva')))
     const select = screen.getByLabelText('Profissional (opcional)')
     expect(select.textContent).toContain('Ítalo Santos')
     expect(select.textContent).not.toContain('Cleiton Silva')
@@ -305,9 +305,9 @@ describe('PDV — profissional inativo do cadastro', () => {
 })
 
 describe('Relatórios — profissional inativo com produção preservada', () => {
-  it('marca "Inativo" na tabela e mantém a produção do período', () => {
+  it('marca "Inativo" na tabela e mantém a produção do período', async () => {
     envRelatorios()
-    act(() => {
+    await act(() => {
       ctxCaixa.registrarPagamento({
         agendamentoId: 'ag-1',
         data: DIA,
@@ -320,7 +320,7 @@ describe('Relatórios — profissional inativo com produção preservada', () =>
         formaPagamento: 'pix',
         statusAgendamento: 'concluido',
       })
-      ctxProfissionais.alternarAtivo(idDoProfissional('Cleiton Silva'))
+      void ctxProfissionais.alternarAtivo(idDoProfissional('Cleiton Silva'))
     })
 
     expect(screen.getByText('Inativo')).toBeTruthy()
