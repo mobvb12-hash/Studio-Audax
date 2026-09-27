@@ -43,7 +43,8 @@ vi.mock('@/services/supabase/servicos', () => ({
     // a lista é capturada na chamada: quem cria durante a leitura ainda
     // está fora do resultado (mesma corrida do navegador)
     const captura = [...remoto.linhas]
-    if (remoto.falhaLeitura) return []
+    // erro de consulta não vira lista vazia: o repositório lança
+    if (remoto.falhaLeitura) throw new Error('rede indisponível')
     if (remoto.leituraCongelada) {
       await new Promise<void>((liberar) => {
         remoto.liberarLeitura = liberar
@@ -156,6 +157,18 @@ beforeEach(() => {
 })
 
 describe('Serviços — cadastro local e Supabase', () => {
+  it('banco realmente vazio (leitura ok, 0 linhas) reenvia o cadastro local', async () => {
+    gravarLocal([svc('s-1', 'Corte')])
+    remoto.linhas = [] // consulta funciona e não devolve nenhuma linha
+
+    montar()
+
+    // vazio legítimo ≠ falha de leitura: aqui o reenvio é o comportamento certo
+    await waitFor(() => expect(remoto.ids()).toEqual(['s-1']))
+    expect(ctx.servicos.map((s) => s.nome)).toEqual(['Corte'])
+    expect(repositorio.importarServicos).toHaveBeenCalledTimes(1)
+  })
+
   it('cadastro local ausente no remoto é enviado e continua na lista', async () => {
     gravarLocal([svc('s-1', 'Corte'), svc('s-2', 'Escova')])
     remoto.linhas = [svc('s-1', 'Corte')]
@@ -249,21 +262,45 @@ describe('Serviços — cadastro local e Supabase', () => {
     await waitFor(() => expect(salvoLocal()[0]?.nome).toBe('Corte Editado'))
   })
 
-  it('leitura falha: mantém o local, não grava no remoto e avisa o envio incompleto', async () => {
+  it('falha de leitura não vira banco vazio: nada é reenviado e o remoto fica intacto', async () => {
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
     gravarLocal([svc('s-1', 'Corte')])
+    // o servidor tem o cadastro de outro aparelho: não pode ser sobrescrito
+    remoto.linhas = [svc('s-1', 'Corte'), svc('s-9', 'Barba')]
     remoto.falhaLeitura = true
+
+    montar()
+
+    await waitFor(() => expect(aviso).toHaveBeenCalled())
+    expect(aviso).toHaveBeenCalledWith(
+      expect.stringContaining('Supabase indisponível'),
+      expect.any(Error),
+    )
+    // "não consegui ler" não pode virar "banco vazio" → nenhum reenvio
+    expect(repositorio.importarServicos).not.toHaveBeenCalled()
+    // o que já existia no servidor continua intacto
+    expect(remoto.ids()).toEqual(['s-1', 's-9'])
+    // e o cadastro local permanece como estava
+    await waitFor(() => expect(ctx.servicos).toHaveLength(1))
+    expect(ctx.servicos[0]?.nome).toBe('Corte')
+    await waitFor(() => expect(salvoLocal()).toHaveLength(1))
+    aviso.mockRestore()
+  })
+
+  it('leitura boa com reenvio recusado avisa envio incompleto e mantém o local', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    gravarLocal([svc('s-1', 'Corte'), svc('s-2', 'Escova')])
+    remoto.linhas = [svc('s-1', 'Corte')]
     remoto.falhaEscrita = true
 
     montar()
 
-    await waitFor(() => expect(ctx.servicos).toHaveLength(1))
-    expect(ctx.servicos[0]?.nome).toBe('Corte')
-    expect(remoto.linhas).toHaveLength(0)
-    await waitFor(() => expect(salvoLocal()).toHaveLength(1))
+    await waitFor(() => expect(aviso).toHaveBeenCalled())
     expect(aviso).toHaveBeenCalledWith(
       expect.stringContaining('envio incompleto'),
     )
+    await waitFor(() => expect(ctx.servicos).toHaveLength(2))
+    expect(remoto.ids()).toEqual(['s-1'])
     aviso.mockRestore()
   })
 

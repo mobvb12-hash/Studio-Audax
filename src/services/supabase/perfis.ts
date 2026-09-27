@@ -44,6 +44,11 @@ function erroDeEscrita(mensagem: string | undefined): Error {
   return new Error(mensagem || 'Falha ao gravar o perfil no Supabase.')
 }
 
+/**
+ * Perfil do usuário. Sem Supabase: `null` (modo local). Com Supabase: erro de
+ * consulta lança, para não se confundirem "usuário sem perfil" com "não
+ * consegui ler o banco".
+ */
 export async function obterPerfil(userId: string): Promise<Perfil | null> {
   const cliente = supabase()
   if (!cliente) return null
@@ -52,7 +57,9 @@ export async function obterPerfil(userId: string): Promise<Perfil | null> {
     .select('*')
     .eq('user_id', userId)
     .maybeSingle()
-  if (error || !data) return null
+  // consulta válida sem linha = usuário ainda sem perfil (não é erro)
+  if (error) throw new Error(error.message || 'Falha ao ler o perfil no Supabase.')
+  if (!data) return null
   return paraPerfil(data)
 }
 

@@ -43,7 +43,8 @@ vi.mock('@/services/supabase/profissionais', () => ({
     // a lista é capturada na chamada: quem cria durante a leitura ainda
     // está fora do resultado (mesma corrida do navegador)
     const captura = [...remoto.linhas]
-    if (remoto.falhaLeitura) return []
+    // erro de consulta não vira lista vazia: o repositório lança
+    if (remoto.falhaLeitura) throw new Error('rede indisponível')
     if (remoto.leituraCongelada) {
       await new Promise<void>((liberar) => {
         remoto.liberarLeitura = liberar
@@ -152,6 +153,18 @@ beforeEach(() => {
 })
 
 describe('Profissionais — cadastro local e Supabase', () => {
+  it('banco realmente vazio (leitura ok, 0 linhas) reenvia o cadastro local', async () => {
+    gravarLocal([prof('p-1', 'Ana Local')])
+    remoto.linhas = [] // consulta funciona e não devolve nenhuma linha
+
+    montar()
+
+    // vazio legítimo ≠ falha de leitura: aqui o reenvio é o comportamento certo
+    await waitFor(() => expect(remoto.ids()).toEqual(['p-1']))
+    expect(ctx.profissionais.map((p) => p.nome)).toEqual(['Ana Local'])
+    expect(repositorio.importarProfissionais).toHaveBeenCalledTimes(1)
+  })
+
   it('cadastro local ausente no remoto é enviado e continua na lista', async () => {
     gravarLocal([prof('p-1', 'Ana Local'), prof('p-2', 'Bruno Local')])
     remoto.linhas = [prof('p-1', 'Ana Local')]
@@ -198,25 +211,49 @@ describe('Profissionais — cadastro local e Supabase', () => {
     expect(remoto.linhas).toHaveLength(2)
   })
 
-  it('leitura falha: mantém o local, não grava no remoto e avisa o envio incompleto', async () => {
+  it('falha de leitura não vira banco vazio: nada é reenviado e o remoto fica intacto', async () => {
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
     gravarLocal([prof('p-1', 'Ana Local')])
+    // o servidor tem o cadastro de outro aparelho: não pode ser sobrescrito
+    remoto.linhas = [prof('p-1', 'Ana Local'), prof('p-9', 'Zeca Remoto')]
     remoto.falhaLeitura = true
+
+    montar()
+
+    await waitFor(() => expect(aviso).toHaveBeenCalled())
+    expect(aviso).toHaveBeenCalledWith(
+      expect.stringContaining('Supabase indisponível'),
+      expect.any(Error),
+    )
+    // "não consegui ler" não pode virar "banco vazio" → nenhum reenvio
+    expect(repositorio.importarProfissionais).not.toHaveBeenCalled()
+    // o que já existia no servidor continua intacto
+    expect(remoto.ids()).toEqual(['p-1', 'p-9'])
+    // e o cadastro local permanece como estava
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    expect(ctx.profissionais[0]?.nome).toBe('Ana Local')
+    await waitFor(() => expect(salvoLocal()).toHaveLength(1))
+    aviso.mockRestore()
+  })
+
+  it('leitura boa com reenvio recusado avisa envio incompleto e mantém o local', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    gravarLocal([prof('p-1', 'Ana Local'), prof('p-2', 'Bruno Local')])
+    remoto.linhas = [prof('p-1', 'Ana Local')]
     remoto.falhaEscrita = true
 
     montar()
 
-    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
-    expect(ctx.profissionais[0]?.nome).toBe('Ana Local')
-    expect(remoto.linhas).toHaveLength(0)
-    await waitFor(() => expect(salvoLocal()).toHaveLength(1))
+    await waitFor(() => expect(aviso).toHaveBeenCalled())
     expect(aviso).toHaveBeenCalledWith(
       expect.stringContaining('envio incompleto'),
     )
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(2))
+    expect(remoto.ids()).toEqual(['p-1'])
     aviso.mockRestore()
   })
 
-  it('leitura rejeitada: mantém o fallback local intacto e avisa', async () => {
+  it('leitura rejeitada pontual mantém o fallback local intacto e avisa', async () => {
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
     gravarLocal([prof('p-1', 'Ana Local')])
     vi.mocked(repositorio.listarProfissionais).mockRejectedValueOnce(

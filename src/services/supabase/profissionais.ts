@@ -37,6 +37,13 @@ function erroDeEscrita(mensagem: string | undefined): Error {
   return new Error(mensagem || 'Falha ao gravar profissionais no Supabase.')
 }
 
+/**
+ * Todos os profissionais, em ordem de nome.
+ * Sem Supabase: `[]` (modo local). Com Supabase: erro de consulta lança —
+ * lista vazia significa "não existe nenhum profissional", nunca "não consegui
+ * ler", senão a integração do C2 trataria falha de rede como banco vazio e
+ * reenviaria o cadastro local por cima do que já existe no servidor.
+ */
 export async function listarProfissionais(): Promise<Profissional[]> {
   const cliente = supabase()
   if (!cliente) return []
@@ -44,7 +51,8 @@ export async function listarProfissionais(): Promise<Profissional[]> {
     .from('profissionais')
     .select('*')
     .order('nome', { ascending: true })
-  if (error || !data) return []
+  if (error) throw new Error(error.message || 'Falha ao ler profissionais no Supabase.')
+  if (!data) throw new Error('Falha ao ler profissionais no Supabase.')
   return data.map(paraProfissional)
 }
 
