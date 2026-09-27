@@ -173,42 +173,49 @@ function AreaProtegida({ children }: { children: ReactNode }) {
 
 function App() {
   return (
-    <ClientesProvider>
-      <ProfissionaisProvider>
-        <ProdutosProvider>
-          <EstoqueProvider>
-            <ServicosProvider>
-              <CaixaProvider>
-                <AgendaProvider>
-                  <ComissoesProvider>
-                    <ClubeProvider>
-                      <CrmProvider>
-                        <EsperaProvider>
-                          <MarketingProvider>
-                            <AutomacoesProvider>
-                              <WhatsProvider>
-              <IaProvider>
-                <AuthProvider>
-                  <AvisoPersistencia />
-                  <AreaProtegida>
-                    <Conteudo />
-                  </AreaProtegida>
-                </AuthProvider>
-              </IaProvider>
-                              </WhatsProvider>
-                            </AutomacoesProvider>
-                          </MarketingProvider>
-                        </EsperaProvider>
-                      </CrmProvider>
-                    </ClubeProvider>
-                  </ComissoesProvider>
-                </AgendaProvider>
-              </CaixaProvider>
-            </ServicosProvider>
-          </EstoqueProvider>
-        </ProdutosProvider>
-      </ProfissionaisProvider>
-    </ClientesProvider>
+    <AuthProvider>
+      <AvisoPersistencia />
+      {/*
+        Os módulos que leem/gravam no Supabase montam DEPOIS do portão de
+        sessão: carga remota sem token é recusada pela RLS e não se repete
+        sozinha — sem esta ordem, o primeiro login abriria o sistema vazio
+        (dado nenhum foi lido) mesmo com tudo salvo no servidor. Em modo
+        local (sem Supabase) o portão abre na hora, sem mudar o comportamento.
+      */}
+      <AreaProtegida>
+        <ClientesProvider>
+          <ProfissionaisProvider>
+            <ProdutosProvider>
+              <EstoqueProvider>
+                <ServicosProvider>
+                  <CaixaProvider>
+                    <AgendaProvider>
+                      <ComissoesProvider>
+                        <ClubeProvider>
+                          <CrmProvider>
+                            <EsperaProvider>
+                              <MarketingProvider>
+                                <AutomacoesProvider>
+                                  <WhatsProvider>
+                                    <IaProvider>
+                                      <Conteudo />
+                                    </IaProvider>
+                                  </WhatsProvider>
+                                </AutomacoesProvider>
+                              </MarketingProvider>
+                            </EsperaProvider>
+                          </CrmProvider>
+                        </ClubeProvider>
+                      </ComissoesProvider>
+                    </AgendaProvider>
+                  </CaixaProvider>
+                </ServicosProvider>
+              </EstoqueProvider>
+            </ProdutosProvider>
+          </ProfissionaisProvider>
+        </ClientesProvider>
+      </AreaProtegida>
+    </AuthProvider>
   )
 }
 
