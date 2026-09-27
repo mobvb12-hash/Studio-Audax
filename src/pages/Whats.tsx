@@ -1,22 +1,19 @@
 import { useMemo, useState } from 'react'
-import { formatarISO } from '@/lib/apresentacao'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import CrmClienteModal from '@/components/CrmClienteModal'
-import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import { hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useClientes } from '@/modules/clientes/store'
 import type { Cliente } from '@/modules/clientes/types'
 import { diasEntre, proximoAgendamento } from '@/modules/crm/regras'
+import ListaMensagens from '@/modules/whatsapp/components/ListaMensagens'
+import NovaMensagem from '@/modules/whatsapp/components/NovaMensagem'
 import { useWhats } from '@/modules/whatsapp/store'
 import { dadosDoAgendamento, textoTemplate } from '@/modules/whatsapp/templates'
-import {
-  ORIGEM_ROTULO,
-  STATUS_ROTULO,
-  TEMPLATES_CENTRAL,
-  TEMPLATES_ROTULO,
-  type IdTemplate,
-  type MensagemWhats,
-  type StatusMensagem,
+import type {
+  IdTemplate,
+  MensagemWhats,
+  StatusMensagem,
 } from '@/modules/whatsapp/types'
 
 type Filtro = StatusMensagem | 'todos'
@@ -27,13 +24,6 @@ const FILTROS: { id: Filtro; rotulo: string }[] = [
   { id: 'enviada', rotulo: 'Enviadas' },
   { id: 'falhou', rotulo: 'Falharam' },
 ]
-
-function corStatus(status: StatusMensagem): string {
-  if (status === 'enviada')
-    return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-  if (status === 'falhou') return 'border-red-300 bg-red-50 text-red-700'
-  return 'border-amber-300 bg-amber-50 text-amber-800'
-}
 
 function norm(s: string): string {
   return s.trim().toLowerCase()
@@ -225,57 +215,16 @@ export default function Whats() {
       </div>
 
       {/* Preparar nova mensagem com templates oficiais */}
-      <div className="mt-5 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4">
-        <h2 className="text-sm font-bold text-[#1C1A15]">Nova mensagem</h2>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex flex-1 flex-col gap-1 text-[12px] font-medium text-[#4A4436]">
-            Cliente
-            <select
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
-            >
-              <option value="">Selecione…</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-1 flex-col gap-1 text-[12px] font-medium text-[#4A4436]">
-            Modelo
-            <select
-              value={template}
-              onChange={(e) => setTemplate(e.target.value as IdTemplate)}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
-            >
-              {TEMPLATES_CENTRAL.map((id) => (
-                <option key={id} value={id}>
-                  {TEMPLATES_ROTULO[id]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={criarMensagem}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
-          >
-            Criar mensagem pendente
-          </button>
-        </div>
-        {erroComp && (
-          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
-            {erroComp}
-          </p>
-        )}
-        {avisoComp && (
-          <p className="mt-3 rounded-lg bg-[#E9F5E4] px-3 py-2 text-[13px] text-[#3F6B33]">
-            {avisoComp}
-          </p>
-        )}
-      </div>
+      <NovaMensagem
+        clientes={clientes}
+        clienteId={clienteId}
+        aoCliente={setClienteId}
+        template={template}
+        aoTemplate={setTemplate}
+        aoCriar={criarMensagem}
+        erro={erroComp}
+        aviso={avisoComp}
+      />
 
       {/* Filtros e busca */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
@@ -313,92 +262,16 @@ export default function Whats() {
         </p>
       )}
 
-      {/* Lista de mensagens */}
-      <div className="mt-3">
-        {filtradas.length === 0 ? (
-          <p className="text-sm text-[#A99E85]">
-            {mensagens.length === 0
-              ? 'Nenhuma mensagem registrada. Use os templates acima, o CRM ou as Automações.'
-              : 'Nenhuma mensagem com este filtro.'}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {filtradas.map((m) => {
-              const ag = m.agendamentoId
-                ? agendamentos.find((a) => a.id === m.agendamentoId)
-                : undefined
-              return (
-                <li
-                  key={m.id}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${corStatus(
-                        m.status,
-                      )}`}
-                    >
-                      {STATUS_ROTULO[m.status]}
-                    </span>
-                    <p className="text-sm font-bold text-[#1C1A15]">
-                      {m.cliente}
-                    </p>
-                    <span className="text-[11px] font-medium text-[#8A8171]">
-                      {TEMPLATES_ROTULO[m.template]} · {ORIGEM_ROTULO[m.origem]}{' '}
-                      · {formatarISO(m.criadoEm)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-[#4A4436]">{m.texto}</p>
-                  {ag && (
-                    <p className="mt-1 text-[12px] text-[#8A6A14]">
-                      Agendamento · {formatarDataLonga(ag.data)} às {ag.horario}
-                    </p>
-                  )}
-                  {m.motivoFalha && (
-                    <p className="mt-1 text-[12px] text-red-700">
-                      {m.motivoFalha}
-                    </p>
-                  )}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => tentarEnviar(m)}
-                      className="rounded-lg border border-[#8A6A14] bg-white px-2.5 py-1 text-xs font-medium text-[#8A6A14] hover:bg-[#F3ECDA]"
-                    >
-                      Enviar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => registrarEnvioManual(m.id)}
-                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-                    >
-                      Marcar enviada
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFalhando(m)}
-                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-                    >
-                      Registrar falha
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Histórico de ${m.cliente}`}
-                      onClick={() => {
-                        const cliente = clientes.find((c) => c.id === m.clienteId)
-                        if (cliente) setClienteDo(cliente)
-                      }}
-                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-                    >
-                      Ver histórico
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
+      <ListaMensagens
+        filtradas={filtradas}
+        total={mensagens.length}
+        agendamentos={agendamentos}
+        clientes={clientes}
+        aoEnviar={tentarEnviar}
+        aoMarcarEnviada={registrarEnvioManual}
+        aoRegistrarFalha={setFalhando}
+        aoVerHistorico={setClienteDo}
+      />
 
       {clienteDo && (
         <CrmClienteModal

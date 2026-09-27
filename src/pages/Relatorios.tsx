@@ -1,13 +1,6 @@
 import { useMemo, useState } from 'react'
-import { chipClasse, dataCurta } from '@/lib/apresentacao'
 import { formatarBRL } from '@/lib/moeda'
-import {
-  BarraEvolucao,
-  CelulaKpi,
-  LinhaDetalhe,
-  Secao,
-  Vazio,
-} from '@/components/PainelUi'
+import { CelulaKpi, Secao, Vazio } from '@/components/PainelUi'
 import { useAgenda } from '@/modules/agenda/store'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
@@ -16,8 +9,6 @@ import { useClube } from '@/modules/clube/store'
 import { useComissoes } from '@/modules/comissoes/store'
 import { linhasDetalhadasDoPeriodo, totaisDoPeriodo } from '@/modules/comissoes/resumo'
 import { montarPerfis, resumoSegmentos } from '@/modules/crm/regras'
-import { SEGMENTOS_ORDEM, SEGMENTOS_ROTULO } from '@/modules/crm/types'
-import { ROTULO_STATUS, type StatusEstoque } from '@/modules/estoque/indicadores'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Periodo } from '@/modules/comissoes/types'
@@ -34,6 +25,12 @@ import {
   servicosDoPeriodo,
   variacaoPercentual,
 } from '@/modules/relatorios/calculos'
+import AgendaCrm from '@/modules/relatorios/components/AgendaCrm'
+import ClubeComissoes from '@/modules/relatorios/components/ClubeComissoes'
+import DespesasClientes from '@/modules/relatorios/components/DespesasClientes'
+import FaturamentoFormas from '@/modules/relatorios/components/FaturamentoFormas'
+import FiltrosPeriodo from '@/modules/relatorios/components/FiltrosPeriodo'
+import ProducaoPeriodo from '@/modules/relatorios/components/ProducaoPeriodo'
 import {
   periodoAnterior,
   periodoHoje,
@@ -41,16 +38,9 @@ import {
   periodoMesAnterior,
   periodoOntem,
   periodoSemana,
-  ROTULO_TIPO,
   rotuloPeriodo,
   type TipoPeriodo,
 } from '@/modules/relatorios/periodo'
-
-function classeStatus(status: StatusEstoque): string {
-  if (status === 'zerado') return 'text-red-700'
-  if (status === 'baixo') return 'text-[#8A6A14]'
-  return 'text-[#4A4436]'
-}
 
 export default function Relatorios() {
   const { lancamentos } = useCaixa()
@@ -241,50 +231,15 @@ export default function Relatorios() {
       </div>
 
       {/* Filtros de período e profissional — alimentam todos os relatórios */}
-      <div className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4">
-        {(Object.keys(ROTULO_TIPO) as TipoPeriodo[]).map((id) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTipo(id)}
-            className={chipClasse(tipo === id)}
-          >
-            {ROTULO_TIPO[id]}
-          </button>
-        ))}
-        {tipo === 'custom' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="date"
-              aria-label="Início do período"
-              value={custom.inicio}
-              onChange={(e) => aplicarCustom('inicio', e.target.value)}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
-            />
-            <span className="text-sm text-[#8A8171]">até</span>
-            <input
-              type="date"
-              aria-label="Fim do período"
-              value={custom.fim}
-              onChange={(e) => aplicarCustom('fim', e.target.value)}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
-            />
-          </div>
-        )}
-        <select
-          aria-label="Profissional"
-          value={profFiltro}
-          onChange={(e) => setProfFiltro(e.target.value)}
-          className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
-        >
-          <option value="todos">Todos os profissionais</option>
-          {opcoesProf.map((nome) => (
-            <option key={nome} value={nome}>
-              {nome}
-            </option>
-          ))}
-        </select>
-      </div>
+      <FiltrosPeriodo
+        tipo={tipo}
+        aoTipo={setTipo}
+        custom={custom}
+        aoCustom={aplicarCustom}
+        profFiltro={profFiltro}
+        aoProfFiltro={setProfFiltro}
+        opcoesProf={opcoesProf}
+      />
 
       {/* Resumo financeiro */}
       <Secao titulo="Resumo financeiro">
@@ -330,687 +285,39 @@ export default function Relatorios() {
       </Secao>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Faturamento */}
-        <Secao titulo="Faturamento">
-          {!fat.temDados ? (
-            <Vazio texto="Sem faturamento no período selecionado." />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <LinhaDetalhe
-                  rotulo="Faturamento bruto (total)"
-                  valor={formatarBRL(fat.bruto)}
-                />
-                <LinhaDetalhe
-                  rotulo="Descontos concedidos"
-                  valor={formatarBRL(fat.descontos)}
-                />
-                <LinhaDetalhe
-                  rotulo="Serviços (líquido)"
-                  valor={formatarBRL(fat.servicos)}
-                />
-                <LinhaDetalhe
-                  rotulo="Produtos (líquido)"
-                  valor={formatarBRL(fat.produtos)}
-                />
-                <LinhaDetalhe
-                  rotulo="Assinaturas (líquido)"
-                  valor={formatarBRL(fat.clube)}
-                />
-                <LinhaDetalhe
-                  rotulo="Estornos (fora da receita)"
-                  valor={formatarBRL(fat.estornos)}
-                />
-                <LinhaDetalhe
-                  rotulo="Despesas (no período)"
-                  valor={formatarBRL(fat.despesas)}
-                />
-                <LinhaDetalhe
-                  rotulo="Resultado líquido (receita – despesas)"
-                  valor={formatarBRL(fat.liquido - fat.despesas)}
-                />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-                  Evolução por dia
-                </p>
-                {fat.evolucao.length === 0 ? (
-                  <Vazio texto="Sem lançamentos no período." />
-                ) : (
-                  <BarraEvolucao dias={fat.evolucao} />
-                )}
-              </div>
-            </div>
-          )}
-          {fat.temDados && fatAnterior.temDados && (
-            <div className="mt-4 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] p-3">
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-                Comparação com o período anterior
-              </p>
-              <p className="mt-1 text-xs text-[#8A8171]">
-                {rotuloPeriodo(anterior)}
-              </p>
-              <div className="mt-1">
-                <LinhaDetalhe
-                  rotulo="Receita líquida no anterior"
-                  valor={formatarBRL(fatAnterior.liquido)}
-                />
-                <LinhaDetalhe
-                  rotulo="Atendimentos pagos no anterior"
-                  valor={String(resumoAnterior.qtdAtendimentosPagos)}
-                />
-              </div>
-              {variacao !== null && (
-                <p
-                  className={`mt-2 text-sm font-semibold ${
-                    variacao > 0
-                      ? 'text-[#6B8E5A]'
-                      : variacao < 0
-                        ? 'text-red-700'
-                        : 'text-[#4A4436]'
-                  }`}
-                >
-                  Receita: {variacao > 0 ? '+' : ''}
-                  {variacao}% vs. anterior
-                </p>
-              )}
-            </div>
-          )}
-        </Secao>
-
-        {/* Formas de pagamento */}
-        <Secao titulo="Formas de pagamento">
-          {!formas.temDados ? (
-            <Vazio texto="Nenhum recebimento no período selecionado." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[420px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                    <th className="px-3 py-2 font-semibold">Forma</th>
-                    <th className="px-3 py-2 text-right font-semibold">Qtd</th>
-                    <th className="px-3 py-2 text-right font-semibold">Valor</th>
-                    <th className="px-3 py-2 text-right font-semibold">%</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EFE7D3]">
-                  {formas.linhas.map((f) => (
-                    <tr key={f.forma}>
-                      <td className="px-3 py-2 font-medium text-[#1C1A15]">
-                        {f.rotulo}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {f.qtd}
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
-                        {formatarBRL(f.valor)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#8A8171]">
-                        {f.percentual}%
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-[#FAF6EB] font-semibold">
-                    <td className="px-3 py-2 text-[#1C1A15]">Total</td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
-                      {formas.linhas.reduce((t, f) => t + f.qtd, 0)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[#8A6A14]">
-                      {formatarBRL(formas.total)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[#8A8171]">100%</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Secao>
-
-        {/* Profissionais */}
-        <Secao titulo="Profissionais">
-          {!temProducao ? (
-            <Vazio texto="Sem produção de atendimentos no período." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                    <th className="px-3 py-2 font-semibold">Profissional</th>
-                    <th className="px-3 py-2 text-right font-semibold">Atend.</th>
-                    <th className="px-3 py-2 text-right font-semibold">Produção</th>
-                    <th className="px-3 py-2 text-right font-semibold">Produtos</th>
-                    <th className="px-3 py-2 text-right font-semibold">Descontos</th>
-                    <th className="px-3 py-2 text-right font-semibold">Estornos</th>
-                    <th className="px-3 py-2 text-right font-semibold">%</th>
-                    <th className="px-3 py-2 text-right font-semibold">Comissão</th>
-                    <th className="px-3 py-2 text-right font-semibold">
-                      Líquido após comissão
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EFE7D3]">
-                  {profLinhas.map((p) => (
-                    <tr key={p.chave}>
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-[#1C1A15]">
-                          {p.nome}
-                        </span>
-                        {p.inativo && (
-                          <span className="ml-2 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                            Inativo
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {p.qtd}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {formatarBRL(p.producao)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {formatarBRL(p.producaoProdutos)}
-                        {p.qtdProdutos > 0 && (
-                          <span className="ml-1 text-xs text-[#8A8171]">
-                            ({p.qtdProdutos})
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {formatarBRL(p.descontos)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
-                        {formatarBRL(p.estornos)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[#8A8171]">
-                        {p.percentual}%
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[#8A6A14]">
-                        {formatarBRL(p.comissao)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[#6B8E5A]">
-                        {formatarBRL(p.producao + p.producaoProdutos - p.comissao)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Secao>
-
-        {/* Serviços */}
-        <Secao titulo="Serviços">
-          {!servicos.temDados ? (
-            <Vazio texto="Nenhum serviço realizado no período." />
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
-                Mais realizado: {servicos.maisRealizado?.nome} (
-                {servicos.maisRealizado?.qtd})
-              </span>
-              <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-3 py-1.5 text-xs font-medium text-[#8A6A14]">
-                Maior receita: {servicos.maisReceita?.nome} (
-                {formatarBRL(servicos.maisReceita?.faturamento ?? 0)})
-              </span>
-              <div className="mt-2 w-full overflow-x-auto">
-                <table className="w-full min-w-[420px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                      <th className="px-3 py-2 font-semibold">Serviço</th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Realizados
-                      </th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Faturamento
-                      </th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Ticket médio por serviço
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#EFE7D3]">
-                    {servicos.linhas.map((s) => (
-                      <tr key={s.nome}>
-                        <td className="px-3 py-2 font-medium text-[#1C1A15]">
-                          {s.nome}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {s.qtd}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {formatarBRL(s.faturamento)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {formatarBRL(s.ticketMedio)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </Secao>
-
-        {/* Produtos */}
-        <Secao titulo="Produtos">
-          {!prods.temDados ? (
-            <Vazio texto="Nenhum produto cadastrado." />
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
-                  Vendidos no período: {prods.qtdTotalVendida} un.
-                </span>
-                <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-3 py-1.5 text-xs font-medium text-[#8A6A14]">
-                  Receita de produtos: {formatarBRL(prods.receitaTotal)}
-                </span>
-                <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
-                  Estoque baixo/zerado: {prods.baixos}
-                </span>
-              </div>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                      <th className="px-3 py-2 font-semibold">Produto</th>
-                      <th className="px-3 py-2 font-semibold">Categoria</th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Vendidos
-                      </th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Receita
-                      </th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Estoque atual
-                      </th>
-                      <th className="px-3 py-2 font-semibold">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#EFE7D3]">
-                    {prods.linhas.map((p) => (
-                      <tr key={p.id} className={p.ativo ? '' : 'opacity-60'}>
-                        <td className="px-3 py-2 font-medium text-[#1C1A15]">
-                          {p.nome}
-                          {!p.ativo && (
-                            <span className="ml-1.5 text-xs text-[#A99E85]">
-                              inativo
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-[#4A4436]">
-                          {p.categoria || '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {p.qtdVendida}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {formatarBRL(p.receita)}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
-                          {p.estoqueAtual}
-                        </td>
-                        <td
-                          className={`px-3 py-2 font-medium ${classeStatus(p.status)}`}
-                        >
-                          {ROTULO_STATUS[p.status]}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </Secao>
-
-        {/* Despesas */}
-        <Secao titulo="Despesas do período">
-          {!despesas.temDados ? (
-            <Vazio texto="Nenhuma despesa no período selecionado." />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <div className="flex gap-4 text-sm">
-                  <div>
-                    <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-                      Total
-                    </p>
-                    <p className="mt-1 text-[22px] leading-none font-bold text-red-700">
-                      {formatarBRL(despesas.total)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-                      Lançamentos
-                    </p>
-                    <p className="mt-1 text-[22px] leading-none font-bold text-[#1C1A15]">
-                      {despesas.qtd}
-                    </p>
-                  </div>
-                </div>
-                <ul className="mt-4 divide-y divide-[#EFE7D3]">
-                  {despesas.porCategoria.map((c) => (
-                    <li
-                      key={c.categoria}
-                      className="flex items-center justify-between py-2 text-sm"
-                    >
-                      <span className="text-[#4A4436]">
-                        {c.categoria}{' '}
-                        <span className="text-xs text-[#8A8171]">({c.qtd})</span>
-                      </span>
-                      <span className="font-medium text-[#1C1A15]">
-                        {formatarBRL(c.valor)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-                  Evolução das despesas
-                </p>
-                <ul className="mt-2 divide-y divide-[#EFE7D3]">
-                  {despesas.evolucao.map((d) => (
-                    <li
-                      key={d.data}
-                      className="flex items-center justify-between py-2 text-sm"
-                    >
-                      <span className="text-[#8A8171]">{dataCurta(d.data)}</span>
-                      <span className="font-medium text-[#1C1A15]">
-                        {formatarBRL(d.valor)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-        </Secao>
-
-        {/* Clientes */}
-        <Secao titulo="Clientes">
-          {!cli.temDados ? (
-            <Vazio texto="Nenhum cliente atendido no período selecionado." />
-          ) : (
-            <>
-              <div className="overflow-x-auto border-y border-[#E5DCC3]">
-                <div className="flex min-w-[700px] divide-x divide-[#E5DCC3]">
-                  <CelulaKpi
-                    rotulo="Clientes atendidos"
-                    valor={String(cli.atendidos)}
-                  />
-                  <CelulaKpi rotulo="Novos clientes" valor={String(cli.novos)} />
-                  <CelulaKpi
-                    rotulo="Recorrentes"
-                    valor={String(cli.recorrentes)}
-                  />
-                  <CelulaKpi
-                    rotulo="Total gasto"
-                    valor={formatarBRL(cli.totalGasto)}
-                  />
-                  <CelulaKpi
-                    rotulo="Ticket médio por cliente"
-                    valor={formatarBRL(cli.ticketMedio)}
-                  />
-                </div>
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[380px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                      <th className="px-3 py-2 font-semibold">Cliente</th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Atendimentos
-                      </th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Total gasto
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#EFE7D3]">
-                    {cli.linhas.slice(0, 10).map((c) => (
-                      <tr key={c.chave}>
-                        <td className="px-3 py-2 font-medium text-[#1C1A15]">
-                          {c.nome}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {c.atendimentos}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {formatarBRL(c.gasto)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </Secao>
-
-        {/* Audax Club */}
-        <Secao titulo="Audax Club">
-          {!clubeRel.temDados ? (
-            <Vazio texto="Nenhuma assinatura do Audax Club." />
-          ) : (
-            <>
-              <div className="overflow-x-auto border-y border-[#E5DCC3]">
-                <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
-                  <CelulaKpi
-                    rotulo="Assinaturas ativas"
-                    valor={String(clubeRel.situacoes.ativas)}
-                  />
-                  <CelulaKpi
-                    rotulo="Próximas do vencimento"
-                    valor={String(clubeRel.situacoes.proximas)}
-                  />
-                  <CelulaKpi
-                    rotulo="Atrasadas"
-                    valor={String(clubeRel.situacoes.atrasadas)}
-                  />
-                  <CelulaKpi
-                    rotulo="Vencidas"
-                    valor={String(clubeRel.situacoes.vencidas)}
-                  />
-                  <CelulaKpi
-                    rotulo="Canceladas"
-                    valor={String(clubeRel.situacoes.canceladas)}
-                  />
-                  <CelulaKpi
-                    rotulo="Receita prevista/mês"
-                    valor={formatarBRL(clubeRel.receitaPrevista)}
-                  />
-                </div>
-              </div>
-              <div className="mt-4">
-                <LinhaDetalhe
-                  rotulo="Assinaturas cadastradas"
-                  valor={String(clubeRel.total)}
-                />
-                <LinhaDetalhe
-                  rotulo="Pagamentos no período"
-                  valor={`${clubeRel.pagamentos} · ${formatarBRL(clubeRel.pagamentosValor)}`}
-                />
-                <LinhaDetalhe
-                  rotulo="Receita de assinaturas no caixa"
-                  valor={formatarBRL(receitaClubeCaixa)}
-                />
-              </div>
-              {profFiltro !== 'todos' && (
-                <p className="mt-3 text-[13px] text-[#4A4436]">
-                  Visão geral da barbearia — assinaturas do Audax Club não são
-                  filtradas por profissional.
-                </p>
-              )}
-            </>
-          )}
-        </Secao>
-
-        {/* Comissões do período */}
-        <Secao titulo="Comissões do período">
-          {!temProducao && comisFech.lista.length === 0 ? (
-            <Vazio texto="Sem produção para comissionar no período." />
-          ) : (
-            <>
-              <div className="overflow-x-auto border-y border-[#E5DCC3]">
-                <div className="flex min-w-[560px] divide-x divide-[#E5DCC3]">
-                  <CelulaKpi
-                    rotulo="Comissões a pagar"
-                    valor={formatarBRL(comisTotais.comissao)}
-                  />
-                  <CelulaKpi
-                    rotulo="Fechadas no período"
-                    valor={formatarBRL(comisFech.totalFechado)}
-                  />
-                  <CelulaKpi
-                    rotulo="Ainda abertas"
-                    valor={formatarBRL(comisAbertas)}
-                    destaque
-                  />
-                </div>
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[420px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
-                      <th className="px-3 py-2 font-semibold">Profissional</th>
-                      <th className="px-3 py-2 text-right font-semibold">%</th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Produção
-                      </th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Comissão
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#EFE7D3]">
-                    {profLinhas.map((p) => (
-                      <tr key={p.chave}>
-                        <td className="px-3 py-2 font-medium text-[#1C1A15]">
-                          {p.nome}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#8A8171]">
-                          {p.percentual}%
-                        </td>
-                        <td className="px-3 py-2 text-right text-[#4A4436]">
-                          {formatarBRL(p.producao)}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-[#8A6A14]">
-                          {formatarBRL(p.comissao)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {comisFech.lista.length > 0 && (
-                <div className="mt-4 border-t border-[#EFE7D3] pt-3">
-                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-                    Comissões fechadas
-                  </p>
-                  <ul className="mt-1.5 divide-y divide-[#EFE7D3]">
-                    {comisFech.lista.map((f) => (
-                      <li
-                        key={f.id}
-                        className="flex items-center justify-between py-2 text-sm"
-                      >
-                        <span className="text-[#4A4436]">
-                          {f.profissionalNome} · {dataCurta(f.periodo.inicio)} a{' '}
-                          {dataCurta(f.periodo.fim)}
-                        </span>
-                        <span className="font-semibold text-[#1C1A15]">
-                          {formatarBRL(f.comissao)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          )}
-        </Secao>
+        <FaturamentoFormas
+          fat={fat}
+          fatAnterior={fatAnterior}
+          resumoAnterior={resumoAnterior}
+          anterior={anterior}
+          variacao={variacao}
+          formas={formas}
+        />
+        <ProducaoPeriodo
+          temProducao={temProducao}
+          profLinhas={profLinhas}
+          servicos={servicos}
+          prods={prods}
+        />
+        <DespesasClientes despesas={despesas} cli={cli} />
+        <ClubeComissoes
+          clubeRel={clubeRel}
+          receitaClubeCaixa={receitaClubeCaixa}
+          profFiltro={profFiltro}
+          temProducao={temProducao}
+          profLinhas={profLinhas}
+          comisTotais={comisTotais}
+          comisFech={comisFech}
+          comisAbertas={comisAbertas}
+        />
       </div>
 
-      {/* Agendamentos do período */}
-      <div className="mt-4">
-        <Secao titulo="Agendamentos do período">
-          <div className="overflow-x-auto border-y border-[#E5DCC3]">
-            <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
-              <CelulaKpi
-                rotulo="Agendamentos"
-                valor={String(agenda.total)}
-              />
-              <CelulaKpi
-                rotulo="Em aberto"
-                valor={String(agenda.emAberto)}
-              />
-              <CelulaKpi
-                rotulo="Concluídos"
-                valor={String(agenda.concluidos)}
-              />
-              <CelulaKpi
-                rotulo="Cancelados"
-                valor={String(agenda.cancelados)}
-              />
-              <CelulaKpi
-                rotulo="Não compareceu"
-                valor={String(agenda.naoCompareceu)}
-              />
-              <CelulaKpi
-                rotulo="Remarcações"
-                valor={String(agenda.remarcacoes)}
-              />
-            </div>
-          </div>
-        </Secao>
-      </div>
-
-      {/* CRM — segmentos atuais (independem do período) */}
-      <div className="mt-4">
-        <Secao titulo="CRM">
-          {perfisCrm.length === 0 ? (
-            <Vazio texto="Nenhum cliente cadastrado." />
-          ) : (
-            <>
-              <p className="text-[13px] text-[#4A4436]">
-                {profFiltro === 'todos'
-                  ? 'Classificação atual dos clientes — não muda com o período selecionado.'
-                  : `Classificação dos clientes atendidos por ${profFiltro} — não muda com o período selecionado.`}
-              </p>
-              <div className="mt-3 overflow-x-auto border-y border-[#E5DCC3]">
-                <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
-                  {SEGMENTOS_ORDEM.map((segmento) => (
-                    <CelulaKpi
-                      key={segmento}
-                      rotulo={`${SEGMENTOS_ROTULO[segmento]} (CRM)`}
-                      valor={String(resumoCrm[segmento])}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="mt-4">
-                <LinhaDetalhe
-                  rotulo="Clientes analisados (CRM)"
-                  valor={String(perfisCrm.length)}
-                />
-                <LinhaDetalhe
-                  rotulo="Atendimentos realizados (CRM)"
-                  valor={String(
-                    perfisCrm.reduce((t, p) => t + p.totalAtendimentos, 0),
-                  )}
-                />
-                <LinhaDetalhe
-                  rotulo="Total gasto pelos clientes (CRM)"
-                  valor={formatarBRL(
-                    perfisCrm.reduce((t, p) => t + p.totalGasto, 0),
-                  )}
-                />
-              </div>
-            </>
-          )}
-        </Secao>
-      </div>
+      <AgendaCrm
+        agenda={agenda}
+        perfisCrm={perfisCrm}
+        resumoCrm={resumoCrm}
+        profFiltro={profFiltro}
+      />
     </div>
   )
 }
