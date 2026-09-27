@@ -316,11 +316,30 @@ describe('Clientes — repository', () => {
     })
   })
 
-  it('criação que viola o banco devolve null sem lançar', async () => {
+  it('criação que viola o banco lança com a mensagem do Supabase', async () => {
     banco.estado.reiniciar([linha('cli-abc123', 'Ana')])
-    await expect(criarCliente(cliente('cli-abc123', 'Outra'))).resolves.toBeNull()
+    await expect(
+      criarCliente(cliente('cli-abc123', 'Outra')),
+    ).rejects.toThrow(/chave duplicada/)
     expect(banco.estado.linhas).toHaveLength(1)
     expect(banco.estado.linhas[0].nome).toBe('Ana')
+  })
+
+  it('recusa do Supabase em qualquer escrita lança (não vira sucesso silencioso)', async () => {
+    banco.estado.reiniciar([linha('c1', 'Ana')])
+    banco.estado.falha = 'permission denied'
+
+    await expect(criarCliente(cliente('c2', 'Bruno'))).rejects.toThrow(
+      /permission denied/,
+    )
+    await expect(
+      atualizarCliente('c1', cliente('c1', 'Ana Editada')),
+    ).rejects.toThrow(/permission denied/)
+    await expect(alternarAtivoCliente('c1', false)).rejects.toThrow(
+      /permission denied/,
+    )
+    await expect(removerCliente('c1')).rejects.toThrow(/permission denied/)
+    expect(banco.estado.linhas).toHaveLength(1)
   })
 
   it('atualiza somente o cliente alvo', async () => {
@@ -338,10 +357,10 @@ describe('Clientes — repository', () => {
     )
   })
 
-  it('atualização sem correspondência devolve null', async () => {
+  it('atualização sem correspondência lança (registro não existe mais no banco)', async () => {
     await expect(
       atualizarCliente('inexistente', cliente('inexistente', 'Ana')),
-    ).resolves.toBeNull()
+    ).rejects.toThrow(/não existe mais no Supabase/)
   })
 
   it('alterna o status sem apagar o registro', async () => {
@@ -354,13 +373,17 @@ describe('Clientes — repository', () => {
     expect(banco.estado.linhas[0].nome).toBe('Ana')
   })
 
-  it('remove apenas o id pedido e devolve false na falha', async () => {
+  it('remove apenas o id pedido', async () => {
     banco.estado.reiniciar([linha('c1', 'Ana'), linha('c2', 'Bruno')])
     await expect(removerCliente('c1')).resolves.toBe(true)
     expect(banco.estado.linhas.map((l) => l.id)).toEqual(['c2'])
+  })
 
+  it('falha ao remover lança com a mensagem do Supabase', async () => {
+    banco.estado.reiniciar([linha('c2', 'Bruno')])
     banco.estado.falha = 'rede indisponível'
-    await expect(removerCliente('c2')).resolves.toBe(false)
+    await expect(removerCliente('c2')).rejects.toThrow(/rede indisponível/)
+    expect(banco.estado.linhas).toHaveLength(1)
   })
 
   it('importa por upsert preservando ids e atualizando o que mudou', async () => {

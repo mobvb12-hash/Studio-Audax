@@ -3,9 +3,12 @@
 //
 // Ausência de Supabase (VITE_SUPABASE_URL / ANON_KEY vazias) segue o padrão
 // dos módulos já migrados: leituras devolvem [] e escritas devolvem null/false
-// — o app permanece 100% local. Falha de rede/consulta NÃO é silenciosa em
-// `listarClientes` (lança), porque a migração precisa distinguir "banco vazio"
-// de "não consegui ler" para nunca sobrescrever dado remoto mais novo.
+// — o app permanece 100% local. Falha de rede/consulta NÃO é silenciosa:
+// `listarClientes` e `buscarClientes` lançam, porque a migração precisa
+// distinguir "banco vazio" de "não consegui ler" para nunca sobrescrever dado
+// remoto mais novo; e `criarCliente`, `atualizarCliente`,
+// `alternarAtivoCliente` e `removerCliente` lançam para que a tela possa avisar
+// em vez de tratar a operação como concluída.
 import { supabase } from '@/lib/supabase'
 import { normalizarCliente } from '@/modules/clientes/regras'
 import type {
@@ -104,6 +107,11 @@ function paraCliente(row: ClienteRow): Cliente {
   })
 }
 
+/** Erro de escrita com a mensagem do Supabase (ou um texto utilizável). */
+function erroDeEscrita(mensagem: string | undefined): Error {
+  return new Error(mensagem || 'Falha ao gravar clientes no Supabase.')
+}
+
 function paraLinha(cliente: Cliente) {
   return {
     id: cliente.id,
@@ -173,7 +181,8 @@ export async function criarCliente(
     .insert(paraLinha(entrada))
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita(undefined)
   return paraCliente(data as ClienteRow)
 }
 
@@ -190,7 +199,8 @@ export async function atualizarCliente(
     .eq('id', id)
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita('O cliente não existe mais no Supabase.')
   return paraCliente(data as ClienteRow)
 }
 
@@ -207,7 +217,8 @@ export async function alternarAtivoCliente(
     .eq('id', id)
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita('O cliente não existe mais no Supabase.')
   return paraCliente(data as ClienteRow)
 }
 
@@ -215,7 +226,8 @@ export async function removerCliente(id: string): Promise<boolean> {
   const cliente = supabase()
   if (!cliente) return false
   const { error } = await cliente.from('clientes').delete().eq('id', id)
-  return !error
+  if (error) throw erroDeEscrita(error.message)
+  return true
 }
 
 /**

@@ -8,7 +8,11 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import { supabase } from '@/lib/supabase'
 import {
@@ -161,13 +165,18 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
     salvarJSON(CHAVE_STORAGE, clientes)
   }, [clientes, temSupabase, sincronizado])
 
-  /** Escrita remota em segundo plano: o local já foi atualizado antes. */
+  /**
+   * Escrita remota em segundo plano: o local já foi atualizado antes, então a
+   * falha só precisa ser informada. O estado local e a pendência (C2) seguem
+   * salvos e a próxima carga do módulo reenvia.
+   */
   const sincronizar = useCallback(
     (operacao: () => Promise<unknown>) => {
       if (!temSupabase) return
       void operacao().catch(() => {
-        // falha de rede — o localStorage guarda o dado e a próxima
-        // carga do módulo reenvia a pendência
+        // o repositório lança com a mensagem do Supabase; nada foi gravado
+        // lá, então a tela avisa em vez de fingir sucesso
+        avisarFalhaSincronizacao(CHAVE_STORAGE)
       })
     },
     [temSupabase],

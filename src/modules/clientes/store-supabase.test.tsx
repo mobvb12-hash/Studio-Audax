@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { avisosPersistencia, limparAvisosPersistencia } from '@/lib/persistencia'
 import * as repositorio from '@/services/supabase/clientes'
 import { ClientesProvider, useClientes } from './store'
 import type { Cliente } from './types'
@@ -42,17 +43,17 @@ vi.mock('@/services/supabase/clientes', () => ({
     return lista.length
   }),
   criarCliente: vi.fn(async (cliente: unknown) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('permission denied')
     remoto.gravar(cliente)
     return cliente as never
   }),
   atualizarCliente: vi.fn(async (id: string, cliente: unknown) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('permission denied')
     remoto.gravar({ ...(cliente as object), id } as never)
     return cliente as never
   }),
   alternarAtivoCliente: vi.fn(async (id: string, ativo: boolean) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('permission denied')
     const alvo = remoto.linhas.find(
       (linha) => (linha as Cliente).id === id,
     ) as Cliente | undefined
@@ -61,7 +62,7 @@ vi.mock('@/services/supabase/clientes', () => ({
     return { ...alvo, ativo }
   }),
   removerCliente: vi.fn(async (id: string) => {
-    if (remoto.falhaEscrita) return false
+    if (remoto.falhaEscrita) throw new Error('permission denied')
     remoto.linhas = remoto.linhas.filter(
       (linha) => (linha as Cliente).id !== id,
     )
@@ -184,6 +185,7 @@ function chavesBackup(): string[] {
 
 beforeEach(() => {
   localStorage.clear()
+  limparAvisosPersistencia()
   remoto.reiniciar()
   vi.clearAllMocks()
   ctx = undefined as unknown as ReturnType<typeof useClientes>
@@ -311,8 +313,19 @@ describe('Clientes — escrita no Supabase com fallback local', () => {
     expect(chamada.id).toBe(esperado?.id)
   })
 
+  it('criação com Supabase funcionando não gera aviso', async () => {
+    montar()
+    await waitFor(() => expect(repositorio.listarClientes).toHaveBeenCalled())
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    await waitFor(() => expect(remoto.linhas).toHaveLength(1))
+
+    expect(avisosPersistencia()).toEqual([])
+  })
+
   it('falha na escrita remota não tira o cliente da tela nem do storage', async () => {
-    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
     montar()
     await waitFor(() => expect(repositorio.listarClientes).toHaveBeenCalled())
 
@@ -321,6 +334,7 @@ describe('Clientes — escrita no Supabase com fallback local', () => {
       fireEvent.click(screen.getByText('criar'))
     })
 
+    // o registro local continua salvo e visível
     expect(lerLista().map((c) => c.nome)).toContain('Lucas Mendes')
     await waitFor(() =>
       expect(
@@ -330,7 +344,84 @@ describe('Clientes — escrita no Supabase com fallback local', () => {
       ).toContain('Lucas Mendes'),
     )
     expect(remoto.linhas).toHaveLength(0)
-    aviso.mockRestore()
+    // a gravação não foi confirmada: nada pode aparecer como sucesso só porque
+    // o cadastro está na tela
+    const avisos = avisosPersistencia()
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0].tipo).toBe('falha_sincronizacao')
+    expect(avisos[0].chave).toBe(CHAVE)
+    expect(avisos[0].mensagem).toMatch(/não foi confirmada no servidor/)
+  })
+
+  it('pendência da criação recusada é reenviada na carga seguinte (C2)', async () => {
+    const primeira = montar()
+    await waitFor(() => expect(repositorio.listarClientes).toHaveBeenCalled())
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      fireEvent.click(screen.getByText('criar'))
+    })
+    const id = lerLista().find((c) => c.nome === 'Lucas Mendes')?.id
+    expect(id).toBeTruthy()
+    expect(remoto.linhas).toHaveLength(0)
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
+
+    // nova carga com o Supabase de volta: a pendência é reenviada
+    primeira.unmount()
+    remoto.falhaEscrita = false
+    montar()
+
+    await waitFor(() =>
+      expect(remoto.linhas.map((l) => (l as Cliente).id)).toContain(id),
+    )
+    expect(repositorio.importarClientes).toHaveBeenCalled()
+  })
+
+  it('edição recusada avisa e preserva o dado local', async () => {
+    remoto.linhas = [cliente('cli-1', 'Ana Dias')]
+    montar()
+    await waitFor(() =>
+      expect(lerLista().map((c) => c.nome)).toEqual(['Ana Dias']),
+    )
+    expect(avisosPersistencia()).toEqual([])
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      fireEvent.click(screen.getByText('editar'))
+    })
+
+    await waitFor(() =>
+      expect(lerLista()[0]?.telefone).toBe('(11) 90000-1111'),
+    )
+    await waitFor(() =>
+      expect(
+        (JSON.parse(localStorage.getItem(CHAVE) ?? '[]') as Cliente[])[0]
+          ?.telefone,
+      ).toBe('(11) 90000-1111'),
+    )
+    expect((remoto.linhas[0] as Cliente).telefone).toBe('(11) 90000-0000')
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
+  })
+
+  it('exclusão recusada avisa que a remoção não foi confirmada', async () => {
+    remoto.linhas = [cliente('cli-1', 'Ana Dias')]
+    montar()
+    await waitFor(() => expect(lerLista()).toHaveLength(1))
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      fireEvent.click(screen.getByText('excluir'))
+    })
+
+    expect(lerLista()).toHaveLength(0)
+    await waitFor(() => expect(remoto.linhas).toHaveLength(1))
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
   })
 
   it('atualizar, inativar e remover chamam o repositório mantendo a API síncrona', async () => {

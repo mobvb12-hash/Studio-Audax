@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { avisosPersistencia, limparAvisosPersistencia } from '@/lib/persistencia'
 import { ClientesProvider, useClientes } from './store'
 import type { Cliente } from './types'
 
@@ -74,10 +75,22 @@ function montar() {
 
 beforeEach(() => {
   localStorage.clear()
+  limparAvisosPersistencia()
   ctx = undefined as unknown as ReturnType<typeof useClientes>
 })
 
 describe('Clientes — store', () => {
+  it('sem Supabase configurado o cadastro funciona local e nada é avisado', () => {
+    montar()
+    fireEvent.click(screen.getByText('criar'))
+    fireEvent.click(screen.getByText('editar'))
+    fireEvent.click(screen.getByText('excluir'))
+
+    expect(lerLista()).toHaveLength(0)
+    // modo local não é falha: nada de aviso de sincronização
+    expect(avisosPersistencia()).toEqual([])
+  })
+
   it('cria cliente com telefone, e-mail e observação', () => {
     montar()
     fireEvent.click(screen.getByText('criar'))
