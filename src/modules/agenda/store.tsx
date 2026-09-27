@@ -7,13 +7,20 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import { useCaixa } from '@/modules/caixa/store'
 import {
-  EXPEDIENTE_PADRAO,
+  carregarAgendamentos,
+  carregarBloqueios,
+  carregarExpediente,
+  salvarAgendamentos,
+  salvarBloqueios,
+  salvarExpedienteJSON,
+} from './persistencia'
+import {
   duracaoBase,
-  paraMinutos,
+  validarBloqueio,
+  validarExpediente,
   validarProposta,
 } from './regras'
 import type {
@@ -25,10 +32,6 @@ import type {
   NovoBloqueioInput,
   StatusAgendamento,
 } from './types'
-
-const CHAVE_STORAGE = 'studio-audax:agendamentos:v1'
-const CHAVE_BLOQUEIOS = 'studio-audax:bloqueios:v1'
-const CHAVE_EXPEDIENTE = 'studio-audax:expediente:v1'
 
 type AgendaContexto = {
   agendamentos: Agendamento[]
@@ -69,25 +72,6 @@ function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function carregarLista<T>(chave: string): T[] {
-  return carregarJSON<T[]>(chave, [], Array.isArray)
-}
-
-function ehExpediente(valor: unknown): boolean {
-  const salvo = valor as Expediente | null
-  return Boolean(
-    salvo &&
-      typeof salvo.inicio === 'string' &&
-      typeof salvo.fim === 'string' &&
-      typeof salvo.almocoInicio === 'string' &&
-      typeof salvo.almocoFim === 'string',
-  )
-}
-
-function carregarExpediente(): Expediente {
-  return carregarJSON<Expediente>(CHAVE_EXPEDIENTE, EXPEDIENTE_PADRAO, ehExpediente)
-}
-
 function ordenar(lista: Agendamento[]): Agendamento[] {
   return [...lista].sort((a, b) =>
     `${a.data} ${a.horario}`.localeCompare(`${b.data} ${b.horario}`),
@@ -113,25 +97,25 @@ function useJaPago(): (agendamentoId: string) => boolean {
 export function AgendaProvider({ children }: { children: ReactNode }) {
   const jaPago = useJaPago()
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() =>
-    carregarLista<Agendamento>(CHAVE_STORAGE),
+    carregarAgendamentos(),
   )
   const [bloqueios, setBloqueios] = useState<Bloqueio[]>(() =>
-    carregarLista<Bloqueio>(CHAVE_BLOQUEIOS),
+    carregarBloqueios(),
   )
   const [expediente, setExpediente] = useState<Expediente>(() =>
     carregarExpediente(),
   )
 
   useEffect(() => {
-    salvarJSON(CHAVE_STORAGE, agendamentos)
+    salvarAgendamentos(agendamentos)
   }, [agendamentos])
 
   useEffect(() => {
-    salvarJSON(CHAVE_BLOQUEIOS, bloqueios)
+    salvarBloqueios(bloqueios)
   }, [bloqueios])
 
   useEffect(() => {
-    salvarJSON(CHAVE_EXPEDIENTE, expediente)
+    salvarExpedienteJSON(expediente)
   }, [expediente])
 
   const adicionar = useCallback(
@@ -296,67 +280,16 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   )
 
   const salvarExpediente = useCallback((entrada: Expediente) => {
-    const inicio = paraMinutos(entrada.inicio)
-    const fim = paraMinutos(entrada.fim)
-    const almocoIni = paraMinutos(entrada.almocoInicio)
-    const almocoFim = paraMinutos(entrada.almocoFim)
-    if (!entrada.inicio || !entrada.fim || !entrada.almocoInicio || !entrada.almocoFim) {
-      throw new Error('Informe início, fim e horário do almoço.')
-    }
-    if (inicio >= fim) {
-      throw new Error('O fim do expediente deve ser depois do início.')
-    }
-    if (almocoIni > almocoFim) {
-      throw new Error('O fim do almoço deve ser depois do início.')
-    }
-    if (almocoIni < inicio || almocoFim > fim) {
-      throw new Error('O almoço deve ficar dentro do expediente.')
-    }
+    const erro = validarExpediente(entrada)
+    if (erro) throw new Error(erro)
     setExpediente(entrada)
   }, [])
 
   const criarBloqueio = useCallback((entrada: NovoBloqueioInput) => {
+    const erro = validarBloqueio(entrada, bloqueios)
+    if (erro) throw new Error(erro)
     const profissional = entrada.profissional.trim()
     const motivo = entrada.motivo.trim()
-    if (!profissional) throw new Error('Informe o profissional.')
-    if (!entrada.data) throw new Error('Informe a data do bloqueio.')
-    if (entrada.dataFim && entrada.dataFim < entrada.data) {
-      throw new Error('A data final deve ser depois da inicial.')
-    }
-    if (paraMinutos(entrada.inicio) >= paraMinutos(entrada.fim)) {
-      throw new Error('O fim do bloqueio deve ser depois do início.')
-    }
-    if (entrada.tipo === 'outro' && !motivo) {
-      throw new Error('Descreva o motivo do bloqueio.')
-    }
-    // Auditoria F18 (duplo clique): bloqueio com os mesmos dados já
-    // cadastrado não entra de novo — o formulário fica aberto para criar
-    // novos períodos, então a proteção é aqui, no dado.
-    const chave = [
-      profissional,
-      entrada.data,
-      entrada.dataFim || '',
-      entrada.inicio,
-      entrada.fim,
-      entrada.tipo,
-      motivo,
-    ].join('|')
-    if (
-      bloqueios.some(
-        (b) =>
-          [
-            b.profissional,
-            b.data,
-            b.dataFim ?? '',
-            b.inicio,
-            b.fim,
-            b.tipo,
-            b.motivo,
-          ].join('|') === chave,
-      )
-    ) {
-      throw new Error('Este bloqueio já foi cadastrado.')
-    }
     const novo: Bloqueio = {
       id: gerarId(),
       profissional,

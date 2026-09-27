@@ -1,5 +1,12 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
 import { useEffect, useState } from 'react'
+import EnderecoBloco from '@/modules/clientes/components/EnderecoBloco'
+import PreferenciasBloco from '@/modules/clientes/components/PreferenciasBloco'
+import {
+  digitos,
+  montarNascimento,
+  validarDadosCliente,
+} from '@/modules/clientes/regras'
 import { useClientes } from '@/modules/clientes/store'
 import type {
   Cliente,
@@ -52,10 +59,6 @@ const MESES = [
   'Novembro',
   'Dezembro',
 ]
-
-function digitos(texto: string): string {
-  return texto.replace(/\D/g, '')
-}
 
 export default function ClienteFormModal({
   cliente,
@@ -150,53 +153,13 @@ export default function ClienteFormModal({
     setEtiquetas((atual) => atual.filter((e) => e !== nome))
   }
 
-  function montarNascimento(): { iso: string; erro?: string } {
-    const algumPreenchido = Boolean(dia || mes || ano)
-    if (!algumPreenchido) return { iso: '' }
-    if (!dia || !mes || !ano) {
-      return { iso: '', erro: 'Informe dia, mês e ano do nascimento ou deixe em branco.' }
-    }
-    const a = Number(ano)
-    if (Number.isNaN(a) || a < 1900 || a > anoAtual) {
-      return { iso: '', erro: 'Ano de nascimento inválido.' }
-    }
-    const d = Number(dia)
-    const m = Number(mes)
-    const testada = new Date(a, m - 1, d)
-    if (
-      testada.getFullYear() !== a ||
-      testada.getMonth() !== m - 1 ||
-      testada.getDate() !== d
-    ) {
-      return { iso: '', erro: 'Data de nascimento inválida.' }
-    }
-    const mm = String(m).padStart(2, '0')
-    const dd = String(d).padStart(2, '0')
-    return { iso: `${a}-${mm}-${dd}` }
-  }
-
   function salvar() {
-    if (nome.trim().length < 2) {
-      setErro('Informe o nome do cliente.')
+    const erroForm = validarDadosCliente({ nome, telefone, email, cpf, cnpj })
+    if (erroForm) {
+      setErro(erroForm)
       return
     }
-    if (!digitos(telefone)) {
-      setErro('Informe o telefone do cliente.')
-      return
-    }
-    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setErro('Informe um e-mail válido ou deixe em branco.')
-      return
-    }
-    if (cpf.trim() && digitos(cpf).length !== 11) {
-      setErro('Informe um CPF com 11 dígitos ou deixe em branco.')
-      return
-    }
-    if (cnpj.trim() && digitos(cnpj).length !== 14) {
-      setErro('Informe um CNPJ com 14 dígitos ou deixe em branco.')
-      return
-    }
-    const nascimento = montarNascimento()
+    const nascimento = montarNascimento({ dia, mes, ano }, anoAtual)
     if (nascimento.erro) {
       setErro(nascimento.erro)
       return
@@ -533,85 +496,10 @@ export default function ClienteFormModal({
             />
           </div>
 
-          <div className="sm:col-span-2">
-            <p className={rotulo}>Notificações</p>
-            <div className="flex flex-col gap-1.5">
-              <label
-                className="flex items-center gap-2 text-sm text-[#1C1A15]"
-                htmlFor="cli-notif-email"
-              >
-                <input
-                  id="cli-notif-email"
-                  type="checkbox"
-                  checked={preferencias.emailAgendamentos}
-                  onChange={(e) =>
-                    setPreferencias((p) => ({
-                      ...p,
-                      emailAgendamentos: e.target.checked,
-                    }))
-                  }
-                />
-                Cliente recebe e-mails sobre seus agendamentos
-              </label>
-              <label
-                className="flex items-center gap-2 text-sm text-[#1C1A15]"
-                htmlFor="cli-notif-sms"
-              >
-                <input
-                  id="cli-notif-sms"
-                  type="checkbox"
-                  checked={preferencias.smsLembrete}
-                  onChange={(e) =>
-                    setPreferencias((p) => ({
-                      ...p,
-                      smsLembrete: e.target.checked,
-                    }))
-                  }
-                />
-                Cliente recebe SMS/Notificação Push de lembrete
-              </label>
-            </div>
-          </div>
-
-          <div className="sm:col-span-2">
-            <p className={rotulo}>Campanhas</p>
-            <div className="flex flex-col gap-1.5">
-              <label
-                className="flex items-center gap-2 text-sm text-[#1C1A15]"
-                htmlFor="cli-camp-sms"
-              >
-                <input
-                  id="cli-camp-sms"
-                  type="checkbox"
-                  checked={preferencias.smsMarketing}
-                  onChange={(e) =>
-                    setPreferencias((p) => ({
-                      ...p,
-                      smsMarketing: e.target.checked,
-                    }))
-                  }
-                />
-                Cliente recebe SMS marketing
-              </label>
-              <label
-                className="flex items-center gap-2 text-sm text-[#1C1A15]"
-                htmlFor="cli-camp-email"
-              >
-                <input
-                  id="cli-camp-email"
-                  type="checkbox"
-                  checked={preferencias.emailMarketing}
-                  onChange={(e) =>
-                    setPreferencias((p) => ({
-                      ...p,
-                      emailMarketing: e.target.checked,
-                    }))
-                  }
-                />
-                Cliente recebe e-mail marketing
-              </label>
-            </div>
-          </div>
+          <PreferenciasBloco
+            preferencias={preferencias}
+            aoMudar={setPreferencias}
+          />
 
           <div className="sm:col-span-2">
             <button
@@ -626,108 +514,7 @@ export default function ClienteFormModal({
           </div>
 
           {comEndereco && (
-            <>
-              <div>
-                <label className={rotulo} htmlFor="cli-cep">
-                  CEP
-                </label>
-                <input
-                  id="cli-cep"
-                  className={campo}
-                  placeholder="00000-000"
-                  inputMode="numeric"
-                  value={endereco.cep}
-                  onChange={(e) =>
-                    setEndereco((a) => ({ ...a, cep: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={rotulo} htmlFor="cli-end-numero">
-                  Número
-                </label>
-                <input
-                  id="cli-end-numero"
-                  className={campo}
-                  value={endereco.numero}
-                  onChange={(e) =>
-                    setEndereco((a) => ({ ...a, numero: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className={rotulo} htmlFor="cli-logradouro">
-                  Logradouro
-                </label>
-                <input
-                  id="cli-logradouro"
-                  className={campo}
-                  placeholder="Rua, avenida..."
-                  value={endereco.logradouro}
-                  onChange={(e) =>
-                    setEndereco((a) => ({ ...a, logradouro: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={rotulo} htmlFor="cli-complemento">
-                  Complemento
-                </label>
-                <input
-                  id="cli-complemento"
-                  className={campo}
-                  placeholder="Apto, bloco..."
-                  value={endereco.complemento}
-                  onChange={(e) =>
-                    setEndereco((a) => ({ ...a, complemento: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={rotulo} htmlFor="cli-bairro">
-                  Bairro
-                </label>
-                <input
-                  id="cli-bairro"
-                  className={campo}
-                  value={endereco.bairro}
-                  onChange={(e) =>
-                    setEndereco((a) => ({ ...a, bairro: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={rotulo} htmlFor="cli-cidade">
-                  Cidade
-                </label>
-                <input
-                  id="cli-cidade"
-                  className={campo}
-                  value={endereco.cidade}
-                  onChange={(e) =>
-                    setEndereco((a) => ({ ...a, cidade: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className={rotulo} htmlFor="cli-uf">
-                  UF
-                </label>
-                <input
-                  id="cli-uf"
-                  className={campo}
-                  maxLength={2}
-                  placeholder="PE"
-                  value={endereco.uf}
-                  onChange={(e) =>
-                    setEndereco((a) => ({
-                      ...a,
-                      uf: e.target.value.toUpperCase().slice(0, 2),
-                    }))
-                  }
-                />
-              </div>
-            </>
+            <EnderecoBloco endereco={endereco} aoMudar={setEndereco} />
           )}
         </div>
 

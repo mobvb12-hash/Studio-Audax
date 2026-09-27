@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { chipClasse, iniciais } from '@/lib/apresentacao'
+import { chipClasse } from '@/lib/apresentacao'
 import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import CrmClienteModal from '@/components/CrmClienteModal'
+import { CelulaKpi } from '@/components/PainelUi'
+import ItemCliente from '@/modules/clientes/components/ItemCliente'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
-import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import { hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
 import { useCrm } from '@/modules/crm/store'
@@ -20,15 +22,9 @@ import {
 } from '@/modules/clientes/regras'
 import { useClientes } from '@/modules/clientes/store'
 import type { Cliente } from '@/modules/clientes/types'
-import {
-  assinaturaVigente,
-  statusAssinatura,
-  STATUS_ROTULO,
-} from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
 import { useEsperaOpcional } from '@/modules/espera/store'
 import { useWhats } from '@/modules/whatsapp/store'
-import { formatarBRL } from '@/lib/moeda'
 
 const FILTROS: { id: FiltroStatusCliente; rotulo: string }[] = [
   { id: 'todos', rotulo: 'Todos' },
@@ -155,14 +151,7 @@ export default function Clientes() {
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
         <div className="flex min-w-[640px] divide-x divide-[#E5DCC3]">
           {kpis.map((kpi) => (
-            <div key={kpi.rotulo} className="min-w-[150px] flex-1 px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-                {kpi.rotulo}
-              </p>
-              <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
-                {kpi.valor}
-              </p>
-            </div>
+            <CelulaKpi key={kpi.rotulo} rotulo={kpi.rotulo} valor={kpi.valor} />
           ))}
         </div>
       </div>
@@ -244,122 +233,21 @@ export default function Clientes() {
         </div>
       ) : (
         <ul className="mt-4 flex flex-col gap-2">
-          {filtrados.map((cliente) => {
-            const info = atendimentos.get(normalizarBusca(cliente.nome))
-            const gasto = gastoDoCliente(gastos, cliente)
-            const assinatura = assinaturaDoCliente(cliente.id)
-            const vigente = assinatura
-              ? assinaturaVigente(assinatura, hoje)
-              : false
-            return (
-              <li
-                key={cliente.id}
-                className="flex flex-col gap-3 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4 sm:flex-row sm:items-center"
-              >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F3ECDA] text-sm font-bold text-[#8A6A14]">
-                  {iniciais(cliente.nome)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-[#1C1A15]">
-                    {cliente.nome}{' '}
-                    {cliente.telefone && (
-                      <span className="ml-1 font-normal text-[#8A8171]">
-                        {cliente.telefone}
-                      </span>
-                    )}
-                  </p>
-                  <p className="mt-0.5 truncate text-[13px] text-[#4A4436]">
-                    {cliente.email && `${cliente.email} · `}
-                    {cliente.observacao || 'Sem observações'}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-1.5">
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                      cliente.ativo
-                        ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-                        : 'border-slate-300 bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {cliente.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
-                  {assinatura && (
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
-                        vigente
-                          ? 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-                          : 'border-amber-300 bg-amber-100 text-amber-900'
-                      }`}
-                    >
-                      {vigente
-                        ? 'Assinante'
-                        : `Assinatura ${STATUS_ROTULO[
-                            statusAssinatura(assinatura, hoje)
-                          ].toLowerCase()}`}
-                    </span>
-                  )}
-                  <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436]">
-                    {info?.total ?? 0} atendimento(s)
-                  </span>
-                  {info?.ultimo && (
-                    <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-1 text-xs font-medium text-[#8A6A14]">
-                      Último: {formatarDataLonga(info.ultimo)}
-                    </span>
-                  )}
-                  <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-1 text-xs font-medium text-[#8A6A14]">
-                    {formatarBRL(gasto)}
-                  </span>
-                </div>
-                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAgendarPara(cliente)}
-                    className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F]"
-                  >
-                    Agendar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHistoricoDo(cliente)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  >
-                    Histórico
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCrmDo(cliente)}
-                    aria-label={`CRM de ${cliente.nome}`}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  >
-                    CRM
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => abrirEdicao(cliente)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => alternarAtivo(cliente.id)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                    aria-label={`${cliente.ativo ? 'Inativar' : 'Reativar'} ${cliente.nome}`}
-                  >
-                    {cliente.ativo ? 'Inativar' : 'Reativar'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => tentarExcluir(cliente)}
-                    className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-                    aria-label={`Excluir ${cliente.nome}`}
-                  >
-                    Excluir
-                  </button>
-                </div>
-              </li>
-            )
-          })}
+          {filtrados.map((cliente) => (
+            <ItemCliente
+              key={cliente.id}
+              cliente={cliente}
+              info={atendimentos.get(normalizarBusca(cliente.nome))}
+              gasto={gastoDoCliente(gastos, cliente)}
+              hoje={hoje}
+              aoAgendar={() => setAgendarPara(cliente)}
+              aoHistorico={() => setHistoricoDo(cliente)}
+              aoCrm={() => setCrmDo(cliente)}
+              aoEditar={() => abrirEdicao(cliente)}
+              aoAlternar={() => alternarAtivo(cliente.id)}
+              aoExcluir={() => tentarExcluir(cliente)}
+            />
+          ))}
         </ul>
       )}
 

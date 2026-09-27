@@ -15,6 +15,7 @@ import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
 import { useClube } from '@/modules/clube/store'
 import { assinaturaVigente } from '@/modules/clube/regras'
+import { corSegmento } from '@/modules/crm/presentacao'
 import {
   aniversariantesDoMes,
   filtrarPerfis,
@@ -36,21 +37,6 @@ import type { Cliente } from '@/modules/clientes/types'
 import { textoTemplate } from '@/modules/whatsapp/templates'
 import { useWhats } from '@/modules/whatsapp/store'
 import { formatarBRL } from '@/lib/moeda'
-
-function corSegmento(segmento: string): string {
-  switch (segmento) {
-    case 'novo':
-      return 'border-sky-300 bg-sky-50 text-sky-700'
-    case 'ativo':
-      return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-    case 'recorrente':
-      return 'border-amber-300 bg-amber-100 text-amber-900'
-    case 'sem_retorno':
-      return 'border-orange-300 bg-orange-50 text-orange-800'
-    default:
-      return 'border-slate-300 bg-slate-100 text-slate-700'
-  }
-}
 
 export default function Crm() {
   const { clientes } = useClientes()

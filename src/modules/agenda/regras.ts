@@ -1,7 +1,13 @@
 // Regras puras da Agenda — conflito de horários por sobreposição de duração,
 // expediente configurável e bloqueios (almoço, folga, férias, ausência).
 import { SERVICOS } from './catalogo'
-import type { Agendamento, Bloqueio, Expediente, TipoBloqueio } from './types'
+import type {
+  Agendamento,
+  Bloqueio,
+  Expediente,
+  NovoBloqueioInput,
+  TipoBloqueio,
+} from './types'
 
 export function paraMinutos(hora: string): number {
   const [h, m] = hora.split(':').map(Number)
@@ -308,4 +314,89 @@ export function horariosDisponiveis(
     }
   }
   return { horarios, vagas }
+}
+
+/** HH:MM + minutos → HH:MM (vira no dia seguinte). */
+export function somaMinutos(hora: string, min: number): string {
+  const [h, m] = hora.split(':').map(Number)
+  const total = h * 60 + m + min
+  const hh = String(Math.floor(total / 60) % 24).padStart(2, '0')
+  const mm = String(total % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+/** Primeira mensagem de invalidade do expediente ('' = válido). */
+export function validarExpediente(entrada: Expediente): string {
+  const inicio = paraMinutos(entrada.inicio)
+  const fim = paraMinutos(entrada.fim)
+  const almocoIni = paraMinutos(entrada.almocoInicio)
+  const almocoFim = paraMinutos(entrada.almocoFim)
+  if (
+    !entrada.inicio ||
+    !entrada.fim ||
+    !entrada.almocoInicio ||
+    !entrada.almocoFim
+  ) {
+    return 'Informe início, fim e horário do almoço.'
+  }
+  if (inicio >= fim) {
+    return 'O fim do expediente deve ser depois do início.'
+  }
+  if (almocoIni > almocoFim) {
+    return 'O fim do almoço deve ser depois do início.'
+  }
+  if (almocoIni < inicio || almocoFim > fim) {
+    return 'O almoço deve ficar dentro do expediente.'
+  }
+  return ''
+}
+
+/**
+ * Primeira mensagem de invalidade de um novo bloqueio ('' = válido).
+ * Inclui a trava de duplicidade (Audax F18: mesmo período/motivo não entra
+ * duas vezes — proteção no dado, pois o formulário permanece aberto).
+ */
+export function validarBloqueio(
+  entrada: NovoBloqueioInput,
+  existentes: Bloqueio[],
+): string {
+  const profissional = entrada.profissional.trim()
+  const motivo = entrada.motivo.trim()
+  if (!profissional) return 'Informe o profissional.'
+  if (!entrada.data) return 'Informe a data do bloqueio.'
+  if (entrada.dataFim && entrada.dataFim < entrada.data) {
+    return 'A data final deve ser depois da inicial.'
+  }
+  if (paraMinutos(entrada.inicio) >= paraMinutos(entrada.fim)) {
+    return 'O fim do bloqueio deve ser depois do início.'
+  }
+  if (entrada.tipo === 'outro' && !motivo) {
+    return 'Descreva o motivo do bloqueio.'
+  }
+  const chave = [
+    profissional,
+    entrada.data,
+    entrada.dataFim || '',
+    entrada.inicio,
+    entrada.fim,
+    entrada.tipo,
+    motivo,
+  ].join('|')
+  if (
+    existentes.some(
+      (b) =>
+        [
+          b.profissional,
+          b.data,
+          b.dataFim ?? '',
+          b.inicio,
+          b.fim,
+          b.tipo,
+          b.motivo,
+        ].join('|') === chave,
+    )
+  ) {
+    return 'Este bloqueio já foi cadastrado.'
+  }
+  return ''
 }

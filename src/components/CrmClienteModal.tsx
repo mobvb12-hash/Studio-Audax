@@ -1,29 +1,31 @@
 import { useMemo, useState } from 'react'
-import { formatarISO } from '@/lib/apresentacao'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import {
   formatarDataCurta,
-  formatarDataLonga,
   hojeISO,
 } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
-import type { Agendamento, StatusAgendamento } from '@/modules/agenda/types'
+import type { Agendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClube } from '@/modules/clube/store'
+import HistoricoCliente from '@/modules/crm/components/HistoricoCliente'
+import InteracoesBloco from '@/modules/crm/components/InteracoesBloco'
+import ResumoComportamento from '@/modules/crm/components/ResumoComportamento'
+import {
+  corSegmento,
+  corStatusMensagem,
+} from '@/modules/crm/presentacao'
 import {
   montarHistorico,
   montarPerfis,
   proximaDataSugerida,
   proximoAgendamento,
-  type EventoHistorico,
 } from '@/modules/crm/regras'
 import { useCrm } from '@/modules/crm/store'
 import { personalizarTexto } from '@/modules/ia/regras'
 import {
   SEGMENTOS_ROTULO,
-  TIPOS_INTERACAO,
-  TIPOS_INTERACAO_ROTULO,
 } from '@/modules/crm/types'
 import type { Cliente } from '@/modules/clientes/types'
 import { useWhats } from '@/modules/whatsapp/store'
@@ -36,77 +38,17 @@ import {
   type IdTemplate,
   type MensagemWhats,
 } from '@/modules/whatsapp/types'
-import { formatarBRL } from '@/lib/moeda'
 
 type Props = {
   cliente: Cliente
   onFechar: () => void
 }
 
-function corSegmento(segmento: string): string {
-  switch (segmento) {
-    case 'novo':
-      return 'border-sky-300 bg-sky-50 text-sky-700'
-    case 'ativo':
-      return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-    case 'recorrente':
-      return 'border-amber-300 bg-amber-100 text-amber-900'
-    case 'sem_retorno':
-      return 'border-orange-300 bg-orange-50 text-orange-800'
-    default:
-      return 'border-slate-300 bg-slate-100 text-slate-700'
-  }
-}
-
-function corStatus(status: MensagemWhats['status']): string {
-  if (status === 'enviada')
-    return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-  if (status === 'falhou')
-    return 'border-red-300 bg-red-50 text-red-700'
-  return 'border-amber-300 bg-amber-100 text-amber-900'
-}
-
-const STATUS_AGENDAMENTO_ROTULO: Record<StatusAgendamento, string> = {
-  pendente: 'Pendente',
-  confirmado: 'Confirmado',
-  concluido: 'Concluído',
-  cancelado: 'Cancelado',
-  nao_compareceu: 'Não compareceu',
-}
-
-function corStatusAgendamento(status: StatusAgendamento): string {
-  if (status === 'concluido' || status === 'confirmado')
-    return 'border-[#BFE0B2] bg-[#E9F5E4] text-[#3F6B33]'
-  if (status === 'cancelado') return 'border-red-200 bg-red-50 text-red-600'
-  if (status === 'nao_compareceu')
-    return 'border-slate-300 bg-slate-100 text-slate-700'
-  return 'border-amber-300 bg-amber-100 text-amber-900'
-}
-
-/** Badge à direita de cada evento do histórico completo. */
-function badgeEvento(
-  evento: EventoHistorico,
-): { rotulo: string; classe: string } | null {
-  if (evento.estornado)
-    return { rotulo: 'Estornada', classe: 'border-red-200 bg-red-50 text-red-600' }
-  if (evento.statusAgendamento)
-    return {
-      rotulo: STATUS_AGENDAMENTO_ROTULO[evento.statusAgendamento],
-      classe: corStatusAgendamento(evento.statusAgendamento),
-    }
-  if (evento.statusMensagem)
-    return {
-      rotulo: STATUS_ROTULO[evento.statusMensagem],
-      classe: corStatus(evento.statusMensagem),
-    }
-  return null
-}
-
 export default function CrmClienteModal({ cliente, onFechar }: Props) {
   const { agendamentos } = useAgenda()
   const { lancamentos } = useCaixa()
   const { assinaturaDoCliente } = useClube()
-  const { interacoesDoCliente, adicionarInteracao } = useCrm()
+  const { interacoesDoCliente } = useCrm()
   const {
     mensagensDoCliente,
     criar,
@@ -116,11 +58,8 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
     integracaoAtiva,
   } = useWhats()
 
-  const [tipo, setTipo] = useState('nota')
-  const [texto, setTexto] = useState('')
-  const [erroNota, setErroNota] = useState('')
-  const [erroWhats, setErroWhats] = useState('')
   const [falhando, setFalhando] = useState<MensagemWhats | null>(null)
+  const [erroWhats, setErroWhats] = useState('')
   const [agendar, setAgendar] = useState(false)
   const [iaTemplate, setIaTemplate] = useState<IdTemplate>('confirmacao')
   const [iaRascunho, setIaRascunho] = useState<{
@@ -170,20 +109,6 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
   }, [agendamentos, cliente.nome])
 
   const assinatura = assinaturaDoCliente(cliente.id)
-
-  function salvarNota() {
-    setErroNota('')
-    try {
-      adicionarInteracao({
-        clienteId: cliente.id,
-        tipo: tipo as 'nota' | 'ligacao' | 'presencial',
-        texto,
-      })
-      setTexto('')
-    } catch (e) {
-      setErroNota(e instanceof Error ? e.message : 'Não foi possível salvar.')
-    }
-  }
 
   function disponivel(id: IdTemplate): boolean {
     if (id === 'confirmacao' || id === 'lembrete') return Boolean(futuro)
@@ -359,142 +284,9 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
           </button>
         </div>
 
-        {/* Resumo do comportamento (derivado de agenda/caixa — sem cópia de dados) */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Último atendimento
-            </p>
-            <p className="mt-1 text-sm font-bold text-[#1C1A15]">
-              {perfil.ultimoAtendimento
-                ? formatarDataLonga(perfil.ultimoAtendimento)
-                : 'Nunca'}
-            </p>
-          </div>
-          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Próxima visita
-            </p>
-            <p className="mt-1 text-sm font-bold text-[#1C1A15]">
-              {futuro
-                ? `${formatarDataLonga(futuro.data)} · ${futuro.horario}`
-                : 'Sem agendamento'}
-            </p>
-          </div>
-          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Frequência
-            </p>
-            <p className="mt-1 text-sm font-bold text-[#1C1A15]">
-              {perfil.frequenciaDias
-                ? `a cada ${perfil.frequenciaDias} dia(s)`
-                : 'Sem histórico suficiente'}
-            </p>
-          </div>
-          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Total gasto
-            </p>
-            <p className="mt-1 text-sm font-bold text-[#1C1A15]">
-              {formatarBRL(perfil.totalGasto)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Atendimentos
-            </p>
-            <p className="mt-1 text-sm font-bold text-[#1C1A15]">
-              {perfil.totalAtendimentos}
-              {perfil.profissionalPreferido
-                ? ` · ${perfil.profissionalPreferido}`
-                : ''}
-            </p>
-          </div>
-        </div>
+        <ResumoComportamento perfil={perfil} futuro={futuro} />
 
-        {perfil.servicos.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Serviços usados:
-            </span>
-            {perfil.servicos.map((s) => (
-              <span
-                key={s.nome}
-                className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-0.5 text-xs font-medium text-[#8A6A14]"
-              >
-                {s.nome} ({s.qtd})
-              </span>
-            ))}
-          </div>
-        )}
-
-        {perfil.produtos.length > 0 && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
-              Produtos comprados:
-            </span>
-            {perfil.produtos.map((p) => (
-              <span
-                key={p.nome}
-                className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#4A4436]"
-              >
-                {p.nome} ({p.qtd})
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Histórico completo — linha do tempo única (derivada das fontes) */}
-        <div className="mt-5 border-t border-[#E5DCC3] pt-4">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-[#1C1A15]">
-              Histórico completo
-            </h3>
-            <span className="text-[11px] text-[#8A8171]">
-              {historico.length} evento(s)
-            </span>
-          </div>
-          {historico.length === 0 ? (
-            <div className="mt-2 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
-              Nenhum evento no histórico deste cliente.
-            </div>
-          ) : (
-            <ul className="mt-2 divide-y divide-[#EFE7D3] rounded-lg border border-[#E5DCC3] bg-white px-3">
-              {historico.map((evento) => {
-                const badge = badgeEvento(evento)
-                return (
-                  <li
-                    key={evento.id}
-                    className="flex items-start justify-between gap-2 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[11px] text-[#8A8171]">
-                        {formatarDataLonga(evento.data)} · {evento.hora}
-                      </p>
-                      <p className="mt-0.5 text-sm text-[#4A4436]">
-                        {evento.titulo}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {evento.valor !== undefined && (
-                        <span className="text-xs font-semibold text-[#8A6A14]">
-                          {formatarBRL(evento.valor)}
-                        </span>
-                      )}
-                      {badge && (
-                        <span
-                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badge.classe}`}
-                        >
-                          {badge.rotulo}
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
+        <HistoricoCliente historico={historico} />
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -506,73 +298,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
           </button>
         </div>
 
-        {/* Interações / notas */}
-        <div className="mt-5 border-t border-[#E5DCC3] pt-4">
-          <h3 className="text-sm font-bold text-[#1C1A15]">
-            Interações e notas
-          </h3>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <label className="sr-only" htmlFor="crm-tipo">
-              Tipo de interação
-            </label>
-            <select
-              id="crm-tipo"
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
-            >
-              {TIPOS_INTERACAO.map((t) => (
-                <option key={t} value={t}>
-                  {TIPOS_INTERACAO_ROTULO[t]}
-                </option>
-              ))}
-            </select>
-            <div className="flex-1">
-              <label className="sr-only" htmlFor="crm-nota">
-                Nova interação
-              </label>
-              <textarea
-                id="crm-nota"
-                rows={2}
-                placeholder="Ex.: cliente pediu para lembrar por WhatsApp..."
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                className="w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={salvarNota}
-              className="h-fit rounded-lg border border-[#8A6A14] bg-white px-3 py-2 text-sm font-medium text-[#8A6A14] hover:bg-[#F3ECDA]"
-            >
-              Salvar interação
-            </button>
-          </div>
-          {erroNota && (
-            <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
-              {erroNota}
-            </p>
-          )}
-          {interacoes.length === 0 ? (
-            <p className="mt-3 text-sm text-[#A99E85]">
-              Nenhuma interação registrada ainda.
-            </p>
-          ) : (
-            <ul className="mt-3 flex flex-col gap-2">
-              {interacoes.map((i) => (
-                <li
-                  key={i.id}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2"
-                >
-                  <p className="text-[11px] font-semibold text-[#8A6A14]">
-                    {TIPOS_INTERACAO_ROTULO[i.tipo]} · {formatarISO(i.criadoEm)}
-                  </p>
-                  <p className="mt-0.5 text-sm text-[#4A4436]">{i.texto}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <InteracoesBloco clienteId={cliente.id} interacoes={interacoes} />
 
         {/* WhatsApp — mensagens preparadas, nunca enviadas sozinhas */}
         <div className="mt-5 border-t border-[#E5DCC3] pt-4">
@@ -691,7 +417,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 >
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${corStatus(
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${corStatusMensagem(
                         m.status,
                       )}`}
                     >

@@ -117,3 +117,64 @@ export function gastoDoCliente(
 ): number {
   return gastos.get(cliente.id) ?? 0
 }
+
+/** Remove tudo que não for dígito. */
+export function digitos(texto: string): string {
+  return texto.replace(/\D/g, '')
+}
+
+export type CamposNascimento = { dia: string; mes: string; ano: string }
+
+/**
+ * Monta o ISO (YYYY-MM-DD) do nascimento a partir dos campos do formulário.
+ * Vazio quando nada foi preenchido; `erro` quando o preenchimento é parcial
+ * ou inválido (ano fora do intervalo ou data inexistente).
+ */
+export function montarNascimento(
+  { dia, mes, ano }: CamposNascimento,
+  anoAtual: number,
+): { iso: string; erro?: string } {
+  const algumPreenchido = Boolean(dia || mes || ano)
+  if (!algumPreenchido) return { iso: '' }
+  if (!dia || !mes || !ano) {
+    return { iso: '', erro: 'Informe dia, mês e ano do nascimento ou deixe em branco.' }
+  }
+  const a = Number(ano)
+  if (Number.isNaN(a) || a < 1900 || a > anoAtual) {
+    return { iso: '', erro: 'Ano de nascimento inválido.' }
+  }
+  const d = Number(dia)
+  const m = Number(mes)
+  const testada = new Date(a, m - 1, d)
+  if (
+    testada.getFullYear() !== a ||
+    testada.getMonth() !== m - 1 ||
+    testada.getDate() !== d
+  ) {
+    return { iso: '', erro: 'Data de nascimento inválida.' }
+  }
+  const mm = String(m).padStart(2, '0')
+  const dd = String(d).padStart(2, '0')
+  return { iso: `${a}-${mm}-${dd}` }
+}
+
+export type DadosClienteForm = {
+  nome: string
+  telefone: string
+  email: string
+  cpf: string
+  cnpj: string
+}
+
+/** Primeira mensagem de validação do formulário de cliente ('' = válido). */
+export function validarDadosCliente(dados: DadosClienteForm): string {
+  if (dados.nome.trim().length < 2) return 'Informe o nome do cliente.'
+  if (!digitos(dados.telefone)) return 'Informe o telefone do cliente.'
+  if (dados.email.trim() && !/^\S+@\S+\.\S+$/.test(dados.email.trim()))
+    return 'Informe um e-mail válido ou deixe em branco.'
+  if (dados.cpf.trim() && digitos(dados.cpf).length !== 11)
+    return 'Informe um CPF com 11 dígitos ou deixe em branco.'
+  if (dados.cnpj.trim() && digitos(dados.cnpj).length !== 14)
+    return 'Informe um CNPJ com 14 dígitos ou deixe em branco.'
+  return ''
+}

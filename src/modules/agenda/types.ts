@@ -6,6 +6,15 @@ export type StatusAgendamento =
   | 'cancelado'
   | 'nao_compareceu'
 
+/** Rótulo oficial de cada status de agendamento (Agenda, Dashboard, CRM). */
+export const STATUS_ROTULO: Record<StatusAgendamento, string> = {
+  pendente: 'Pendente',
+  confirmado: 'Confirmado',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado',
+  nao_compareceu: 'Não compareceu',
+}
+
 /** Registro de uma remarcação — preserva o histórico do agendamento */
 export type Remarcacao = {
   de: { data: string; horario: string; profissional: string }

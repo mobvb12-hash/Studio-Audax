@@ -4,6 +4,7 @@ import ConfigComissaoModal from '@/components/ConfigComissaoModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import DetalheComissaoModal from '@/components/DetalheComissaoModal'
 import FechamentoComissaoModal from '@/components/FechamentoComissaoModal'
+import { CelulaKpi } from '@/components/PainelUi'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import {
@@ -149,38 +150,20 @@ export default function Comissoes() {
       {/* Totais */}
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
         <div className="flex min-w-[640px] divide-x divide-[#E5DCC3]">
-          <div className="min-w-[150px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-              Atendimentos pagos
-            </p>
-            <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
-              {totalQtd}
-            </p>
-          </div>
-          <div className="min-w-[150px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-              Produção total
-            </p>
-            <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
-              {formatarBRL(totalProducao)}
-            </p>
-          </div>
-          <div className="min-w-[150px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-              Comissões a pagar
-            </p>
-            <p className="mt-1.5 text-[22px] leading-none font-bold text-[#6B8E5A]">
-              {formatarBRL(totalComissao)}
-            </p>
-          </div>
-          <div className="min-w-[150px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-              Profissionais ativos
-            </p>
-            <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
-              {linhas.filter((l) => !l.inativo).length}
-            </p>
-          </div>
+          <CelulaKpi rotulo="Atendimentos pagos" valor={String(totalQtd)} />
+          <CelulaKpi
+            rotulo="Produção total"
+            valor={formatarBRL(totalProducao)}
+          />
+          <CelulaKpi
+            rotulo="Comissões a pagar"
+            valor={formatarBRL(totalComissao)}
+            destaque
+          />
+          <CelulaKpi
+            rotulo="Profissionais ativos"
+            valor={String(linhas.filter((l) => !l.inativo).length)}
+          />
         </div>
       </div>
 

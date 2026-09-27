@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { chipClasse } from '@/lib/apresentacao'
 import AssinaturaDetalheModal from '@/components/AssinaturaDetalheModal'
 import AssinaturaFormModal from '@/components/AssinaturaFormModal'
+import { CelulaKpi } from '@/components/PainelUi'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
 import {
@@ -117,14 +118,7 @@ export default function Clube() {
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
         <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
           {kpis.map((kpi) => (
-            <div key={kpi.rotulo} className="min-w-[150px] flex-1 px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-                {kpi.rotulo}
-              </p>
-              <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
-                {kpi.valor}
-              </p>
-            </div>
+            <CelulaKpi key={kpi.rotulo} rotulo={kpi.rotulo} valor={kpi.valor} />
           ))}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
+import { CelulaKpi } from '@/components/PainelUi'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClientes } from '@/modules/clientes/store'
@@ -104,14 +105,7 @@ export default function Ia() {
             { rotulo: 'Confirmadas', valor: String(aceitas.length) },
             { rotulo: 'Descartadas', valor: String(descartadas.length) },
           ].map((kpi) => (
-            <div key={kpi.rotulo} className="min-w-[150px] flex-1 px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
-                {kpi.rotulo}
-              </p>
-              <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
-                {kpi.valor}
-              </p>
-            </div>
+            <CelulaKpi key={kpi.rotulo} rotulo={kpi.rotulo} valor={kpi.valor} />
           ))}
         </div>
       </div>

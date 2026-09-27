@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
-import type { StatusAgendamento } from '@/modules/agenda/types'
+import { STATUS_ROTULO, type StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import type { Cliente } from '@/modules/clientes/types'
 import {
@@ -16,14 +16,6 @@ import { formatarBRL, normalizarTexto } from '@/lib/moeda'
 type Props = {
   cliente: Cliente
   onFechar: () => void
-}
-
-const STATUS_ROTULO: Record<StatusAgendamento, string> = {
-  pendente: 'Pendente',
-  confirmado: 'Confirmado',
-  concluido: 'Concluído',
-  cancelado: 'Cancelado',
-  nao_compareceu: 'Não compareceu',
 }
 
 function badgeStatus(status: StatusAgendamento): string {

@@ -3,7 +3,7 @@
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { duracaoBase, horariosDisponiveis } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
-import type { StatusAgendamento } from '@/modules/agenda/types'
+import { STATUS_ROTULO, type StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
 import { periodoMes } from '@/modules/comissoes/periodo'
@@ -39,14 +39,6 @@ function dataHoje(): string {
     year: 'numeric',
   })
   return texto.charAt(0).toUpperCase() + texto.slice(1)
-}
-
-const STATUS_ROTULO: Record<StatusAgendamento, string> = {
-  pendente: 'Pendente',
-  confirmado: 'Confirmado',
-  concluido: 'Concluído',
-  cancelado: 'Cancelado',
-  nao_compareceu: 'Não compareceu',
 }
 
 function statusClasse(status: StatusAgendamento): string {
