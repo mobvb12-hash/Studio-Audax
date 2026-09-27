@@ -8,7 +8,11 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import { PROFISSIONAIS as SEED } from '@/modules/agenda/catalogo'
 import { validarProfissional } from './regras'
@@ -353,7 +357,9 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         try {
           await criarProfissional(novo)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
       return novo
@@ -397,7 +403,9 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         try {
           await atualizarProfissional(id, input)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
     },
@@ -418,7 +426,9 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         try {
           await alternarAtivoProfissional(id, novoAtivo)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
     },
@@ -434,7 +444,9 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         try {
           await removerProfissional(id)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
     },

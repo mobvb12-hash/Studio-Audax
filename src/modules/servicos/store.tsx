@@ -8,7 +8,11 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import { SERVICOS as SEED } from '@/modules/agenda/catalogo'
 import { validarServico } from './regras'
@@ -328,7 +332,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         try {
           await criarServico(novo)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
       return novo
@@ -370,7 +376,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         try {
           await atualizarServico(id, input)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
     },
@@ -395,7 +403,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         try {
           await alternarAtivoServico(id, novoAtivo)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
     },
@@ -411,7 +421,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         try {
           await removerServico(id)
         } catch {
-          // falha de rede — localStorage já tem o dado
+          // o estado local e a pendência (C2) já garantiram o dado; o aviso
+          // impede que a tela trate a operação como confirmada no servidor
+          avisarFalhaSincronizacao(CHAVE_STORAGE)
         }
       }
     },

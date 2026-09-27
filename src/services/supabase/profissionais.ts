@@ -1,3 +1,12 @@
+// Acesso ao Supabase — profissionais (única camada que fala com a tabela
+// `public.profissionais`). Sem regra de negócio da UI aqui: só leitura/escrita.
+//
+// Ausência de Supabase (VITE_SUPABASE_URL / ANON_KEY vazias) mantém o app
+// 100% local: as escritas devolvem null/false e não há o que confirmar.
+// Falha de escrita NÃO é silenciosa: `criarProfissional`,
+// `atualizarProfissional`, `alternarAtivoProfissional` e `removerProfissional`
+// lançam quando o Supabase recusa a operação, para que a tela possa avisar em
+// vez de tratar a operação como concluída.
 import { supabase } from '@/lib/supabase'
 import type { Profissional, NovoProfissionalInput } from '@/modules/profissionais/types'
 
@@ -21,6 +30,11 @@ function paraProfissional(row: ProfissionalRow): Profissional {
     ativo: row.ativo,
     criadoEm: row.criado_em,
   }
+}
+
+/** Erro de escrita com a mensagem do Supabase (ou um texto utilizável). */
+function erroDeEscrita(mensagem: string | undefined): Error {
+  return new Error(mensagem || 'Falha ao gravar profissionais no Supabase.')
 }
 
 export async function listarProfissionais(): Promise<Profissional[]> {
@@ -50,7 +64,8 @@ export async function criarProfissional(
     })
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita(undefined)
   return paraProfissional(data)
 }
 
@@ -71,7 +86,8 @@ export async function atualizarProfissional(
     .eq('id', id)
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita('O profissional não existe mais no Supabase.')
   return paraProfissional(data)
 }
 
@@ -87,7 +103,8 @@ export async function alternarAtivoProfissional(
     .eq('id', id)
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita('O profissional não existe mais no Supabase.')
   return paraProfissional(data)
 }
 
@@ -95,7 +112,8 @@ export async function removerProfissional(id: string): Promise<boolean> {
   const cliente = supabase()
   if (!cliente) return false
   const { error } = await cliente.from('profissionais').delete().eq('id', id)
-  return !error
+  if (error) throw erroDeEscrita(error.message)
+  return true
 }
 
 /**

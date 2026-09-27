@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { avisosPersistencia, limparAvisosPersistencia } from '@/lib/persistencia'
 import * as repositorio from '@/services/supabase/profissionais'
 import { ProfissionaisProvider, useProfissionais } from './store'
 import type { Profissional } from './types'
@@ -56,13 +57,13 @@ vi.mock('@/services/supabase/profissionais', () => ({
     return lista.length
   }),
   criarProfissional: vi.fn(async (profissional: unknown) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     remoto.gravar(profissional)
     return profissional as never
   }),
   atualizarProfissional: vi.fn(
     async (id: string, input: Record<string, unknown>) => {
-      if (remoto.falhaEscrita) return null
+      if (remoto.falhaEscrita) throw new Error('rede indisponível')
       const alvo = remoto.linhas.find(
         (linha) => (linha as { id: string }).id === id,
       ) as Record<string, unknown> | undefined
@@ -73,7 +74,7 @@ vi.mock('@/services/supabase/profissionais', () => ({
     },
   ),
   alternarAtivoProfissional: vi.fn(async (id: string, ativo: boolean) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     const alvo = remoto.linhas.find(
       (linha) => (linha as { id: string }).id === id,
     ) as Record<string, unknown> | undefined
@@ -83,7 +84,7 @@ vi.mock('@/services/supabase/profissionais', () => ({
     return linha as never
   }),
   removerProfissional: vi.fn(async (id: string) => {
-    if (remoto.falhaEscrita) return false
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     remoto.linhas = remoto.linhas.filter(
       (linha) => (linha as { id: string }).id !== id,
     )
@@ -144,6 +145,7 @@ function linhasSalvasNoBackup(): Profissional[] {
 
 beforeEach(() => {
   localStorage.clear()
+  limparAvisosPersistencia()
   remoto.reiniciar()
   vi.clearAllMocks()
   ctx = undefined as unknown as ReturnType<typeof useProfissionais>
@@ -238,6 +240,8 @@ describe('Profissionais — cadastro local e Supabase', () => {
     remoto.linhas = [prof('p-1', 'Ana Local')]
     const primeira = montar()
     await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    // nada avisado enquanto a sincronização funciona
+    expect(avisosPersistencia()).toEqual([])
 
     remoto.falhaEscrita = true
     await act(async () => {
@@ -250,6 +254,10 @@ describe('Profissionais — cadastro local e Supabase', () => {
     })
     await waitFor(() => expect(salvoLocal()[0]?.nome).toBe('Ana Editada'))
     expect((remoto.linhas[0] as Profissional).nome).toBe('Ana Local')
+    // a edição não foi confirmada no servidor: a tela precisa avisar
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
 
     primeira.unmount()
     remoto.falhaEscrita = false
@@ -290,6 +298,58 @@ describe('Profissionais — cadastro local e Supabase', () => {
     await waitFor(() =>
       expect(salvoLocal().map((p) => p.nome)).toContain('Luan Silva'),
     )
+  })
+
+  it('criação recusada pelo Supabase avisa e não perde o dado local', async () => {
+    gravarLocal([prof('p-1', 'Ana Local')])
+    remoto.linhas = [prof('p-1', 'Ana Local')]
+    montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    expect(avisosPersistencia()).toEqual([])
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      await ctx.adicionar({
+        nome: 'Luan Silva',
+        telefone: '(11) 91234-5678',
+        email: '',
+        foto: '',
+      })
+    })
+
+    // não há sucesso indevido: o aviso diz que o servidor não confirmou
+    const avisos = avisosPersistencia()
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0].tipo).toBe('falha_sincronizacao')
+    expect(avisos[0].mensagem).toMatch(/não foi confirmada no servidor/)
+    expect(avisos[0].mensagem).toMatch(/Nada foi perdido/)
+    // o dado fica no estado e no localStorage (pendência do C2)
+    await waitFor(() =>
+      expect(ctx.profissionais.map((p) => p.nome)).toContain('Luan Silva'),
+    )
+    await waitFor(() =>
+      expect(salvoLocal().map((p) => p.nome)).toContain('Luan Silva'),
+    )
+    expect(remoto.ids()).toEqual(['p-1'])
+  })
+
+  it('exclusão recusada pelo Supabase avisa que a remoção não foi confirmada', async () => {
+    gravarLocal([prof('p-1', 'Ana Local')])
+    remoto.linhas = [prof('p-1', 'Ana Local')]
+    montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      await ctx.remover('p-1')
+    })
+
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(0))
+    // a linha continua no Supabase — a exclusão não foi confirmada
+    expect(remoto.ids()).toEqual(['p-1'])
   })
 
   it('divergência: o local vence e a versão remota substituída fica no snapshot', async () => {

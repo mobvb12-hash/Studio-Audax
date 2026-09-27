@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { avisosPersistencia, limparAvisosPersistencia } from '@/lib/persistencia'
 import * as repositorio from '@/services/supabase/servicos'
 import { ServicosProvider, useServicos } from './store'
 import type { Servico } from './types'
@@ -56,12 +57,12 @@ vi.mock('@/services/supabase/servicos', () => ({
     return lista.length
   }),
   criarServico: vi.fn(async (servico: unknown) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     remoto.gravar(servico)
     return servico as never
   }),
   atualizarServico: vi.fn(async (id: string, input: Record<string, unknown>) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     const alvo = remoto.linhas.find(
       (linha) => (linha as { id: string }).id === id,
     ) as Record<string, unknown> | undefined
@@ -76,7 +77,7 @@ vi.mock('@/services/supabase/servicos', () => ({
     return linha as never
   }),
   alternarAtivoServico: vi.fn(async (id: string, ativo: boolean) => {
-    if (remoto.falhaEscrita) return null
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     const alvo = remoto.linhas.find(
       (linha) => (linha as { id: string }).id === id,
     ) as Record<string, unknown> | undefined
@@ -86,7 +87,7 @@ vi.mock('@/services/supabase/servicos', () => ({
     return linha as never
   }),
   removerServico: vi.fn(async (id: string) => {
-    if (remoto.falhaEscrita) return false
+    if (remoto.falhaEscrita) throw new Error('rede indisponível')
     remoto.linhas = remoto.linhas.filter(
       (linha) => (linha as { id: string }).id !== id,
     )
@@ -148,6 +149,7 @@ function linhasSalvasNoBackup(): Servico[] {
 
 beforeEach(() => {
   localStorage.clear()
+  limparAvisosPersistencia()
   remoto.reiniciar()
   vi.clearAllMocks()
   ctx = undefined as unknown as ReturnType<typeof useServicos>
@@ -270,6 +272,8 @@ describe('Serviços — cadastro local e Supabase', () => {
     remoto.linhas = [svc('s-1', 'Corte')]
     const primeira = montar()
     await waitFor(() => expect(ctx.servicos).toHaveLength(1))
+    // nada avisado enquanto a sincronização funciona
+    expect(avisosPersistencia()).toEqual([])
 
     remoto.falhaEscrita = true
     await act(async () => {
@@ -282,6 +286,10 @@ describe('Serviços — cadastro local e Supabase', () => {
     })
     await waitFor(() => expect(salvoLocal()[0]?.nome).toBe('Corte Editado'))
     expect((remoto.linhas[0] as Servico).nome).toBe('Corte')
+    // a edição não foi confirmada no servidor: a tela precisa avisar
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
 
     primeira.unmount()
     remoto.falhaEscrita = false
@@ -294,6 +302,58 @@ describe('Serviços — cadastro local e Supabase', () => {
     )
     expect(linhasSalvasNoBackup()[0]?.nome).toBe('Corte')
     await waitFor(() => expect(salvoLocal()[0]?.nome).toBe('Corte Editado'))
+  })
+
+  it('criação recusada pelo Supabase avisa e não perde o dado local', async () => {
+    gravarLocal([svc('s-1', 'Corte')])
+    remoto.linhas = [svc('s-1', 'Corte')]
+    montar()
+    await waitFor(() => expect(ctx.servicos).toHaveLength(1))
+    expect(avisosPersistencia()).toEqual([])
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      await ctx.adicionar({
+        nome: 'Luzes',
+        preco: 120,
+        duracaoMin: 60,
+        categoria: 'Cabelo',
+      })
+    })
+
+    // não há sucesso indevido: o aviso diz que o servidor não confirmou
+    const avisos = avisosPersistencia()
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0].tipo).toBe('falha_sincronizacao')
+    expect(avisos[0].mensagem).toMatch(/não foi confirmada no servidor/)
+    expect(avisos[0].mensagem).toMatch(/Nada foi perdido/)
+    // o dado fica no estado e no localStorage (pendência do C2)
+    await waitFor(() =>
+      expect(ctx.servicos.map((s) => s.nome)).toContain('Luzes'),
+    )
+    await waitFor(() =>
+      expect(salvoLocal().map((s) => s.nome)).toContain('Luzes'),
+    )
+    expect(remoto.ids()).toEqual(['s-1'])
+  })
+
+  it('exclusão recusada pelo Supabase avisa que a remoção não foi confirmada', async () => {
+    gravarLocal([svc('s-1', 'Corte')])
+    remoto.linhas = [svc('s-1', 'Corte')]
+    montar()
+    await waitFor(() => expect(ctx.servicos).toHaveLength(1))
+
+    remoto.falhaEscrita = true
+    await act(async () => {
+      await ctx.remover('s-1')
+    })
+
+    expect(avisosPersistencia().map((a) => a.tipo)).toEqual([
+      'falha_sincronizacao',
+    ])
+    await waitFor(() => expect(ctx.servicos).toHaveLength(0))
+    // a linha continua no Supabase — a exclusão não foi confirmada
+    expect(remoto.ids()).toEqual(['s-1'])
   })
 
   it('criação durante a janela de carga não some nem do estado nem do localStorage', async () => {

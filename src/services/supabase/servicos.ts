@@ -1,3 +1,12 @@
+// Acesso ao Supabase — serviços (única camada que fala com a tabela
+// `public.servicos`). Sem regra de negócio da UI aqui: só leitura/escrita.
+//
+// Ausência de Supabase (VITE_SUPABASE_URL / ANON_KEY vazias) mantém o app
+// 100% local: as escritas devolvem null/false e não há o que confirmar.
+// Falha de escrita NÃO é silenciosa: `criarServico`, `atualizarServico`,
+// `alternarAtivoServico` e `removerServico` lançam quando o Supabase recusa a
+// operação, para que a tela possa avisar em vez de tratar a operação como
+// concluída.
 import { supabase } from '@/lib/supabase'
 import type { Servico, NovoServicoInput } from '@/modules/servicos/types'
 
@@ -23,6 +32,11 @@ function paraServico(row: ServicoRow): Servico {
     criadoEm: row.criado_em,
     atualizadoEm: row.atualizado_em,
   }
+}
+
+/** Erro de escrita com a mensagem do Supabase (ou um texto utilizável). */
+function erroDeEscrita(mensagem: string | undefined): Error {
+  return new Error(mensagem || 'Falha ao gravar serviços no Supabase.')
 }
 
 export async function listarServicos(): Promise<Servico[]> {
@@ -52,7 +66,8 @@ export async function criarServico(
     })
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita(undefined)
   return paraServico(data)
 }
 
@@ -74,7 +89,8 @@ export async function atualizarServico(
     .eq('id', id)
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita('O serviço não existe mais no Supabase.')
   return paraServico(data)
 }
 
@@ -90,7 +106,8 @@ export async function alternarAtivoServico(
     .eq('id', id)
     .select()
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw erroDeEscrita(error.message)
+  if (!data) throw erroDeEscrita('O serviço não existe mais no Supabase.')
   return paraServico(data)
 }
 
@@ -98,7 +115,8 @@ export async function removerServico(id: string): Promise<boolean> {
   const cliente = supabase()
   if (!cliente) return false
   const { error } = await cliente.from('servicos').delete().eq('id', id)
-  return !error
+  if (error) throw erroDeEscrita(error.message)
+  return true
 }
 
 /**

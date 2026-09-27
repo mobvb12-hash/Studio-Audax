@@ -11,8 +11,10 @@ import { useSyncExternalStore } from 'react'
  */
 
 const SUFIXO_CORROMPIDO = ':corrompido'
-
-export type TipoAvisoPersistencia = 'dado_corrompido' | 'falha_gravacao'
+export type TipoAvisoPersistencia =
+  | 'dado_corrompido'
+  | 'falha_gravacao'
+  | 'falha_sincronizacao'
 
 export type AvisoPersistencia = {
   id: string
@@ -24,7 +26,10 @@ export type AvisoPersistencia = {
 const MENSAGENS: Record<TipoAvisoPersistencia, string> = {
   dado_corrompido:
     'Foi detectado um dado local corrompido; uma cópia foi preservada.',
-  falha_gravacao: 'Os dados locais do Studio Audax não puderam ser salvos.',
+  falha_gravacao:
+    'Os dados locais do Studio Audax não puderam ser salvos.',
+  falha_sincronizacao:
+    'Falha ao sincronizar com o Supabase: a alteração não foi confirmada no servidor. Nada foi perdido — o estado deste dispositivo segue salvo e a próxima abertura tenta sincronizar de novo.',
 }
 
 let avisos: AvisoPersistencia[] = []
@@ -123,4 +128,13 @@ export function salvarJSON(chave: string, valor: unknown): void {
   } catch {
     emitir('falha_gravacao', chave)
   }
+}
+
+/**
+ * A escrita no Supabase não foi confirmada. O dado já está salvo no
+ * dispositivo e na pendência de reenvio — o aviso existe para que a tela
+ * não finja que a operação foi concluída no servidor.
+ */
+export function avisarFalhaSincronizacao(chave: string): void {
+  emitir('falha_sincronizacao', chave)
 }
