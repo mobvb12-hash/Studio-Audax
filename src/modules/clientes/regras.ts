@@ -3,9 +3,47 @@
 import type { Agendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { normalizarTexto } from '@/lib/moeda'
-import { digitosDosTelefones, type Cliente } from './types'
+import {
+  digitosDosTelefones,
+  preferenciasPadrao,
+  type Cliente,
+} from './types'
 
 export type FiltroStatusCliente = 'todos' | 'ativos' | 'inativos'
+
+/** Ordem de exibição e de persistência: alfabética por nome. */
+export function ordenarClientes(lista: Cliente[]): Cliente[] {
+  return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
+/**
+ * Preenche campos ausentes (registros antigos, linhas vindas do Supabase)
+ * com os padrões atuais. Usado pelo store e pela camada de persistência —
+ * um único lugar normaliza, para local e remoto convergirem.
+ */
+export function normalizarCliente(bruto: Partial<Cliente>): Cliente {
+  const agora = new Date().toISOString()
+  return {
+    id: bruto.id ?? '',
+    nome: bruto.nome ?? '',
+    telefone: bruto.telefone ?? '',
+    email: bruto.email ?? '',
+    observacao: bruto.observacao ?? '',
+    genero: bruto.genero ?? 'nao_informado',
+    cpf: bruto.cpf ?? '',
+    cnpj: bruto.cnpj ?? '',
+    nascimento: bruto.nascimento ?? '',
+    ativo: bruto.ativo ?? true,
+    etiquetas: Array.isArray(bruto.etiquetas) ? bruto.etiquetas : [],
+    instagram: bruto.instagram ?? '',
+    comoNosConheceu: bruto.comoNosConheceu ?? '',
+    telefones: Array.isArray(bruto.telefones) ? bruto.telefones : [],
+    endereco: bruto.endereco ?? null,
+    preferencias: { ...preferenciasPadrao(), ...bruto.preferencias },
+    criadoEm: bruto.criadoEm ?? agora,
+    atualizadoEm: bruto.atualizadoEm ?? agora,
+  }
+}
 
 /** Minúsculas, sem acentos e sem espaços nas pontas. */
 export function normalizarBusca(texto: string): string {

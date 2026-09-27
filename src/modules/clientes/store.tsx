@@ -4,40 +4,29 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
+import { supabase } from '@/lib/supabase'
+import {
+  alternarAtivoCliente,
+  atualizarCliente,
+  criarCliente,
+  removerCliente,
+} from '@/services/supabase/clientes'
+import {
+  CHAVE_STORAGE_CLIENTES,
+  migrarClientes,
+  type RelatorioMigracaoClientes,
+} from './migracao'
+import { normalizarCliente, ordenarClientes } from './regras'
 import type { Cliente, NovoClienteInput } from './types'
-import { digitosDosTelefones, preferenciasPadrao } from './types'
+import { digitosDosTelefones } from './types'
 
-const CHAVE_STORAGE = 'studio-audax:clientes:v1'
-
-/** Preenche campos ausentes (registros antigos) com os padrões atuais. */
-function normalizarCliente(bruto: Partial<Cliente>): Cliente {
-  const agora = new Date().toISOString()
-  return {
-    id: bruto.id ?? '',
-    nome: bruto.nome ?? '',
-    telefone: bruto.telefone ?? '',
-    email: bruto.email ?? '',
-    observacao: bruto.observacao ?? '',
-    genero: bruto.genero ?? 'nao_informado',
-    cpf: bruto.cpf ?? '',
-    cnpj: bruto.cnpj ?? '',
-    nascimento: bruto.nascimento ?? '',
-    ativo: bruto.ativo ?? true,
-    etiquetas: Array.isArray(bruto.etiquetas) ? bruto.etiquetas : [],
-    instagram: bruto.instagram ?? '',
-    comoNosConheceu: bruto.comoNosConheceu ?? '',
-    telefones: Array.isArray(bruto.telefones) ? bruto.telefones : [],
-    endereco: bruto.endereco ?? null,
-    preferencias: { ...preferenciasPadrao(), ...bruto.preferencias },
-    criadoEm: bruto.criadoEm ?? agora,
-    atualizadoEm: bruto.atualizadoEm ?? agora,
-  }
-}
+const CHAVE_STORAGE = CHAVE_STORAGE_CLIENTES
 
 type ClientesContexto = {
   clientes: Cliente[]
@@ -47,6 +36,7 @@ type ClientesContexto = {
   alternarAtivo: (id: string) => void
   remover: (id: string) => void
   porId: (id: string) => Cliente | undefined
+  /** Compatibilidade: Agenda/CRM/WhatsApp ainda ligam por nome (sem clienteId) */
   porNome: (nome: string) => Cliente | undefined
 }
 
@@ -54,10 +44,6 @@ const Contexto = createContext<ClientesContexto | null>(null)
 
 function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function ordenar(lista: Cliente[]): Cliente[] {
-  return [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 /**
@@ -80,12 +66,112 @@ function carregar(): Cliente[] {
   return (bruto as Partial<Cliente>[]).map(normalizarCliente)
 }
 
+/**
+ * Junta a lista oficial (remoto) com o que aconteceu na tela durante a
+ * carga: mudança da sessão vence, registro criado no meio da carga não some
+ * e remoção da sessão é respeitada.
+ */
+function fundir(
+  base: Cliente[],
+  atual: Cliente[],
+  alterados: Set<string>,
+  removidos: Set<string>,
+): Cliente[] {
+  const porId = new Map(base.map((c) => [c.id, c]))
+  for (const cliente of atual) {
+    if (removidos.has(cliente.id)) continue
+    if (alterados.has(cliente.id) || !porId.has(cliente.id)) {
+      porId.set(cliente.id, cliente)
+    }
+  }
+  for (const id of removidos) porId.delete(id)
+  return ordenarClientes([...porId.values()])
+}
+
+/**
+ * Migração em andamento compartilhada: o StrictMode (React) executa o efeito
+ * duas vezes em desenvolvimento e uma única ida ao Supabase deve acontecer.
+ */
+let promessaMigracao: Promise<RelatorioMigracaoClientes> | null = null
+
 export function ClientesProvider({ children }: { children: ReactNode }) {
   const [clientes, setClientes] = useState<Cliente[]>(() => carregar())
+  const [sincronizado, setSincronizado] = useState(false)
+
+  const temSupabase = supabase() !== null
+  const alterados = useRef<Set<string>>(new Set())
+  const removidos = useRef<Set<string>>(new Set())
+  const listaLocal = useRef<Cliente[]>(clientes)
 
   useEffect(() => {
-    salvarJSON(CHAVE_STORAGE, clientes)
+    listaLocal.current = clientes
   }, [clientes])
+
+  // Supabase é a fonte oficial: a primeira carga roda a migração local →
+  // remoto (com snapshot) e só então o localStorage volta a ser gravado.
+  useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    if (!promessaMigracao) {
+      promessaMigracao = migrarClientes(listaLocal.current)
+    }
+    promessaMigracao
+      .then((relatorio) => {
+        if (!relatorio.ok) {
+          console.warn(
+            '[clientes] migração para Supabase incompleta — dados locais preservados.',
+            relatorio.erros,
+          )
+        }
+        if (vivo) {
+          setClientes((atual) =>
+            fundir(
+              relatorio.clientes,
+              atual,
+              alterados.current,
+              removidos.current,
+            ),
+          )
+        }
+      })
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o fallback local intacto
+        if (vivo) {
+          console.warn(
+            '[clientes] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaMigracao = null
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase])
+
+  // Grava local quando está sem Supabase, quando já sincronizou ou quando
+  // existe alteração feita nesta sessão (nada que o usuário fez se perde).
+  useEffect(() => {
+    const temPendencia =
+      alterados.current.size > 0 || removidos.current.size > 0
+    if (temSupabase && !sincronizado && !temPendencia) return
+    salvarJSON(CHAVE_STORAGE, clientes)
+  }, [clientes, temSupabase, sincronizado])
+
+  /** Escrita remota em segundo plano: o local já foi atualizado antes. */
+  const sincronizar = useCallback(
+    (operacao: () => Promise<unknown>) => {
+      if (!temSupabase) return
+      void operacao().catch(() => {
+        // falha de rede — o localStorage guarda o dado e a próxima
+        // carga do módulo reenvia a pendência
+      })
+    },
+    [temSupabase],
+  )
 
   const adicionar = useCallback(
     (input: NovoClienteInput) => {
@@ -122,10 +208,12 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
         criadoEm: agora,
         atualizadoEm: agora,
       })
-      setClientes((atual) => ordenar([...atual, novo]))
+      alterados.current.add(novo.id)
+      setClientes((atual) => ordenarClientes([...atual, novo]))
+      sincronizar(() => criarCliente(novo))
       return novo
     },
-    [clientes],
+    [clientes, sincronizar],
   )
 
   const atualizar = useCallback(
@@ -150,51 +238,67 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
       ) {
         throw new Error('Já existe um cliente com este telefone.')
       }
+      if (!existente) return
+      const atualizado = normalizarCliente({
+        ...existente,
+        nome,
+        telefone: input.telefone.trim(),
+        email: input.email.trim(),
+        observacao: input.observacao.trim(),
+        genero: input.genero ?? existente?.genero,
+        ativo: input.ativo ?? existente?.ativo,
+        cpf: input.cpf?.trim() || existente?.cpf,
+        cnpj: input.cnpj?.trim() || existente?.cnpj,
+        nascimento: input.nascimento || existente?.nascimento,
+        etiquetas: input.etiquetas ?? existente?.etiquetas,
+        instagram: input.instagram?.trim() || existente?.instagram,
+        comoNosConheceu: input.comoNosConheceu || existente?.comoNosConheceu,
+        telefones: input.telefones ?? existente?.telefones,
+        endereco:
+          input.endereco === undefined ? existente?.endereco : input.endereco,
+        preferencias: input.preferencias ?? existente?.preferencias,
+        id,
+        atualizadoEm: new Date().toISOString(),
+      })
+      alterados.current.add(id)
       setClientes((atual) =>
-        ordenar(
-          atual.map((c) =>
-            c.id === id
-              ? normalizarCliente({
-                  ...c,
-                  nome,
-                  telefone: input.telefone.trim(),
-                  email: input.email.trim(),
-                  observacao: input.observacao.trim(),
-                  genero: input.genero ?? c.genero,
-                  ativo: input.ativo ?? c.ativo,
-                  cpf: input.cpf?.trim() || c.cpf,
-                  cnpj: input.cnpj?.trim() || c.cnpj,
-                  nascimento: input.nascimento || c.nascimento,
-                  etiquetas: input.etiquetas ?? c.etiquetas,
-                  instagram: input.instagram?.trim() || c.instagram,
-                  comoNosConheceu: input.comoNosConheceu || c.comoNosConheceu,
-                  telefones: input.telefones ?? c.telefones,
-                  endereco:
-                    input.endereco === undefined ? c.endereco : input.endereco,
-                  preferencias: input.preferencias ?? c.preferencias,
-                  atualizadoEm: new Date().toISOString(),
-                })
-              : c,
-          ),
+        ordenarClientes(
+          atual.map((c) => (c.id === id ? atualizado : c)),
         ),
       )
+      sincronizar(() => atualizarCliente(id, atualizado))
     },
-    [clientes],
+    [clientes, sincronizar],
   )
 
-  const alternarAtivo = useCallback((id: string) => {
-    setClientes((atual) =>
-      atual.map((c) =>
-        c.id === id
-          ? { ...c, ativo: !c.ativo, atualizadoEm: new Date().toISOString() }
-          : c,
-      ),
-    )
-  }, [])
+  const alternarAtivo = useCallback(
+    (id: string) => {
+      const alvo = clientes.find((c) => c.id === id)
+      if (!alvo) return
+      const novoAtivo = !alvo.ativo
+      const atualizado: Cliente = {
+        ...alvo,
+        ativo: novoAtivo,
+        atualizadoEm: new Date().toISOString(),
+      }
+      alterados.current.add(id)
+      setClientes((atual) =>
+        atual.map((c) => (c.id === id ? atualizado : c)),
+      )
+      sincronizar(() => alternarAtivoCliente(id, novoAtivo))
+    },
+    [clientes, sincronizar],
+  )
 
-  const remover = useCallback((id: string) => {
-    setClientes((atual) => atual.filter((c) => c.id !== id))
-  }, [])
+  const remover = useCallback(
+    (id: string) => {
+      removidos.current.add(id)
+      alterados.current.delete(id)
+      setClientes((atual) => atual.filter((c) => c.id !== id))
+      sincronizar(() => removerCliente(id))
+    },
+    [sincronizar],
+  )
 
   const porId = useCallback(
     (id: string) => clientes.find((c) => c.id === id),
