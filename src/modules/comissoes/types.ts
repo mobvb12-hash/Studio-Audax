@@ -11,6 +11,13 @@ export type ConfigComissao = {
   /** 0 a 100 (%) */
   percentual: number
   ativo: boolean
+  /**
+   * Última alteração (ISO). Não é regra de negócio: é o carimbo que a
+   * sincronização usa para escolher a versão mais recente quando dois
+   * dispositivos mexem no mesmo percentual (mesmo papel de produtos,
+   * serviços e agenda).
+   */
+  atualizadoEm?: string
 }
 
 export type FechamentoComissao = {
@@ -24,6 +31,13 @@ export type FechamentoComissao = {
   percentual: number
   comissao: number
   fechadoEm: string
+  /**
+   * Carimbo de alteração (ISO) usado só pela sincronização para decidir qual
+   * versão vence quando dois dispositivos mudam o mesmo fechamento (reabertura
+   * ou renomeação do profissional). Não é regra de negócio: o fechamento
+   * continua imutável em produção, percentual e comissão.
+   */
+  atualizadoEm?: string
   reaberto?: { em: string; motivo: string }
 }
 

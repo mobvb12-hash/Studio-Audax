@@ -13,7 +13,11 @@ const scripts = import.meta.glob('../supabase/**/*.sql', {
 }) as Record<string, string>
 
 const codigo = import.meta.glob(
-  ['../src/services/supabase/profissionais.ts', '../src/services/supabase/servicos.ts'],
+  [
+    '../src/services/supabase/profissionais.ts',
+    '../src/services/supabase/servicos.ts',
+    '../src/services/supabase/comissoes.ts',
+  ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
 
@@ -114,6 +118,7 @@ describe('Supabase — migrations', () => {
       '../supabase/migrations/005_caixa.sql',
       '../supabase/migrations/006_produtos_estoque.sql',
       '../supabase/migrations/007_agenda.sql',
+      '../supabase/migrations/008_comissoes.sql',
     ])
   })
 
@@ -267,6 +272,84 @@ describe('Supabase — consistência entre código e migration', () => {
     expect(texto).toMatch(/alter column criado_em set default now\(\)/i)
     for (const tabela of ['profissionais', 'servicos']) {
       expect(texto, tabela).toMatch(
+        new RegExp(`public\\.${tabela} alter column dados drop not null`),
+      )
+    }
+  })
+})
+
+describe('Supabase — comissões (a 008 espelha o que o app grava)', () => {
+  it('toda coluna lida pelo repositório de comissões existe no schema', () => {
+    // A estrutura preliminar (`supabase/schema.sql`) não tinha `acao` na
+    // auditoria nem os carimbos de sincronização. Se a 008 parar de completar
+    // alguma coluna lida pelo app, a leitura quebra em produção.
+    const declaradas = colunasDeclaradas('comissoes_auditoria')
+    expect(declaradas.has('acao')).toBe(true)
+    const lidos = camposLidosDoApp('comissoes.ts', 'AuditoriaRow')
+    for (const campo of lidos) {
+      expect(
+        declaradas.has(campo),
+        `comissoes_auditoria.${campo} é lido pelo app e não existe no schema`,
+      ).toBe(true)
+    }
+    for (const [tabela, tipo] of [
+      ['comissoes_configs', 'ConfigRow'],
+      ['comissoes_fechamentos', 'FechamentoRow'],
+    ] as const) {
+      for (const campo of camposLidosDoApp('comissoes.ts', tipo)) {
+        expect(
+          colunasDeclaradas(tabela).has(campo),
+          `${tabela}.${campo} é lido pelo app e não existe no schema`,
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('fechamento e auditoria têm a chave id do app (reenvio é o mesmo registro)', () => {
+    // A comissão não pode ser paga duas vezes: o upsert do reenvio depende da
+    // chave primária ser o MESMO id gerado pelo app.
+    for (const tabela of ['comissoes_fechamentos', 'comissoes_auditoria']) {
+      const cria = [...declaracoesPorScript(tabela)].find(
+        ([, declaracoes]) => declaracoes.cria,
+      )
+      expect(cria, tabela).toBeTruthy()
+      expect(
+        (cria?.[1].colunas ?? [])
+          .map(([coluna]) => coluna)
+          .includes('id'),
+        `${tabela} sem id do app`,
+      ).toBe(true)
+    }
+  })
+
+  it('a configuração é chaveada por profissional_id (uma config por profissional)', () => {
+    const texto = sql('../supabase/migrations/008_comissoes.sql')
+    expect(texto).toMatch(
+      /profissional_id text primary key references public\.profissionais/i,
+    )
+  })
+
+  it('a 008 completa as colunas ausentes na estrutura preliminar', () => {
+    const texto = sql('../supabase/migrations/008_comissoes.sql')
+    for (const [tabela, coluna] of [
+      ['comissoes_auditoria', 'acao'],
+      ['comissoes_configs', 'atualizado_em'],
+      ['comissoes_fechamentos', 'atualizado_em'],
+    ] as const) {
+      expect(
+        new RegExp(
+          `alter table public\\.${tabela}\\s+add column if not exists ${coluna}\\b`,
+          'i',
+        ).test(texto),
+        `${tabela}.${coluna} não é completada pela 008`,
+      ).toBe(true)
+    }
+    for (const tabela of [
+      'comissoes_configs',
+      'comissoes_fechamentos',
+      'comissoes_auditoria',
+    ]) {
+      expect(texto).toMatch(
         new RegExp(`public\\.${tabela} alter column dados drop not null`),
       )
     }
