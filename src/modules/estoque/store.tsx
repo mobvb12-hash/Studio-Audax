@@ -9,9 +9,19 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { normalizarTexto } from '@/lib/moeda'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
+import { supabase } from '@/lib/supabase'
 import { useProdutos } from '@/modules/produtos/store'
 import type { Produto } from '@/modules/produtos/types'
+import {
+  gravarMovimentacao,
+  importarMovimentacoes,
+  listarMovimentacoes,
+} from '@/services/supabase/estoque'
 import type {
   AjusteEstoqueInput,
   EntradaEstoqueInput,
@@ -125,11 +135,194 @@ function registrarEstorno(pend: Pendencias, vendaId: string): void {
   pend.estornos.add(vendaId)
 }
 
+// ---------------------------------------------------------------------------
+// Integração com o Supabase (mesmo padrão de Produtos/Caixa)
+// ---------------------------------------------------------------------------
+
+/** JSON com chaves ordenadas: o `jsonb` do Postgres não preserva a ordem. */
+function estavel(valor: unknown): string {
+  if (Array.isArray(valor)) return `[${valor.map(estavel).join(',')}]`
+  if (valor && typeof valor === 'object') {
+    const objeto = valor as Record<string, unknown>
+    return `{${Object.keys(objeto)
+      .sort()
+      .map((chave) => `${JSON.stringify(chave)}:${estavel(objeto[chave])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(valor) ?? 'null'
+}
+
+/**
+ * Assinatura da movimentação: `quantidade`, saldos e `vendaId` entram, então
+ * a comparação local × remota é a comparação de linhas (histórico imutável —
+ * só o rótulo do produto pode mudar, e isso também é conteúdo).
+ */
+function assinatura(m: MovimentacaoEstoque): string {
+  return estavel({
+    id: m.id,
+    produtoId: m.produtoId,
+    produto: m.produto,
+    tipo: m.tipo,
+    quantidade: m.quantidade,
+    estoqueAntes: m.estoqueAntes,
+    estoqueDepois: m.estoqueDepois,
+    custoUnitario: m.custoUnitario,
+    fornecedor: m.fornecedor ?? null,
+    data: m.data,
+    hora: m.hora,
+    origem: m.origem,
+    vendaId: m.vendaId ?? null,
+    motivo: m.motivo ?? null,
+    observacao: m.observacao ?? null,
+  })
+}
+
+function carimbo(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+/** Snapshot do que será substituído; false = não gravou (nada muda). */
+function criarSnapshot(perdedores: MovimentacaoEstoque[]): boolean {
+  const prefixo = `${CHAVE_STORAGE}:backup:`
+  const destino = `${prefixo}${carimbo()}`
+  try {
+    localStorage.setItem(destino, JSON.stringify(perdedores))
+    if (localStorage.getItem(destino) === null) return false
+    const antigas: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const chave = localStorage.key(i)
+      if (chave?.startsWith(prefixo)) antigas.push(chave)
+    }
+    antigas.sort()
+    antigas
+      .slice(0, Math.max(0, antigas.length - 3))
+      .forEach((chaveAntiga) => localStorage.removeItem(chaveAntiga))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * União por id + reenvio das pendências. O reenvio é `upsert` pelo mesmo id
+ * da movimentação: reenviar o histórico (ou a mesma venda) atualiza as
+ * linhas e NUNCA cria uma segunda movimentação — é o que garante que uma
+ * venda repetida não baixe o estoque duas vezes. Movimentações são histórico
+ * imutável, então em divergência (só o rótulo pode mudar) vence o estado da
+ * tela e a versão remota vai para o snapshot.
+ */
+async function integrarMovimentacoes(
+  locais: MovimentacaoEstoque[],
+  instalacaoNova: boolean,
+): Promise<MovimentacaoEstoque[]> {
+  const remotos = await listarMovimentacoes()
+  if (instalacaoNova && remotos.length > 0) {
+    // instalação nova: o histórico do servidor é a fonte
+    return [...remotos]
+  }
+  const remotoPorId = new Map(remotos.map((m) => [m.id, m]))
+  const porId = new Map<string, MovimentacaoEstoque>()
+  const ordem: string[] = []
+  const enviar: MovimentacaoEstoque[] = []
+  const perdedores: MovimentacaoEstoque[] = []
+
+  for (const local of locais) {
+    const remoto = remotoPorId.get(local.id)
+    if (!remoto) {
+      porId.set(local.id, local)
+      ordem.push(local.id)
+      enviar.push(local)
+      continue
+    }
+    porId.set(local.id, remoto)
+    ordem.push(local.id)
+    if (assinatura(local) === assinatura(remoto)) continue
+    perdedores.push(remoto)
+    porId.set(local.id, local)
+    enviar.push(local)
+  }
+  for (const remoto of remotos) {
+    if (porId.has(remoto.id)) continue
+    porId.set(remoto.id, remoto)
+    ordem.push(remoto.id)
+  }
+
+  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+    const divergentes = new Set(perdedores.map((m) => m.id))
+    for (let i = enviar.length - 1; i >= 0; i--) {
+      if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
+    }
+    console.warn(
+      '[estoque] snapshot indisponível — divergências mantidas sem envio.',
+    )
+  }
+
+  if (enviar.length > 0) {
+    try {
+      const enviados = await importarMovimentacoes(enviar)
+      if (enviados < enviar.length) {
+        console.warn(
+          `[estoque] envio incompleto: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
+        )
+      }
+    } catch (erro) {
+      console.warn(
+        '[estoque] falha ao enviar pendências para o Supabase.',
+        erro,
+      )
+    }
+  }
+
+  return ordem
+    .map((id) => porId.get(id))
+    .filter((m): m is MovimentacaoEstoque => m !== undefined)
+}
+
+/**
+ * Junta a lista oficial com o que a tela fez durante a carga: mudança da
+ * sessão vence e registro criado no meio da carga não some. Em instalação
+ * nova, só o que a sessão criou acompanha a lista.
+ */
+function fundir(
+  base: MovimentacaoEstoque[],
+  atual: MovimentacaoEstoque[],
+  alterados: Set<string>,
+  instalacaoNova: boolean,
+): MovimentacaoEstoque[] {
+  const porId = new Map(base.map((m) => [m.id, m]))
+  const ordem = base.map((m) => m.id)
+  for (const movimentacao of atual) {
+    if (alterados.has(movimentacao.id)) {
+      if (!porId.has(movimentacao.id)) ordem.push(movimentacao.id)
+      porId.set(movimentacao.id, movimentacao)
+      continue
+    }
+    if (porId.has(movimentacao.id)) continue
+    if (instalacaoNova) continue
+    ordem.push(movimentacao.id)
+    porId.set(movimentacao.id, movimentacao)
+  }
+  return ordem
+    .map((id) => porId.get(id))
+    .filter((m): m is MovimentacaoEstoque => m !== undefined)
+}
+
+/** Integração em andamento compartilhada (StrictMode executa o efeito 2x). */
+let promessaIntegracao: Promise<MovimentacaoEstoque[]> | null = null
+
 export function EstoqueProvider({ children }: { children: ReactNode }) {
   const { porId, aplicarEstoque, produtos } = useProdutos()
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>(() =>
     carregar(),
   )
+  const [sincronizado, setSincronizado] = useState(false)
+
+  const temSupabase = supabase() !== null
+  const [instalacaoNova] = useState(
+    () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
+  )
+  const alterados = useRef<Set<string>>(new Set())
+  const listaLocal = useRef<MovimentacaoEstoque[]>(movimentacoes)
 
   /**
    * Pendências do lote de estado atual: duas chamadas antes do re-render
@@ -151,8 +344,101 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
   }, [movimentacoes])
 
   useEffect(() => {
-    salvarJSON(CHAVE_STORAGE, movimentacoes)
+    listaLocal.current = movimentacoes
   }, [movimentacoes])
+
+  // O histórico do estoque tem o Supabase como fonte oficial, mas a lista
+  // local nunca é substituída: a integração une os dois lados, reenvia as
+  // pendências (upsert por id — não duplica movimentação) e mescla com o que a
+  // tela fez durante a carga.
+  useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    if (!promessaIntegracao) {
+      promessaIntegracao = integrarMovimentacoes(
+        listaLocal.current,
+        instalacaoNova,
+      )
+    }
+    promessaIntegracao
+      .then((base) => {
+        if (vivo) {
+          setMovimentacoes((atual) =>
+            fundir(base, atual, alterados.current, instalacaoNova),
+          )
+        }
+      })
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o histórico local intacto e
+        // não reenvia nada (nada é gravado por cima do servidor)
+        if (vivo) {
+          console.warn(
+            '[estoque] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaIntegracao = null
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase, instalacaoNova])
+
+  const podeGravar = useCallback(() => {
+    if (!temSupabase) return true
+    if (sincronizado) return true
+    return alterados.current.size > 0
+  }, [temSupabase, sincronizado])
+
+  useEffect(() => {
+    if (!podeGravar()) return
+    salvarJSON(CHAVE_STORAGE, movimentacoes)
+  }, [movimentacoes, podeGravar])
+
+  /**
+   * Escrita remota em segundo plano: o local já foi atualizado antes, então a
+   * falha só precisa ser informada — o histórico e a pendência seguem salvos e
+   * a próxima carga reenvia (upsert por id, sem baixar o estoque de novo).
+   */
+  const sincronizar = useCallback(
+    (operacao: () => Promise<unknown>) => {
+      if (!temSupabase) return
+      void operacao().catch(() => {
+        avisarFalhaSincronizacao(CHAVE_STORAGE)
+      })
+    },
+    [temSupabase],
+  )
+
+  /**
+   * Grava as movimentações recém-criadas: marca a pendência e envia por
+   * `upsert`, então reenviar a mesma lista (ou a mesma venda) continua sendo
+   * uma única movimentação efetiva.
+   */
+  const registrarMovimentacoes = useCallback(
+    (novas: MovimentacaoEstoque[]) => {
+      for (const movimentacao of novas) {
+        alterados.current.add(movimentacao.id)
+      }
+      setMovimentacoes((atual) => [...atual, ...novas])
+      if (novas.length === 1) {
+        const unica = novas[0]
+        sincronizar(() => gravarMovimentacao(unica))
+        return
+      }
+      sincronizar(() =>
+        novas.reduce<Promise<unknown>>(
+          (anterior, movimentacao) =>
+            anterior.then(() => gravarMovimentacao(movimentacao)),
+          Promise.resolve(),
+        ),
+      )
+    },
+    [sincronizar],
+  )
 
   function criarMovimentacao(
     base: Omit<MovimentacaoEstoque, 'id' | 'hora' | 'criadoEm'>,
@@ -186,10 +472,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         data: new Date().toISOString().slice(0, 10),
         origem: 'cadastro',
       })
-      setMovimentacoes((atual) => [...atual, nova])
+      registrarMovimentacoes([nova])
       return nova
     },
-    [],
+    [registrarMovimentacoes],
   )
 
   const entrada = useCallback(
@@ -219,10 +505,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
       })
       aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
-      setMovimentacoes((atual) => [...atual, nova])
+      registrarMovimentacoes([nova])
       return nova
     },
-    [porId, aplicarEstoque],
+    [porId, aplicarEstoque, registrarMovimentacoes],
   )
 
   const ajuste = useCallback(
@@ -256,10 +542,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
       })
       aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
-      setMovimentacoes((atual) => [...atual, nova])
+      registrarMovimentacoes([nova])
       return nova
     },
-    [porId, aplicarEstoque],
+    [porId, aplicarEstoque, registrarMovimentacoes],
   )
 
   const resolverProduto = useCallback(
@@ -337,10 +623,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         )
         aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       }
-      setMovimentacoes((atual) => [...atual, ...novas])
+      registrarMovimentacoes(novas)
       return novas
     },
-    [movimentacoes, resolverProduto, aplicarEstoque],
+    [movimentacoes, resolverProduto, aplicarEstoque, registrarMovimentacoes],
   )
 
   const reverterVenda = useCallback(
@@ -397,10 +683,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         )
         aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       }
-      setMovimentacoes((atual) => [...atual, ...novas])
+      registrarMovimentacoes(novas)
       return novas
     },
-    [movimentacoes, resolverProduto, aplicarEstoque],
+    [movimentacoes, resolverProduto, aplicarEstoque, registrarMovimentacoes],
   )
 
   const movimentacoesDoProduto = useCallback(
@@ -411,19 +697,29 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
 
   // Rótulo da movimentação acompanha o cadastro (o vínculo continua
   // sendo o produtoId — saldo e histórico nunca se perdem no rename).
+  // O estado continua por updater funcional (duas renomeações no mesmo lote
+  // se combinam) e o envio leva só as movimentações tocadas, por upsert.
   const renomearProduto = useCallback(
     (produtoId: string, novoNome: string) => {
       const destino = novoNome.trim()
       if (!produtoId || !destino) return
-      setMovimentacoes((atual) =>
+      const renomear = (atual: MovimentacaoEstoque[]) =>
         atual.map((m) =>
           m.produtoId === produtoId && m.produto !== destino
             ? { ...m, produto: destino }
             : m,
-        ),
+        )
+      const mudados = renomear(listaLocal.current).filter(
+        (m, indice) => m !== listaLocal.current[indice],
       )
+      if (mudados.length === 0) return
+      for (const movimentacao of mudados) {
+        alterados.current.add(movimentacao.id)
+      }
+      setMovimentacoes((atual) => renomear(atual))
+      sincronizar(() => importarMovimentacoes(mudados))
     },
-    [],
+    [sincronizar],
   )
 
   const valor = useMemo(

@@ -4,11 +4,22 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { carregarJSON, salvarJSON } from '@/lib/persistencia'
+import {
+  avisarFalhaSincronizacao,
+  carregarJSON,
+  salvarJSON,
+} from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
+import { supabase } from '@/lib/supabase'
+import {
+  criarProduto,
+  importarProdutos,
+  listarProdutos,
+} from '@/services/supabase/produtos'
 import type { NovoProdutoInput, Produto } from './types'
 
 const CHAVE_STORAGE = 'studio-audax:produtos:v1'
@@ -92,12 +103,248 @@ function carregar(): Produto[] {
   return ordenar(migrada)
 }
 
+// ---------------------------------------------------------------------------
+// Integração com o Supabase (mesmo padrão de Clientes/Profissionais/Serviços/Caixa)
+// ---------------------------------------------------------------------------
+
+/** JSON com chaves ordenadas: o `jsonb` do Postgres não preserva a ordem. */
+function estavel(valor: unknown): string {
+  if (Array.isArray(valor)) return `[${valor.map(estavel).join(',')}]`
+  if (valor && typeof valor === 'object') {
+    const objeto = valor as Record<string, unknown>
+    return `{${Object.keys(objeto)
+      .sort()
+      .map((chave) => `${JSON.stringify(chave)}:${estavel(objeto[chave])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(valor) ?? 'null'
+}
+
+/** Assinatura do conteúdo (sem carimbos): a linha que vai para o banco. */
+function assinatura(p: Produto): string {
+  return estavel({
+    id: p.id,
+    nome: p.nome,
+    preco: p.preco,
+    custo: p.custo,
+    estoque: p.estoque,
+    estoque_minimo: p.estoqueMinimo,
+    categoria: p.categoria,
+    foto: p.foto,
+    ativo: p.ativo,
+  })
+}
+
+function carimbo(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+/**
+ * Snapshot das versões que serão substituídas, antes de qualquer escrita.
+ * Mantém as 3 cópias mais recentes; false = não gravou (nada é sobrescrito).
+ */
+function criarSnapshot(perdedores: Produto[]): boolean {
+  const prefixo = `${CHAVE_STORAGE}:backup:`
+  const destino = `${prefixo}${carimbo()}`
+  try {
+    localStorage.setItem(destino, JSON.stringify(perdedores))
+    if (localStorage.getItem(destino) === null) return false
+    const antigas: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const chave = localStorage.key(i)
+      if (chave?.startsWith(prefixo)) antigas.push(chave)
+    }
+    antigas.sort()
+    antigas
+      .slice(0, Math.max(0, antigas.length - 3))
+      .forEach((chaveAntiga) => localStorage.removeItem(chaveAntiga))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * União por id + reenvio das pendências. Nada é descartado: o que só existe de
+ * um lado entra na lista. Em divergência vence o registro mais recente por
+ * `atualizadoEm` (mesma regra de serviços) — o saldo de estoque entra nessa
+ * comparação porque `aplicarEstoque` carimba o produto. O perdedor vai para o
+ * snapshot e o reenvio é `upsert` por `id`, então repetir não duplica produto.
+ */
+async function integrarProdutos(
+  locais: Produto[],
+  instalacaoNova: boolean,
+): Promise<Produto[]> {
+  const remotos = await listarProdutos()
+  if (instalacaoNova && remotos.length > 0) {
+    // instalação nova: o que já existe no servidor é a fonte
+    return ordenar(remotos)
+  }
+  const remotoPorId = new Map(remotos.map((p) => [p.id, p]))
+  const porId = new Map<string, Produto>()
+  const ordem: string[] = []
+  const enviar: Produto[] = []
+  const perdedores: Produto[] = []
+
+  for (const local of locais) {
+    const remoto = remotoPorId.get(local.id)
+    if (!remoto) {
+      porId.set(local.id, local)
+      ordem.push(local.id)
+      enviar.push(local)
+      continue
+    }
+    porId.set(local.id, remoto)
+    ordem.push(local.id)
+    if (assinatura(local) === assinatura(remoto)) continue
+    if ((local.atualizadoEm || '') > (remoto.atualizadoEm || '')) {
+      perdedores.push(remoto)
+      porId.set(local.id, local)
+      enviar.push(local)
+    } else {
+      perdedores.push(local)
+    }
+  }
+  for (const remoto of remotos) {
+    if (porId.has(remoto.id)) continue
+    porId.set(remoto.id, remoto)
+    ordem.push(remoto.id)
+  }
+
+  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+    const divergentes = new Set(perdedores.map((p) => p.id))
+    for (let i = enviar.length - 1; i >= 0; i--) {
+      if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
+    }
+    console.warn(
+      '[produtos] snapshot indisponível — divergências mantidas sem envio.',
+    )
+  }
+
+  if (enviar.length > 0) {
+    try {
+      const enviados = await importarProdutos(enviar)
+      if (enviados < enviar.length) {
+        console.warn(
+          `[produtos] envio incompleto: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
+        )
+      }
+    } catch (erro) {
+      console.warn('[produtos] falha ao enviar pendências para o Supabase.', erro)
+    }
+  }
+
+  return ordenar(
+    ordem
+      .map((id) => porId.get(id))
+      .filter((p): p is Produto => p !== undefined),
+  )
+}
+
+/**
+ * Junta a lista oficial com o que aconteceu na tela durante a carga: mudança
+ * da sessão vence, registro criado no meio da carga não some. Em instalação
+ * nova o seed local não acompanha — só o que a sessão alterou.
+ */
+function fundir(
+  base: Produto[],
+  atual: Produto[],
+  alterados: Set<string>,
+  instalacaoNova: boolean,
+): Produto[] {
+  const porId = new Map(base.map((p) => [p.id, p]))
+  const ordem = base.map((p) => p.id)
+  for (const produto of atual) {
+    if (alterados.has(produto.id)) {
+      if (!porId.has(produto.id)) ordem.push(produto.id)
+      porId.set(produto.id, produto)
+      continue
+    }
+    if (porId.has(produto.id)) continue
+    if (instalacaoNova) continue
+    ordem.push(produto.id)
+    porId.set(produto.id, produto)
+  }
+  return ordenar(
+    ordem
+      .map((id) => porId.get(id))
+      .filter((p): p is Produto => p !== undefined),
+  )
+}
+
+/** Integração em andamento compartilhada (StrictMode executa o efeito 2x). */
+let promessaIntegracao: Promise<Produto[]> | null = null
+
 export function ProdutosProvider({ children }: { children: ReactNode }) {
   const [produtos, setProdutos] = useState<Produto[]>(() => carregar())
+  const [sincronizado, setSincronizado] = useState(false)
+
+  const temSupabase = supabase() !== null
+  const [instalacaoNova] = useState(
+    () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
+  )
+  const alterados = useRef<Set<string>>(new Set())
+  const listaLocal = useRef<Produto[]>(produtos)
 
   useEffect(() => {
-    salvarJSON(CHAVE_STORAGE, produtos)
+    listaLocal.current = produtos
   }, [produtos])
+
+  // Supabase é a fonte oficial, mas a lista local nunca é substituída: a
+  // integração une os dois lados, reenvia as pendências e o resultado é
+  // mesclado com o que a tela fez durante a carga.
+  useEffect(() => {
+    if (!temSupabase) return
+    let vivo = true
+    if (!promessaIntegracao) {
+      promessaIntegracao = integrarProdutos(listaLocal.current, instalacaoNova)
+    }
+    promessaIntegracao
+      .then((base) => {
+        if (vivo) {
+          setProdutos((atual) => fundir(base, atual, alterados.current, instalacaoNova))
+        }
+      })
+      .catch((erro) => {
+        // leitura remota indisponível: mantém o cadastro local intacto e
+        // não reenvia nada (evita sobrescrever dado do servidor)
+        if (vivo) {
+          console.warn(
+            '[produtos] Supabase indisponível — seguindo com os dados locais.',
+            erro,
+          )
+        }
+      })
+      .finally(() => {
+        promessaIntegracao = null
+        if (vivo) setSincronizado(true)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [temSupabase, instalacaoNova])
+
+  const podeGravar = useCallback(() => {
+    if (!temSupabase) return true
+    if (sincronizado) return true
+    return alterados.current.size > 0
+  }, [temSupabase, sincronizado])
+
+  useEffect(() => {
+    if (!podeGravar()) return
+    salvarJSON(CHAVE_STORAGE, produtos)
+  }, [produtos, podeGravar])
+
+  /** Escrita remota em segundo plano: o local já foi atualizado antes. */
+  const sincronizar = useCallback(
+    (operacao: () => Promise<unknown>) => {
+      if (!temSupabase) return
+      void operacao().catch(() => {
+        avisarFalhaSincronizacao(CHAVE_STORAGE)
+      })
+    },
+    [temSupabase],
+  )
 
   const adicionar = useCallback(
     (input: NovoProdutoInput): Produto => {
@@ -124,10 +371,12 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
         criadoEm: agora,
         atualizadoEm: agora,
       }
+      alterados.current.add(novo.id)
       setProdutos((atual) => ordenar([...atual, novo]))
+      sincronizar(() => criarProduto(novo))
       return novo
     },
-    [produtos],
+    [produtos, sincronizar],
   )
 
   const atualizar = useCallback(
@@ -152,53 +401,72 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
       ) {
         throw new Error('Já existe um produto com este nome.')
       }
+      const existente = produtos.find((p) => p.id === id)
+      if (!existente) return
+      const atualizado: Produto = {
+        ...existente,
+        nome,
+        preco: Math.round(input.preco * 100) / 100,
+        custo: Math.round(custo * 100) / 100,
+        estoqueMinimo: minimo,
+        categoria: input.categoria?.trim() ?? existente.categoria,
+        foto: input.foto?.trim() ?? existente.foto,
+        ativo: input.ativo ?? existente.ativo,
+        atualizadoEm: new Date().toISOString(),
+      }
+      alterados.current.add(id)
       setProdutos((atual) =>
         ordenar(
-          atual.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  nome,
-                  preco: Math.round(input.preco * 100) / 100,
-                  custo: Math.round(custo * 100) / 100,
-                  estoqueMinimo: minimo,
-                  categoria: input.categoria?.trim() ?? p.categoria,
-                  foto: input.foto?.trim() ?? p.foto,
-                  ativo: input.ativo ?? p.ativo,
-                  atualizadoEm: new Date().toISOString(),
-                }
-              : p,
-          ),
+          atual.map((p) => (p.id === id ? atualizado : p)),
         ),
       )
+      sincronizar(() => criarProduto(atualizado))
     },
-    [produtos],
+    [produtos, sincronizar],
   )
 
-  const alternarAtivo = useCallback((id: string) => {
-    setProdutos((atual) =>
-      atual.map((p) =>
-        p.id === id
-          ? { ...p, ativo: !p.ativo, atualizadoEm: new Date().toISOString() }
-          : p,
-      ),
-    )
-  }, [])
+  const alternarAtivo = useCallback(
+    (id: string) => {
+      const alvo = produtos.find((p) => p.id === id)
+      if (!alvo) return
+      const atualizado: Produto = {
+        ...alvo,
+        ativo: !alvo.ativo,
+        atualizadoEm: new Date().toISOString(),
+      }
+      alterados.current.add(id)
+      setProdutos((atual) =>
+        atual.map((p) => (p.id === id ? atualizado : p)),
+      )
+      sincronizar(() => criarProduto(atualizado))
+    },
+    [produtos, sincronizar],
+  )
 
+  /**
+   * Aplica novo valor de estoque — usado apenas pelo módulo Estoque (com
+   * histórico). Grava o saldo absoluto, então reenviar a mesma aplicação é
+   * idempotente: o saldo não muda duas vezes.
+   */
   const aplicarEstoque = useCallback(
     (id: string, estoque: number) => {
       if (!inteiroNaoNegativo(estoque)) {
         throw new Error('Estoque inválido.')
       }
+      const alvo = produtos.find((p) => p.id === id)
+      if (!alvo || alvo.estoque === estoque) return
+      const atualizado: Produto = {
+        ...alvo,
+        estoque,
+        atualizadoEm: new Date().toISOString(),
+      }
+      alterados.current.add(id)
       setProdutos((atual) =>
-        atual.map((p) =>
-          p.id === id
-            ? { ...p, estoque, atualizadoEm: new Date().toISOString() }
-            : p,
-        ),
+        atual.map((p) => (p.id === id ? atualizado : p)),
       )
+      sincronizar(() => criarProduto(atualizado))
     },
-    [],
+    [produtos, sincronizar],
   )
 
   const porId = useCallback(
