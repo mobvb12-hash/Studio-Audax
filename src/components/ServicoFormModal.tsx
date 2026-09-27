@@ -1,4 +1,5 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
+import { parseMoeda } from '@/lib/moeda'
 import { useEffect, useState } from 'react'
 import { CATEGORIAS_SUGERIDAS } from '@/modules/servicos/regras'
 import { useServicos } from '@/modules/servicos/store'
@@ -42,7 +43,7 @@ export default function ServicoFormModal({
       setErro('Informe o nome do serviço.')
       return
     }
-    const precoNum = Number(preco.replace(/\./g, '').replace(',', '.'))
+    const precoNum = parseMoeda(preco)
     if (!Number.isFinite(precoNum) || precoNum < 0) {
       setErro('Informe um preço válido (ex.: 70 ou 70,00).')
       return

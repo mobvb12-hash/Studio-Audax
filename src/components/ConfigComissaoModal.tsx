@@ -1,4 +1,5 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
+import { parseMoeda } from '@/lib/moeda'
 import { useEffect, useState } from 'react'
 import { useComissoes } from '@/modules/comissoes/store'
 import type { ConfigComissao } from '@/modules/comissoes/types'
@@ -32,7 +33,7 @@ export default function ConfigComissaoModal({
   }, [onFechar])
 
   function salvar() {
-    const numero = Number(percentual.replace(/\./g, '').replace(',', '.'))
+    const numero = parseMoeda(percentual)
     if (!Number.isFinite(numero) || numero < 0) {
       setErro('Informe um percentual válido (ex.: 40 ou 40,5).')
       return

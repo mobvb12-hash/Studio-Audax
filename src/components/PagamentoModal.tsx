@@ -69,8 +69,8 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [onFechar])
 
-  const valorNum = Number(valor.replace(/\./g, '').replace(',', '.'))
-  const descontoNum = Number(desconto.replace(/\./g, '').replace(',', '.')) || 0
+  const valorNum = parseMoeda(valor)
+  const descontoNum = parseMoeda(desconto) || 0
   const liquido = Number.isFinite(valorNum - descontoNum)
     ? Math.max(0, valorNum - descontoNum)
     : 0
