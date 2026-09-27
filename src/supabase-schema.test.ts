@@ -113,6 +113,7 @@ describe('Supabase — migrations', () => {
       '../supabase/migrations/004_profissionais_servicos_compat.sql',
       '../supabase/migrations/005_caixa.sql',
       '../supabase/migrations/006_produtos_estoque.sql',
+      '../supabase/migrations/007_agenda.sql',
     ])
   })
 

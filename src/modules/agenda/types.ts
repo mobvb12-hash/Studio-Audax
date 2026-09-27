@@ -39,6 +39,13 @@ export type Agendamento = {
   duracaoMin?: number
   /** Remarrações anteriores (histórico preservado) */
   remarcacoes?: Remarcacao[]
+  /**
+   * Última alteração do registro (ISO). Não é regra de negócio: é o carimbo
+   * que a sincronização usa para escolher a versão mais recente quando dois
+   * dispositivos mexem no mesmo agendamento (mesmo papel de `produtos` e
+   * `servicos`). Registro antigo herda o `criadoEm`.
+   */
+  atualizadoEm?: string
 }
 
 export type NovoAgendamentoInput = {
@@ -92,6 +99,8 @@ export type Bloqueio = {
   tipo: TipoBloqueio
   motivo: string
   criadoEm: string
+  /** Carimbo da última alteração (usado só pela sincronização) */
+  atualizadoEm?: string
 }
 
 export type NovoBloqueioInput = Omit<Bloqueio, 'id' | 'criadoEm'>
