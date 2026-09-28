@@ -51,8 +51,30 @@ function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/**
+ * Estado do Clube válido: objeto comum cujas listas, quando presentes, são
+ * arrays. `{}` e `{"assinaturas":[],"pagamentos":[]}` são estados LEGÍTIMOS —
+ * um clube sem nenhuma assinatura é um estado vazio, não corrupção, e não pode
+ * ser classificado como dado corrompido.
+ *
+ * Antes, qualquer objeto passava e `carregarEstado` convertia em `[]` uma
+ * lista gravada com a forma errada. Esse `[]` era então gravado de volta por
+ * `salvarJSON`, sobrescrevendo o original sem backup e sem aviso: dado
+ * corrompido sumia em silêncio. Agora a forma errada é rejeitada aqui e o
+ * original vai para `<chave>:corrompido`, como manda a regra da camada.
+ */
 function ehEstadoClube(valor: unknown): boolean {
-  return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
+  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) {
+    return false
+  }
+  const estado = valor as { assinaturas?: unknown; pagamentos?: unknown }
+  if (estado.assinaturas !== undefined && !Array.isArray(estado.assinaturas)) {
+    return false
+  }
+  if (estado.pagamentos !== undefined && !Array.isArray(estado.pagamentos)) {
+    return false
+  }
+  return true
 }
 
 /**
