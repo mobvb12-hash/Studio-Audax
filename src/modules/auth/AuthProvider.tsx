@@ -8,7 +8,7 @@ import {
   sessaoExpirada,
 } from './regras'
 import { adaptarSupabase } from './supabaseAdapter'
-import type { ClienteAuth, PerfilInfo } from './tipos'
+import type { ClienteAuth, PerfilInfo, SessaoInfo } from './tipos'
 import { obterPerfil } from '@/services/supabase/perfis'
 
 /**
@@ -48,6 +48,8 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
   )
   const [erroEntrada, setErroEntrada] = useState('')
   const [entrando, setEntrando] = useState(false)
+  const [saindo, setSaindo] = useState(false)
+  const [erroSaida, setErroSaida] = useState('')
 
   const carregarPerfil = useCallback(async () => {
     const cliente = supabase()
@@ -68,6 +70,29 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
     }
   }, [])
 
+  /**
+   * Entra em `autenticado` só com sessão confirmada pelo SERVIDOR.
+   *
+   * `cliente.sessao()` sozinho não basta: ele lê o localStorage e o auth-js
+   * só confere a forma do objeto e o relógio local (auth-js
+   * `_isValidSession`). Uma sessão revogada, ou cujo token o banco já não
+   * aceita, continua "válida" no navegador — o painel abria e as consultas
+   * saíam com a anon key, que a RLS trata como visitante. `confirmar()`
+   * pergunta ao Auth se o JWT ainda vale.
+   */
+  const entrarComConfirmacao = useCallback(
+    async (sessao: SessaoInfo | null): Promise<boolean> => {
+      if (!sessao || !cliente) return false
+      if (!sessaoExpirada(sessao, agoraSegundos()) && (await cliente.confirmar())) {
+        setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
+        void carregarPerfil()
+        return true
+      }
+      return false
+    },
+    [cliente, carregarPerfil],
+  )
+
   useEffect(() => {
     // `cliente` é estável (injetado uma única vez): o estado inicial já é
     // 'desabilitado' sem cliente e 'carregando' com cliente — nenhum
@@ -77,15 +102,18 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
 
     cliente
       .sessao()
-      .then((sessao) => {
+      .then(async (sessao) => {
         if (!vivo) return
         if (!sessao) {
           setEstado({ status: 'deslogado', aviso: '' })
-        } else if (sessaoExpirada(sessao, agoraSegundos())) {
+          return
+        }
+        if (sessaoExpirada(sessao, agoraSegundos())) {
           setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
-        } else {
-          setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
-          carregarPerfil()
+          return
+        }
+        if (!(await entrarComConfirmacao(sessao)) && vivo) {
+          setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
         }
       })
       .catch(() => {
@@ -105,15 +133,14 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
         setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
         return
       }
-      setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
-      carregarPerfil()
+      void entrarComConfirmacao(sessao)
     })
 
     return () => {
       vivo = false
       cancelar()
     }
-  }, [cliente])
+  }, [cliente, entrarComConfirmacao])
 
   const entrar = useCallback(
     async (email: string, senha: string): Promise<boolean> => {
@@ -129,8 +156,13 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
           setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
           return false
         }
-        setEstado({ status: 'autenticado', email: sessao.email, perfil: null })
-        carregarPerfil()
+        // login aceito, mas o token ainda precisa valer para o banco: sem
+        // esta confirmação o painel abriria e as consultas sairiam como
+        // visitante, e a RLS recusaria tudo.
+        if (!(await entrarComConfirmacao(sessao))) {
+          setEstado({ status: 'deslogado', aviso: AVISO_SESSAO_EXPIRADA })
+          return false
+        }
         return true
       } catch (erro) {
         setErroEntrada(mensagemErroEntrada(erro))
@@ -142,23 +174,54 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
     [cliente],
   )
 
-  const sair = useCallback(async () => {
-    if (cliente !== null) {
-      try {
-        await cliente.sair()
-      } catch {
-        // falha ao avisar o provedor não impede o logout local
-      }
+  /**
+   * Encerra a sessão. Só marca `deslogado` quando o provedor realmente
+   * encerrou: antes, uma falha de `signOut()` era engolida e o estado local
+   * virava `deslogado` com a sessão ainda viva no servidor — no próximo F5 o
+   * `getSession()` a encontra e o usuário entra de novo sem ter feito login.
+   * Agora a falha é informada e o estado continua coerente com o provedor.
+   */
+  const sair = useCallback(async (): Promise<boolean> => {
+    if (cliente === null) {
+      setErroEntrada('')
+      setEstado({ status: 'deslogado', aviso: '' })
+      return true
     }
-    setErroEntrada('')
-    setEstado({ status: 'deslogado', aviso: '' })
+    setErroSaida('')
+    setSaindo(true)
+    try {
+      await cliente.sair()
+      setErroEntrada('')
+      setEstado({ status: 'deslogado', aviso: '' })
+      return true
+    } catch (erro) {
+      // O provedor recusou: a sessão continua válida, então o estado segue
+      // autenticado e o usuário é avisado em vez de receber um logout falso.
+      setErroSaida(
+        erro instanceof Error && erro.message
+          ? `Não foi possível encerrar a sessão: ${erro.message}`
+          : 'Não foi possível encerrar a sessão. Tente novamente.',
+      )
+      return false
+    } finally {
+      setSaindo(false)
+    }
   }, [cliente])
 
   const perfil = estado.status === 'autenticado' ? estado.perfil : null
 
   const valor = useMemo(
-    () => ({ estado, erroEntrada, entrando, entrar, sair, perfil }),
-    [estado, erroEntrada, entrando, entrar, sair, perfil],
+    () => ({
+      estado,
+      erroEntrada,
+      entrando,
+      entrar,
+      sair,
+      saindo,
+      erroSaida,
+      perfil,
+    }),
+    [estado, erroEntrada, entrando, entrar, sair, saindo, erroSaida, perfil],
   )
 
   return <ContextoAuth.Provider value={valor}>{children}</ContextoAuth.Provider>

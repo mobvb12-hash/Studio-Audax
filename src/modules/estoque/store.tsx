@@ -135,6 +135,24 @@ function registrarEstorno(pend: Pendencias, vendaId: string): void {
   pend.estornos.add(vendaId)
 }
 
+/**
+ * Custo praticado na venda original do item, para o estorno devolver o
+ * mesmo valor e o par venda/estorno fechar no mesmo custo. Sem a
+ * movimentação original (venda legada, ou ainda só no lote pendente), cai
+ * no custo atual do produto.
+ */
+function custoDaVenda(
+  movimentacoes: MovimentacaoEstoque[],
+  vendaId: string,
+  produtoId: string,
+  atual: number,
+): number {
+  const original = movimentacoes.find(
+    (m) => m.tipo === 'venda' && m.vendaId === vendaId && m.produtoId === produtoId,
+  )
+  return original ? original.custoUnitario : atual
+}
+
 // ---------------------------------------------------------------------------
 // Integração com o Supabase (mesmo padrão de Produtos/Caixa)
 // ---------------------------------------------------------------------------
@@ -601,7 +619,24 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      registrarSaida(pendencias.current, vendaId)
+      // Simulação dos saldos SEM tocar em nada. O laço de aplicação percorre
+      // os itens na mesma ordem e vai vendo o saldo já reduzido pelos itens
+      // anteriores da própria venda (por isso simula, e não usa o mapa
+      // `exigido`), então é aqui que se garante que nenhum `depois` sai
+      // fracionário ou negativo. Depois deste ponto a aplicação não lança,
+      // e a venda só é marcada como baixada no fim.
+      const simulados = new Map<string, number>()
+      for (const { produto, item } of resolvidos) {
+        const base = simulados.get(produto.id) ?? saldoVigente(produto, pendencias.current)
+        const depois = base - item.quantidade
+        if (!Number.isInteger(depois) || depois < 0) {
+          throw new Error(
+            `Estoque inválido ao baixar "${produto.nome}". Nada foi movimentado.`,
+          )
+        }
+        simulados.set(produto.id, depois)
+      }
+
       const novas: MovimentacaoEstoque[] = []
       for (const { produto, item } of resolvidos) {
         // saldoVigente já considera os itens anteriores desta mesma venda
@@ -623,6 +658,10 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         )
         aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
       }
+      // Só marca depois de aplicar tudo: se algo lançasse no meio, a venda
+      // continuaria "não baixada" e o retry refaria a baixa inteira em vez
+      // de deixar o estoque pela metade sem registro.
+      registrarSaida(pendencias.current, vendaId)
       registrarMovimentacoes(novas)
       return novas
     },
@@ -675,7 +714,16 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
             quantidade: item.quantidade,
             estoqueAntes: antes,
             estoqueDepois: depois,
-            custoUnitario: produto.custo,
+            // devolve pelo custo da venda original: se o custo foi reajustado
+            // entre a venda e o estorno, usar o de agora deixaria o par
+            // venda/estorno com custos diferentes e o CMV por movimentação
+            // inconsistente. Sem a movimentação original, custo atual.
+            custoUnitario: custoDaVenda(
+              movimentacoes,
+              venda.id,
+              produto.id,
+              produto.custo,
+            ),
             data: new Date().toISOString().slice(0, 10),
             origem: 'estorno',
             vendaId: venda.id,

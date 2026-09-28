@@ -8,6 +8,8 @@ import type { ClienteAuth, MotivoSessao, SessaoInfo } from './tipos'
 export type ClienteAuthFalso = ClienteAuth & {
   /** Sessão atual (mutável pelo teste). */
   sessoes: SessaoInfo | null
+  /** Quando false, `confirmar()` recusa: sessão que o servidor não aceita. */
+  confirmada: boolean
   /** Histórico de tentativas de entrar. */
   entradas: { email: string; senha: string }[]
   /** Quando definido, entrar() lança este erro. */
@@ -22,10 +24,14 @@ export function criarClienteAuthFalso(
   const ouvintes = new Set<(sessao: SessaoInfo | null, motivo: MotivoSessao) => void>()
   const falso: ClienteAuthFalso = {
     sessoes: sessaoInicial,
+    confirmada: sessaoInicial !== null,
     entradas: [],
     erroEntrada: null,
     async sessao() {
       return falso.sessoes
+    },
+    async confirmar() {
+      return falso.sessoes !== null && falso.confirmada
     },
     observar(mudou) {
       ouvintes.add(mudou)
@@ -37,6 +43,7 @@ export function criarClienteAuthFalso(
       falso.entradas.push({ email, senha })
       if (falso.erroEntrada) throw falso.erroEntrada
       falso.sessoes = { email, expiraEm: Math.floor(Date.now() / 1000) + 3600 }
+      falso.confirmada = true
       return falso.sessoes
     },
     async sair() {

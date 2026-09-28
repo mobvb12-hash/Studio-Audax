@@ -37,6 +37,20 @@ export function adaptarSupabase(cliente: SupabaseClient): ClienteAuth {
       })
       return () => data.subscription.unsubscribe()
     },
+    /**
+     * Confirma a sessão com o servidor. `getUser()` fala com o Auth, que
+     * valida a assinatura do JWT e a `role`; `getSession()` não fala com
+     * ninguém. Sem esta checagem o portão abriria com uma sessão que o banco
+     * já não aceita.
+     */
+    async confirmar() {
+      try {
+        const { data, error } = await cliente.auth.getUser()
+        return !error && data.user !== null
+      } catch {
+        return false
+      }
+    },
     async entrar(email, senha) {
       const { data, error } = await cliente.auth.signInWithPassword({
         email,

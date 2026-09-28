@@ -9,7 +9,16 @@ export type ContextoAuth = {
   /** true enquanto a tentativa de login está em andamento. */
   entrando: boolean
   entrar: (email: string, senha: string) => Promise<boolean>
-  sair: () => Promise<void>
+  /**
+   * Encerra a sessão. Devolve `true` quando saiu de verdade e `false` quando
+   * o provedor recusou — nesse caso o estado continua `autenticado`, para
+   * não divergir da sessão que segue viva no provedor.
+   */
+  sair: () => Promise<boolean>
+  /** true enquanto a tentativa de saída está em andamento. */
+  saindo: boolean
+  /** Erro da última tentativa de saída ('' = sem erro). */
+  erroSaida: string
   /** Perfil do usuário autenticado (null = sem perfil ou não autenticado). */
   perfil: PerfilInfo | null
 }

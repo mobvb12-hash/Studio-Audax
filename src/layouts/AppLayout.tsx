@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import ConfirmarModal from '@/components/ConfirmarModal'
+import { useAuth } from '@/modules/auth/useAuth'
 
 export type PaginaId =
   | 'painel'
@@ -103,6 +105,8 @@ export default function AppLayout({
   onNavegar,
 }: AppLayoutProps) {
   const [menuAberto, setMenuAberto] = useState(false)
+  const [confirmandoSaida, setConfirmandoSaida] = useState(false)
+  const { sair, saindo, erroSaida } = useAuth()
 
   const navegar = (pagina: PaginaId) => {
     setMenuAberto(false)
@@ -186,6 +190,22 @@ export default function AppLayout({
           <p className="text-[11px] text-[#A99E85]">
             Dados salvos automaticamente
           </p>
+          {erroSaida && (
+            <p
+              role="alert"
+              className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800"
+            >
+              {erroSaida}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setConfirmandoSaida(true)}
+            disabled={saindo}
+            className="mt-2.5 w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-[12px] font-semibold text-[#1C1A15] hover:bg-[#F3ECDA] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saindo ? 'Saindo…' : 'Sair'}
+          </button>
         </div>
       </aside>
 
@@ -196,6 +216,24 @@ export default function AppLayout({
           {children}
         </main>
       </div>
+
+      {confirmandoSaida && (
+        <ConfirmarModal
+          titulo="Sair do Studio Audax"
+          texto="A sessão será encerrada e a tela de login volta a aparecer."
+          rotuloConfirmar="Sair da conta"
+          perigo
+          onConfirmar={() => {
+            setConfirmandoSaida(false)
+            setMenuAberto(false)
+            // `sair` só marca deslogado quando o provedor encerra a sessão;
+            // se recusar, o estado continua autenticado e o erro aparece na
+            // sidebar.
+            void sair()
+          }}
+          onFechar={() => setConfirmandoSaida(false)}
+        />
+      )}
     </div>
   )
 }
