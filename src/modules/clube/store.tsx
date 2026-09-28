@@ -418,7 +418,7 @@ export type ClubeContexto = {
 const Contexto = createContext<ClubeContexto | null>(null)
 
 export function ClubeProvider({ children }: { children: ReactNode }) {
-  const { registrarReceitaClube, lancamentos } = useCaixa()
+  const { registrarReceitaClube, desfazerLancamento, lancamentos } = useCaixa()
   const [estado, setEstado] = useState<EstadoClube>(carregarEstado)
   const temSupabase = supabase() !== null
   const [sincronizado, setSincronizado] = useState(false)
@@ -691,52 +691,72 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
 
       // Caixa primeiro (lançamento do dia) — lança erro de caixa fechado
       // antes de qualquer mudança nas assinaturas.
-      const lancamento = registrarReceitaClube({
-        data: input.data,
-        descricao: `Assinatura ${PLANOS_ROTULO[ass.plano]} — ${ass.cliente}`,
-        valor: input.valor,
-        formaPagamento: input.formaPagamento,
-        cliente: ass.cliente,
-        clienteId: ass.clienteId,
-        assinaturaId: ass.id,
-      })
+      let lancamentoId: string | null = null
+      try {
+        const lancamento = registrarReceitaClube({
+          data: input.data,
+          descricao: `Assinatura ${PLANOS_ROTULO[ass.plano]} — ${ass.cliente}`,
+          valor: input.valor,
+          formaPagamento: input.formaPagamento,
+          cliente: ass.cliente,
+          clienteId: ass.clienteId,
+          assinaturaId: ass.id,
+        })
+        lancamentoId = lancamento.id
 
-      const pagamento: PagamentoClube = {
-        id: gerarId(),
-        assinaturaId: ass.id,
-        clienteId: ass.clienteId,
-        data: input.data,
-        valor: Math.round(input.valor * 100) / 100,
-        formaPagamento: input.formaPagamento,
-        caixaLancamentoId: lancamento.id,
-        vencimentoCoberto: ass.proximoVencimento,
-        criadoEm: new Date().toISOString(),
+        const pagamento: PagamentoClube = {
+          id: gerarId(),
+          assinaturaId: ass.id,
+          clienteId: ass.clienteId,
+          data: input.data,
+          valor: Math.round(input.valor * 100) / 100,
+          formaPagamento: input.formaPagamento,
+          caixaLancamentoId: lancamento.id,
+          vencimentoCoberto: ass.proximoVencimento,
+          criadoEm: new Date().toISOString(),
+        }
+        const atualizada: AssinaturaClube = {
+          ...ass,
+          proximoVencimento: proximoVencimentoAposPagamento(
+            ass.proximoVencimento,
+            input.data,
+          ),
+          atualizadoEm: new Date().toISOString(),
+        }
+        setEstado((atual) => ({
+          assinaturas: atual.assinaturas.map((a) =>
+            a.id === ass.id ? atualizada : a,
+          ),
+          pagamentos: [...atual.pagamentos, pagamento],
+        }))
+        // Marcadores de idempotência só depois do estado confirmado: se algo
+        // falhar antes, o rollback deixa o ciclo livre para nova tentativa.
+        if (!ciclosPagos.current) ciclosPagos.current = new Set()
+        ciclosPagos.current.add(`${ass.id}:${ass.proximoVencimento}`)
+        alteradosAssinaturas.current.add(ass.id)
+        alteradosPagamentos.current.add(pagamento.id)
+        // mesma chave do app: se o envio falhar, o reenvio da próxima carga é o
+        // MESMO registro — o pagamento não vira uma segunda mensalidade
+        sincronizar(CHAVE_CLUBE, () => gravarAssinatura(atualizada))
+        sincronizar(CHAVE_CLUBE, () => gravarPagamento(pagamento))
+        return { assinatura: atualizada, pagamento }
+      } catch (erro) {
+        // Rollback: a receita já entrou no Caixa, mas o pagamento do Clube não
+        // chegou ao estado. Desfaz a receita para não deixar caixa com entrada
+        // órfã — mesmo padrão dos fluxos do PDV, da venda de produtos e do
+        // pagamento de agendamento.
+        if (lancamentoId) desfazerLancamento(lancamentoId)
+        throw erro
       }
-      if (!ciclosPagos.current) ciclosPagos.current = new Set()
-      ciclosPagos.current.add(`${ass.id}:${ass.proximoVencimento}`)
-      const atualizada: AssinaturaClube = {
-        ...ass,
-        proximoVencimento: proximoVencimentoAposPagamento(
-          ass.proximoVencimento,
-          input.data,
-        ),
-        atualizadoEm: new Date().toISOString(),
-      }
-      alteradosAssinaturas.current.add(ass.id)
-      alteradosPagamentos.current.add(pagamento.id)
-      setEstado((atual) => ({
-        assinaturas: atual.assinaturas.map((a) =>
-          a.id === ass.id ? atualizada : a,
-        ),
-        pagamentos: [...atual.pagamentos, pagamento],
-      }))
-      // mesma chave do app: se o envio falhar, o reenvio da próxima carga é o
-      // MESMO registro — o pagamento não vira uma segunda mensalidade
-      sincronizar(CHAVE_CLUBE, () => gravarAssinatura(atualizada))
-      sincronizar(CHAVE_CLUBE, () => gravarPagamento(pagamento))
-      return { assinatura: atualizada, pagamento }
     },
-    [estado.assinaturas, estado.pagamentos, registrarReceitaClube, lancamentos, sincronizar],
+    [
+      estado.assinaturas,
+      estado.pagamentos,
+      registrarReceitaClube,
+      desfazerLancamento,
+      lancamentos,
+      sincronizar,
+    ],
   )
 
   const renomearCliente = useCallback(
