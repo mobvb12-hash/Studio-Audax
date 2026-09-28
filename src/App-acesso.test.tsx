@@ -4,8 +4,9 @@ import App from './App'
 
 /**
  * Confirma o portão de acesso do Studio Audax no App completo:
- * sem Supabase configurado o sistema segue como sempre (localStorage);
- * com Supabase, a TelaLogin aparece e uma sessão válida libera o painel.
+ * o portão é allow-list — SOMENTE sessão válida abre o painel. Sem Supabase
+ * configurado o sistema NÃO abre (não existe sessão possível); com Supabase
+ * sem sessão, a TelaLogin aparece.
  * Sem rede: o Supabase só lê a sessão local (nenhuma chamada externa).
  */
 
@@ -62,14 +63,15 @@ afterEach(() => {
 })
 
 describe('App — portão de acesso Supabase', () => {
-  it('sem Supabase configurado o sistema continua funcionando como antes', () => {
+  it('sem Supabase configurado o sistema NÃO abre: mostra a tela de ausência de configuração', () => {
     // vaza do .env em execuções locais — zera para simular o ambiente sem acesso
     vi.stubEnv('VITE_SUPABASE_URL', '')
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', '')
     render(<App />)
+    // o painel NÃO pode aparecer — nem login, que também não teria como validar
+    expect(screen.queryByRole('heading', { name: 'Painel' })).toBeNull()
     expect(screen.queryByLabelText('Senha')).toBeNull()
-    expect(screen.getByText('Dados salvos automaticamente')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Painel' })).toBeTruthy()
+    expect(screen.getByText(/Supabase não foi encontrado/)).toBeTruthy()
   })
 
   it('com Supabase configurado a TelaLogin aparece', async () => {

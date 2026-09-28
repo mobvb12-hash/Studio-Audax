@@ -154,12 +154,46 @@ function Conteudo() {
 }
 
 /**
- * Portão de acesso: sem Supabase configurado o conteúdo passa direto
- * (comportamento atual de teste/desenvolvimento). Com Supabase ativo,
- * exige sessão válida antes de mostrar qualquer página interna.
+ * Sem Supabase não há sessão possível — e sem sessão o painel não abre.
+ * Nenhum caminho de código, e nenhuma configuração, libera o sistema sem
+ * autenticação.
+ */
+function SupabaseAusente() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] px-4">
+      <div className="w-full max-w-md rounded-xl border border-[#E5DCC3] bg-white p-8">
+        <h1 className="text-center text-xl font-bold text-[#1C1A15]">Studio Audax</h1>
+        <div
+          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
+          aria-hidden="true"
+        />
+        <p role="alert" className="mt-4 text-sm text-[#8A8171]">
+          O Studio Audax está configurado para exigir login, mas o Supabase não
+          foi encontrado.
+        </p>
+        <p className="mt-3 text-[13px] text-[#8A8171]">
+          Sem <span className="font-mono">VITE_SUPABASE_URL</span> e{' '}
+          <span className="font-mono">VITE_SUPABASE_ANON_KEY</span> não existe
+          sessão para validar, então o painel permanece fechado. Configure as
+          duas variáveis e recarregue a página.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Portão de acesso — allow-list: SOMENTE `autenticado` abre o conteúdo.
+ * `deslogado` mostra o login, `carregando` mostra a verificação, e qualquer
+ * outro estado (hoje `desabilitado`, amanhã o que vier) cai na tela de
+ * Supabase ausente em vez de liberar o sistema. A versão anterior liberava
+ * `{children}` para tudo que não fosse `carregando`/`deslogado`, o que
+ * entregava o painel inteiro sem autenticação sempre que as variáveis de
+ * ambiente não chegassem no build.
  */
 function AreaProtegida({ children }: { children: ReactNode }) {
   const { estado } = useAuth()
+  if (estado.status === 'autenticado') return <>{children}</>
   if (estado.status === 'carregando') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] text-sm text-[#8A8171]">
@@ -168,7 +202,7 @@ function AreaProtegida({ children }: { children: ReactNode }) {
     )
   }
   if (estado.status === 'deslogado') return <TelaLogin />
-  return <>{children}</>
+  return <SupabaseAusente />
 }
 
 function App() {
@@ -179,8 +213,9 @@ function App() {
         Os módulos que leem/gravam no Supabase montam DEPOIS do portão de
         sessão: carga remota sem token é recusada pela RLS e não se repete
         sozinha — sem esta ordem, o primeiro login abriria o sistema vazio
-        (dado nenhum foi lido) mesmo com tudo salvo no servidor. Em modo
-        local (sem Supabase) o portão abre na hora, sem mudar o comportamento.
+        (dado nenhum foi lido) mesmo com tudo salvo no servidor. Sem Supabase
+        o portão não abre: ele mostra a tela de ausência de configuração em
+        vez de entregar o painel.
       */}
       <AreaProtegida>
         <ClientesProvider>
