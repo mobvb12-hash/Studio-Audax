@@ -85,9 +85,9 @@ export function linhaMovimentacao(m: MovimentacaoEstoque) {
     hora: m.hora,
     origem: m.origem,
     venda_id: m.vendaId ?? null,
-    fornecedor: m.fornecedor ?? null,
-    motivo: m.motivo ?? null,
-    observacao: m.observacao ?? null,
+    fornecedor: m.fornecedor ?? '',
+    motivo: m.motivo ?? '',
+    observacao: m.observacao ?? '',
     criado_em: m.criadoEm,
   }
 }
@@ -149,5 +149,13 @@ export async function importarMovimentacoes(
       lista.map(linhaMovimentacao),
       { onConflict: 'id' },
     )
-  return error ? 0 : lista.length
+  if (error) {
+    console.warn('[estoque] falha ao enviar as movimentações para o Supabase.', {
+      codigo: error.code,
+      mensagem: error.message,
+      detalhes: error.details,
+    })
+    return 0
+  }
+  return lista.length
 }

@@ -168,14 +168,14 @@ export function linhaLancamento(l: Lancamento) {
     cliente: l.cliente ?? null,
     cliente_id: l.clienteId ?? null,
     profissional: l.profissional ?? null,
-    servico: l.servico ?? null,
+    servico: l.servico ?? '',
     agendamento_id: l.agendamentoId ?? null,
     assinatura_id: l.assinaturaId ?? null,
-    produto: l.produto ?? null,
+    produto: l.produto ?? '',
     quantidade: l.quantidade ?? null,
     itens: l.itens ?? [],
-    categoria: l.categoria ?? null,
-    observacao: l.observacao ?? null,
+    categoria: l.categoria ?? '',
+    observacao: l.observacao ?? '',
     estornado: l.estornado ?? false,
     estornado_em: l.estornadoEm ?? null,
     criado_em: l.criadoEm,
@@ -352,7 +352,15 @@ export async function importarLancamentos(lista: Lancamento[]): Promise<number> 
       lista.map(linhaLancamento),
       { onConflict: 'id' },
     )
-  return error ? 0 : lista.length
+  if (error) {
+    console.warn('[caixa] falha ao enviar os lançamentos para o Supabase.', {
+      codigo: error.code,
+      mensagem: error.message,
+      detalhes: error.details,
+    })
+    return 0
+  }
+  return lista.length
 }
 
 export async function importarFechamentos(lista: Fechamento[]): Promise<number> {

@@ -78,14 +78,23 @@ function erroDeEscrita(mensagem: string | undefined): Error {
   return new Error(mensagem || 'Falha ao gravar produtos no Supabase.')
 }
 
-/** Todos os produtos em ordem de nome. Vazio = base sem produtos. */
+/**
+ * Todos os produtos em ordem de nome. Vazio = base sem produtos.
+ *
+ * O `order` leva o nome CRU: o PostgREST não aceita expressão de função no
+ * parâmetro `order` e recusa a requisição inteira com PGRST108
+ * ("'lower' is not an embedded resource in this request"). A ordenação
+ * case-insensitive é feita em `modules/produtos/store.tsx` (`ordenar`, com
+ * `localeCompare(..., 'pt-BR')`), igual a clientes/profissionais/serviços —
+ * aqui o `order` só garante uma base determinística.
+ */
 export async function listarProdutos(): Promise<Produto[]> {
   const cliente = supabase()
   if (!cliente) return []
   const { data, error } = await cliente
     .from('produtos')
     .select('*')
-    .order('lower(nome)', { ascending: true })
+    .order('nome', { ascending: true })
   if (error) throw erroDeLeitura(error.message)
   if (!data) throw erroDeLeitura(undefined)
   return data.map((linha) => paraProduto(linha as ProdutoRow))
