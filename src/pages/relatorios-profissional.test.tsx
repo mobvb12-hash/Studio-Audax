@@ -330,4 +330,25 @@ describe('Relatórios — filtros por período e profissional', () => {
       storageAntes,
     )
   })
+
+  it('torna explícito no rótulo que "Novos clientes" é da barbearia', () => {
+    montar()
+    semear()
+
+    // sem filtro: rótulo original, sem qualificação
+    expect(valorKpi(secao('Clientes'), 'Novos clientes')).toBe('2')
+
+    fireEvent.change(selecaoProf(), { target: { value: 'Diego' } })
+
+    const clientes = secao('Clientes')
+    // com filtro: o número continua global e o rótulo diz isso
+    expect(valorKpi(clientes, 'Novos clientes (barbearia)')).toBe('2')
+    expect(screen.queryByText('Novos clientes')).toBeNull()
+    // os vizinhos da mesma fileira seguem o escopo do profissional
+    expect(valorKpi(clientes, 'Clientes atendidos')).toBe('1')
+    expect(valorKpi(clientes, 'Recorrentes')).toBe('0')
+    // sem cálculo alterado: o total de cadastros é o mesmo com e sem filtro
+    fireEvent.change(selecaoProf(), { target: { value: 'todos' } })
+    expect(valorKpi(secao('Clientes'), 'Novos clientes')).toBe('2')
+  })
 })

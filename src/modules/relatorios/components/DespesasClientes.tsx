@@ -9,10 +9,15 @@ import type {
 type Props = {
   despesas: DespesasRelatorio
   cli: ClientesRelatorio
+  profFiltro: string
 }
 
 /** Despesas do período e clientes atendidos no período. */
-export default function DespesasClientes({ despesas, cli }: Props) {
+export default function DespesasClientes({
+  despesas,
+  cli,
+  profFiltro,
+}: Props) {
   return (
     <>
       {/* Despesas */}
@@ -91,7 +96,14 @@ export default function DespesasClientes({ despesas, cli }: Props) {
                   rotulo="Clientes atendidos"
                   valor={String(cli.atendidos)}
                 />
-                <CelulaKpi rotulo="Novos clientes" valor={String(cli.novos)} />
+                <CelulaKpi
+                  rotulo={
+                    profFiltro === 'todos'
+                      ? 'Novos clientes'
+                      : 'Novos clientes (barbearia)'
+                  }
+                  valor={String(cli.novos)}
+                />
                 <CelulaKpi
                   rotulo="Recorrentes"
                   valor={String(cli.recorrentes)}

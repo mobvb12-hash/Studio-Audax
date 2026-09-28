@@ -299,7 +299,11 @@ export default function Relatorios() {
           servicos={servicos}
           prods={prods}
         />
-        <DespesasClientes despesas={despesas} cli={cli} />
+        <DespesasClientes
+          despesas={despesas}
+          cli={cli}
+          profFiltro={profFiltro}
+        />
         <ClubeComissoes
           clubeRel={clubeRel}
           receitaClubeCaixa={receitaClubeCaixa}
