@@ -266,7 +266,13 @@ describe('Clientes — migração localStorage → Supabase', () => {
     )
     localStorage.setItem(
       'studio-audax:clube:v1',
-      JSON.stringify([{ id: 'a1', clienteId: 'sumiu' }]),
+      // O Clube grava um ESTADO, não uma lista solta: a assinatura é que cita
+      // `clienteId`. A forma antiga (array na raiz) nunca foi gravada pelo
+      // módulo e fazia a varredura aceitar dado que o Clube não produz.
+      JSON.stringify({
+        assinaturas: [{ id: 'a1', clienteId: 'sumiu' }],
+        pagamentos: [],
+      }),
     )
 
     const relatorio = await migrarClientes([cliente('cli-1', 'Ana Dias')])

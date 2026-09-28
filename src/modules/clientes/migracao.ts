@@ -115,24 +115,92 @@ function validarLocais(locais: Cliente[]): ValidacaoLocal {
 }
 
 /** Chave de citação em outros módulos: `clienteId`. */
-const CHAVES_REFERENCIAS: { chave: string; rotulo: string }[] = [
-  { chave: 'studio-audax:crm:v1', rotulo: 'CRM' },
-  { chave: 'studio-audax:whatsapp:v1', rotulo: 'WhatsApp' },
-  { chave: 'studio-audax:clube:v1', rotulo: 'Clube' },
-  { chave: 'studio-audax:caixa:lancamentos:v1', rotulo: 'Caixa' },
+type LeitorDeReferencias = {
+  chave: string
+  rotulo: string
+  /** Validador compatível com a forma que aquele módulo realmente grava. */
+  valido: (valor: unknown) => boolean
+  /** Itens que podem citar `clienteId` dentro do valor lido. */
+  itens: (valor: unknown) => unknown[]
+}
+
+/** Módulos que gravam uma lista solta de registros. */
+function itensDeLista(bruto: unknown): unknown[] {
+  return Array.isArray(bruto) ? bruto : []
+}
+
+/**
+ * O Clube grava um ESTADO (`assinaturas` + `pagamentos`), não uma lista solta.
+ * Um estado vazio é legítimo: `{}` e `{"assinaturas":[],"pagamentos":[]}`
+ * passam. Só a forma realmente errada é rejeitada — e aí a corrupção é
+ * detectada de verdade, com backup e aviso.
+ */
+function ehEstadoDeClube(bruto: unknown): boolean {
+  if (typeof bruto !== 'object' || bruto === null || Array.isArray(bruto)) {
+    return false
+  }
+  const estado = bruto as { assinaturas?: unknown; pagamentos?: unknown }
+  if (estado.assinaturas !== undefined && !Array.isArray(estado.assinaturas)) {
+    return false
+  }
+  if (estado.pagamentos !== undefined && !Array.isArray(estado.pagamentos)) {
+    return false
+  }
+  return true
+}
+
+function itensDoClube(bruto: unknown): unknown[] {
+  if (!ehEstadoDeClube(bruto)) return []
+  const estado = bruto as { assinaturas?: unknown[]; pagamentos?: unknown[] }
+  return [...(estado.assinaturas ?? []), ...(estado.pagamentos ?? [])]
+}
+
+const CHAVES_REFERENCIAS: LeitorDeReferencias[] = [
+  {
+    chave: 'studio-audax:crm:v1',
+    rotulo: 'CRM',
+    valido: Array.isArray,
+    itens: itensDeLista,
+  },
+  {
+    chave: 'studio-audax:whatsapp:v1',
+    rotulo: 'WhatsApp',
+    valido: Array.isArray,
+    itens: itensDeLista,
+  },
+  {
+    chave: 'studio-audax:clube:v1',
+    rotulo: 'Clube',
+    valido: ehEstadoDeClube,
+    itens: itensDoClube,
+  },
+  {
+    chave: 'studio-audax:caixa:lancamentos:v1',
+    rotulo: 'Caixa',
+    valido: Array.isArray,
+    itens: itensDeLista,
+  },
 ]
 
 /**
- * `clienteId` citado em outros módulos que não existe no cadastro. Só lê
- * (nunca escreve) e não impede a migração: é um apontamento para a etapa
- * correspondente.
+ * `clienteId` citado em outros módulos que não existe no cadastro. Não
+ * impede a migração: é um apontamento para a etapa correspondente.
+ *
+ * Cada chave tem a forma que o SEU módulo grava. Isso importa porque
+ * `carregarJSON` valida: um validador errado não é inócuo — ele marca dado
+ * legítimo como corrompido e ainda grava `<chave>:corrompido`. Foi o que
+ * acontecia com o Clube, que grava um ESTADO (`assinaturas` + `pagamentos`) e
+ * era validado como se fosse lista.
+ *
+ * Quando a chave está realmente corrompida, `carregarJSON` continua fazendo o
+ * que deve: backup em `<chave>:corrompido` e aviso. Aqui só não há mais falso
+ * positivo.
  */
 function referenciasProblematicas(conhecidos: Set<string>): string[] {
   const problemas: string[] = []
-  for (const { chave, rotulo } of CHAVES_REFERENCIAS) {
-    const bruto = carregarJSON<unknown>(chave, null, Array.isArray)
-    if (!Array.isArray(bruto)) continue
-    for (const item of bruto) {
+  for (const { chave, rotulo, valido, itens } of CHAVES_REFERENCIAS) {
+    const bruto = carregarJSON<unknown>(chave, null, valido)
+    for (const item of itens(bruto)) {
       if (!item || typeof item !== 'object') continue
       const id = (item as Record<string, unknown>).clienteId
       if (typeof id !== 'string' || !id) continue
