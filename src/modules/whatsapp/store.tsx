@@ -9,6 +9,11 @@ import {
 import type { ReactNode } from 'react'
 import { carregarJSON, salvarJSON } from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
+import { supabase } from '@/lib/supabase'
+import { CHAVE_STORAGE_CLIENTES } from '@/modules/clientes/migracao'
+import { normalizarCliente } from '@/modules/clientes/regras'
+import type { Cliente } from '@/modules/clientes/types'
+import { enviarTextoWhatsApp } from '@/services/evolution'
 import type { ProvedorEnvio } from './provedor'
 import {
   ehIdTemplate,
@@ -87,9 +92,45 @@ function ordenar(lista: MensagemWhats[]): MensagemWhats[] {
   return [...lista].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
 }
 
+/**
+ * Telefone do cliente da mensagem, lido do cadastro (mesma chave que o
+ * ClientesProvider grava). O WhatsApp store não guarda telefone próprio e
+ * nunca inventa um: sem cadastro ou sem número o envio é recusado com motivo.
+ */
+function telefoneDoCliente(clienteId: string): string {
+  const bruto = carregarJSON<unknown>(
+    CHAVE_STORAGE_CLIENTES,
+    null,
+    Array.isArray,
+  )
+  if (!Array.isArray(bruto)) return ''
+  const cliente = (bruto as Partial<Cliente>[])
+    .map(normalizarCliente)
+    .find((c) => c.id === clienteId)
+  return cliente?.telefone.trim() ?? ''
+}
+
+/**
+ * Provedor padrão: envio de texto pela Evolution API através da Edge Function
+ * `whatsapp-enviar` (mesmo contrato `ResultadoEnvio` de provedor.ts).
+ */
+const provedorEvolution: ProvedorEnvio = {
+  nome: 'evolution',
+  enviar: async (mensagem) => {
+    const telefone = telefoneDoCliente(mensagem.clienteId)
+    if (!telefone) {
+      return { ok: false, motivo: 'Cliente sem telefone cadastrado.' }
+    }
+    return enviarTextoWhatsApp(telefone, mensagem.texto)
+  },
+}
+
 export function WhatsProvider({ children }: { children: ReactNode }) {
   const [mensagens, setMensagens] = useState<MensagemWhats[]>(() => carregar())
   const [provedor, setProvedor] = useState<ProvedorEnvio | null>(null)
+  // Provedor efetivo: o que a tela configurou ou o padrão (Evolution), que só
+  // existe quando o Supabase está configurado — sem nada, nada sai do sistema.
+  const provedorEfetivo = provedor ?? (supabase() ? provedorEvolution : null)
 
   useEffect(() => {
     salvarJSON(CHAVE_STORAGE, mensagens)
@@ -139,11 +180,11 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
       if (!alvo) {
         throw new Error('Mensagem não encontrada.')
       }
-      // Sem provedor configurado: NÃO tenta enviar e nada muda no estado.
-      if (!provedor) {
+      // Sem provedor (nem Supabase): NÃO tenta enviar e nada muda no estado.
+      if (!provedorEfetivo) {
         throw new Error(ERRO_SEM_INTEGRACAO)
       }
-      const resultado = await provedor.enviar(alvo)
+      const resultado = await provedorEfetivo.enviar(alvo)
       setMensagens((atual) =>
         atual.map((m) =>
           m.id === id
@@ -164,7 +205,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
         ),
       )
     },
-    [mensagens, provedor],
+    [mensagens, provedorEfetivo],
   )
 
   const registrarEnvioManual = useCallback((id: string) => {
@@ -222,7 +263,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
   const valor = useMemo(
     () => ({
       mensagens,
-      integracaoAtiva: provedor !== null,
+      integracaoAtiva: provedorEfetivo !== null,
       criar,
       enviar,
       registrarEnvioManual,
@@ -233,7 +274,7 @@ export function WhatsProvider({ children }: { children: ReactNode }) {
     }),
     [
       mensagens,
-      provedor,
+      provedorEfetivo,
       criar,
       enviar,
       registrarEnvioManual,
