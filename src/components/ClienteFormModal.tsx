@@ -248,37 +248,41 @@ export default function ClienteFormModal({
               Telefone *
             </label>
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Tipo de telefone"
-                className={`${campoSelect} shrink-0 px-2!`}
-                value={tipoTelefone}
-                onChange={(e) => setTipoTelefone(e.target.value as TipoTelefone)}
-              >
-                {TIPOS_TELEFONE.map((t) => (
-                  <option key={t.valor} value={t.valor}>
-                    {t.texto}
-                  </option>
-                ))}
-              </select>
-              <span className="flex shrink-0 items-center rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-2.5 py-2 text-sm text-[#4A4436]">
-                +55
-              </span>
-              <input
-                id="cli-tel"
-                className={`${campo} min-w-[12rem] basis-[12rem] grow`}
-                inputMode="numeric"
-                placeholder="81 99999-9999"
-                value={mascararTelefone(telefone)}
-                onChange={(e) => setTelefone(digitos(e.target.value))}
-              />
-              <button
-                type="button"
-                aria-label="Adicionar telefone"
-                onClick={adicionarTelefone}
-                className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-              >
-                + adicionar
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <select
+                  aria-label="Tipo de telefone"
+                  className={`${campoSelect} w-[7rem] shrink-0 px-2!`}
+                  value={tipoTelefone}
+                  onChange={(e) => setTipoTelefone(e.target.value as TipoTelefone)}
+                >
+                  {TIPOS_TELEFONE.map((t) => (
+                    <option key={t.valor} value={t.valor}>
+                      {t.texto}
+                    </option>
+                  ))}
+                </select>
+                <span className="flex shrink-0 items-center rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-2.5 py-2 text-sm text-[#4A4436]">
+                  +55
+                </span>
+              </div>
+              <div className="flex min-w-0 grow basis-[20rem] items-center gap-2 max-sm:flex-wrap">
+                <input
+                  id="cli-tel"
+                  className={`${campo} min-w-[13.75rem] grow basis-[13.75rem]`}
+                  inputMode="numeric"
+                  placeholder="81 99999-9999"
+                  value={mascararTelefone(telefone)}
+                  onChange={(e) => setTelefone(digitos(e.target.value))}
+                />
+                <button
+                  type="button"
+                  aria-label="Adicionar telefone"
+                  onClick={adicionarTelefone}
+                  className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA] max-sm:w-full max-sm:text-center"
+                >
+                  + adicionar
+                </button>
+              </div>
             </div>
             {telefones.length > 0 && (
               <ul className="mt-2 flex flex-wrap gap-1.5">
