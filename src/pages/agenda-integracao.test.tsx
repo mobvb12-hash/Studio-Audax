@@ -8,6 +8,7 @@ import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import Agenda, { type SlotAgendamento } from './Agenda'
 
 const DIA = hojeISO()
@@ -102,8 +103,10 @@ function montar() {
         <ServicosProvider>
           <AgendaProvider>
             <CaixaProvider>
-              <Captura />
-              <AppAgenda />
+              <WhatsProvider>
+                <Captura />
+                <AppAgenda />
+              </WhatsProvider>
             </CaixaProvider>
           </AgendaProvider>
         </ServicosProvider>

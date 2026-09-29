@@ -19,6 +19,7 @@ import {
   useProfissionais,
 } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import Agenda from './Agenda'
 import PDV from './PDV'
 import Profissionais from './Profissionais'
@@ -115,8 +116,10 @@ function env(elemento: ReactNode) {
         <ServicosProvider>
           <AgendaProvider>
             <CaixaProvider>
-              <Captura />
-              {elemento}
+              <WhatsProvider>
+                <Captura />
+                {elemento}
+              </WhatsProvider>
             </CaixaProvider>
           </AgendaProvider>
         </ServicosProvider>

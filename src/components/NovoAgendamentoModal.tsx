@@ -1,13 +1,17 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { slotsDoExpediente } from '@/modules/agenda/regras'
 import { verificarConflito } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
+import type { Agendamento } from '@/modules/agenda/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { useServicos } from '@/modules/servicos/store'
 import { normalizarTexto } from '@/lib/moeda'
+import { useWhats } from '@/modules/whatsapp/store'
+import { dadosDoAgendamento, textoTemplate } from '@/modules/whatsapp/templates'
 
 type Props = {
   /** Pré-preenche o cliente (ação "Agendar" vinda da página Clientes) */
@@ -29,6 +33,14 @@ export default function NovoAgendamentoModal({
   const { clientes, porNome } = useClientes()
   const { servicos } = useServicos()
   const { profissionais } = useProfissionais()
+  const whats = useWhats()
+  // Último contexto do WhatsApp, atualizado a cada render: criar() re-renderiza
+  // o provedor dentro do flushSync e a modal logo desmonta — sem isto o
+  // enviar() enxergaria só a lista anterior à mensagem criada.
+  const whatsRef = useRef(whats)
+  useEffect(() => {
+    whatsRef.current = whats
+  })
   // Novos agendamentos só podem usar serviços/profissionais ativos
   const servicosAtivos = useMemo(
     () => servicos.filter((s) => s.ativo),
@@ -72,6 +84,57 @@ export default function NovoAgendamentoModal({
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [onFechar])
+
+  /**
+   * Confirmação automática no ato do agendamento: cria a mensagem com o
+   * template `confirmacao` e dispara o envio pelo provedor já existente.
+   * Sempre depois do adicionar() e nunca trava o salvamento — sem cliente
+   * cadastrado, sem telefone ou com falha de envio, o agendamento segue salvo.
+   */
+  function confirmarPorWhatsApp(novo: Agendamento) {
+    try {
+      const cadastrado = porNome(novo.cliente)
+      if (!cadastrado?.telefone.trim()) return
+      // Duplicidade: uma confirmação já criada para o mesmo agendamento
+      // (pendente/enviada) não gera segunda; `falhou` pode tentar de novo.
+      const jaConfirmada = whats.mensagens.some(
+        (m) =>
+          m.agendamentoId === novo.id &&
+          m.template === 'confirmacao' &&
+          m.status !== 'falhou',
+      )
+      if (jaConfirmada) return
+      // criar() enfileira o estado: só o flushSync conclui essa renderização
+      // (e o efeito que atualiza o ref) antes da modal fechar.
+      const mensagem = flushSync(() =>
+        whats.criar({
+          clienteId: cadastrado.id,
+          cliente: novo.cliente,
+          template: 'confirmacao',
+          texto: textoTemplate('confirmacao', dadosDoAgendamento(novo)),
+          origem: 'automacao',
+          agendamentoId: novo.id,
+        }),
+      )
+      enviarConfirmacao(mensagem.id)
+    } catch {
+      // Dados incompletos ou Integração ausente: o agendamento já está salvo
+      // e apenas nenhuma mensagem sai do sistema.
+    }
+  }
+
+  /** Envia sem bloquear a UI; erro vira `falhou` com o motivo do sistema. */
+  function enviarConfirmacao(id: string) {
+    void whatsRef.current.enviar(id).catch((e) => {
+      const motivo =
+        e instanceof Error ? e.message : 'Não foi possível enviar a mensagem.'
+      try {
+        whatsRef.current.registrarFalha(id, motivo)
+      } catch {
+        // Mensagem removida antes da resposta: nada a registrar.
+      }
+    })
+  }
 
   function salvar() {
     if (cliente.trim().length < 2) {
@@ -150,8 +213,9 @@ export default function NovoAgendamentoModal({
       )
       return
     }
+    let novo: Agendamento
     try {
-      adicionar({
+      novo = adicionar({
         cliente,
         telefone,
         servico,
@@ -165,6 +229,7 @@ export default function NovoAgendamentoModal({
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.')
       return
     }
+    confirmarPorWhatsApp(novo)
     onFechar()
   }
 

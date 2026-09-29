@@ -12,6 +12,7 @@ import { EsperaProvider, useEspera } from '@/modules/espera/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import Dashboard from './Dashboard'
 import Espera from './Espera'
 
@@ -37,8 +38,10 @@ function env(elemento: ReactNode) {
         <ServicosProvider>
           <AgendaProvider>
             <EsperaProvider>
-              <Captura />
-              {elemento}
+              <WhatsProvider>
+                <Captura />
+                {elemento}
+              </WhatsProvider>
             </EsperaProvider>
           </AgendaProvider>
         </ServicosProvider>

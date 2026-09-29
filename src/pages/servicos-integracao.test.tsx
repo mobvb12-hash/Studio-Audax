@@ -9,6 +9,7 @@ import { CaixaProvider, useCaixa } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider, useServicos } from '@/modules/servicos/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 import Servicos from './Servicos'
 
 const DIA = hojeISO()
@@ -36,8 +37,10 @@ function env(elemento: ReactNode) {
         <ServicosProvider>
           <AgendaProvider>
             <CaixaProvider>
-              <Captura />
-              {elemento}
+              <WhatsProvider>
+                <Captura />
+                {elemento}
+              </WhatsProvider>
             </CaixaProvider>
           </AgendaProvider>
         </ServicosProvider>
