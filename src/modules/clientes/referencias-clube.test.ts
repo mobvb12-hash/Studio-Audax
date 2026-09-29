@@ -28,7 +28,7 @@ const BACKUP_CAIXA = `${CHAVE_CAIXA}:corrompido`
 
 vi.mock('@/services/supabase/clientes', () => ({
   listarClientes: vi.fn(async () => []),
-  criarClientes: vi.fn(async (_lista: Cliente[]) => true),
+  criarClientes: vi.fn(async () => true),
   removerClientes: vi.fn(async () => 0),
 }))
 

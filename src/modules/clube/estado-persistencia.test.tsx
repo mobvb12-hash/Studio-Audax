@@ -11,7 +11,7 @@
 // `[]` resultante era gravado de volta por `salvarJSON`, sobrescrevendo o
 // original SEM backup e SEM aviso: dado corrompido sumia em silêncio. Este
 // arquivo trava os dois lados — o que é aceito e o que é preservado.
-import { act } from 'react'
+import { act, useEffect } from 'react'
 import { render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { carregarJSON } from '@/lib/persistencia'
@@ -181,7 +181,9 @@ let capturado: Captura = { assinaturas: [], pagamentos: [] }
 
 function Sondagem() {
   const clube = useClube()
-  capturado = { assinaturas: clube.assinaturas, pagamentos: clube.pagamentos }
+  useEffect(() => {
+    capturado = { assinaturas: clube.assinaturas, pagamentos: clube.pagamentos }
+  })
   return null
 }
 
