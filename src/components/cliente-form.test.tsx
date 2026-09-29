@@ -133,9 +133,9 @@ describe('Formulário de cliente — cadastro completo', () => {
 
     const salvo = ctx.clientes[0]
     expect(salvo.nome).toBe('Lucas Mendes')
-    expect(salvo.telefone).toBe('(81) 98888-7777')
+    expect(salvo.telefone).toBe('81988887777')
     expect(salvo.telefones).toEqual([
-      { tipo: 'residencial', numero: '(81) 3232-1111' },
+      { tipo: 'residencial', numero: '8132321111' },
     ])
     expect(salvo.genero).toBe('feminino')
     expect(salvo.cpf).toBe('123.456.789-00')
@@ -279,7 +279,7 @@ describe('Formulário de cliente — validações', () => {
     preencherBasico('Lucas Mendes', '(81) 98888-7777')
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar telefone' }))
     expect(
-      screen.getByLabelText('Remover telefone (81) 98888-7777'),
+      screen.getByLabelText('Remover telefone 81 98888-7777'),
     ).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Telefone *'), {
@@ -327,6 +327,10 @@ describe('Formulário de cliente — edição', () => {
     expect(screen.getByLabelText('Nome *')).toHaveProperty(
       'value',
       'Lucas Mendes',
+    )
+    expect(screen.getByLabelText('Telefone *')).toHaveProperty(
+      'value',
+      '81 98888-7777',
     )
     expect(screen.getByLabelText('Gênero')).toHaveProperty(
       'value',
@@ -384,13 +388,78 @@ describe('Formulário de cliente — edição', () => {
     expect(atualizado.etiquetas).toEqual(['fiel', 'novo'])
     expect(atualizado.preferencias.smsMarketing).toBe(true)
     expect(atualizado.preferencias.emailAgendamentos).toBe(true)
-    // Campos não alterados preservados
-    expect(atualizado.telefone).toBe('(81) 98888-7777')
+    // Campos não alterados preservados (o telefone é gravado só com dígitos)
+    expect(atualizado.telefone).toBe('81988887777')
     expect(atualizado.email).toBe('lucas@email.com')
     expect(atualizado.observacao).toBe('Prefere cadeira 3')
     expect(atualizado.nascimento).toBe('1995-03-15')
     expect(atualizado.instagram).toBe('@lucasbarb')
     expect(atualizado.comoNosConheceu).toBe('Instagram')
+  })
+})
+
+describe('Formulário de cliente — máscara do telefone', () => {
+  it('aceita só dígitos, formata progressivamente e grava sem máscara', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Nome *'), {
+      target: { value: 'Ana Souza' },
+    })
+    const campo = screen.getByLabelText('Telefone *') as HTMLInputElement
+
+    // Digitação progressiva da máscara DD NNNNN-NNNN
+    fireEvent.change(campo, { target: { value: '8' } })
+    expect(campo.value).toBe('8')
+    fireEvent.change(campo, { target: { value: '81' } })
+    expect(campo.value).toBe('81')
+    fireEvent.change(campo, { target: { value: '819' } })
+    expect(campo.value).toBe('81 9')
+    fireEvent.change(campo, { target: { value: '8199737' } })
+    expect(campo.value).toBe('81 99737')
+    fireEvent.change(campo, { target: { value: '81997373' } })
+    expect(campo.value).toBe('81 99737-3')
+
+    // Celular completo: DD NNNNN-NNNN
+    fireEvent.change(campo, { target: { value: '81997373593' } })
+    expect(campo.value).toBe('81 99737-3593')
+
+    // Tudo que não for dígito é descartado (máscara colada é aceita)
+    fireEvent.change(campo, { target: { value: '(81) 99737-3593' } })
+    expect(campo.value).toBe('81 99737-3593')
+
+    fireEvent.click(screen.getByText('Cadastrar cliente'))
+    expect(ctx.clientes[0].telefone).toBe('81997373593')
+
+    const gravado = JSON.parse(
+      localStorage.getItem('studio-audax:clientes:v1') ?? '[]',
+    )
+    expect(gravado[0].telefone).toBe('81997373593')
+  })
+
+  it('edita telefone gravado em dígitos mostrando a máscara', async () => {
+    const semente = render(
+      <ClientesProvider>
+        <Captura />
+      </ClientesProvider>,
+    )
+    act(() => {
+      ctx.adicionar({
+        nome: 'Cleiton',
+        telefone: '81997373593',
+        email: '',
+        observacao: '',
+      })
+    })
+    const cliente = ctx.clientes[0]
+    semente.unmount()
+
+    montar(cliente)
+    expect(screen.getByLabelText('Telefone *')).toHaveProperty(
+      'value',
+      '81 99737-3593',
+    )
+
+    fireEvent.click(screen.getByText('Salvar alterações'))
+    await waitFor(() => expect(ctx.clientes[0].telefone).toBe('81997373593'))
   })
 })
 

@@ -1,4 +1,9 @@
-import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
+import {
+  CAMPO_FORM as campo,
+  CAMPO_SELECT as campoSelect,
+  ROTULO_FORM as rotulo,
+  mascararTelefone,
+} from '@/lib/apresentacao'
 import { useEffect, useState } from 'react'
 import EnderecoBloco from '@/modules/clientes/components/EnderecoBloco'
 import PreferenciasBloco from '@/modules/clientes/components/PreferenciasBloco'
@@ -67,7 +72,8 @@ export default function ClienteFormModal({
 }: Props) {
   const { adicionar, atualizar } = useClientes()
   const [nome, setNome] = useState(() => cliente?.nome ?? '')
-  const [telefone, setTelefone] = useState(() => cliente?.telefone ?? '')
+  // Somente dígitos aqui; a máscara `DD NNNNN-NNNN` é aplicada só na exibição.
+  const [telefone, setTelefone] = useState(() => digitos(cliente?.telefone ?? ''))
   const [tipoTelefone, setTipoTelefone] = useState<TipoTelefone>('celular')
   const [telefones, setTelefones] = useState(
     () => cliente?.telefones ?? [],
@@ -122,12 +128,12 @@ export default function ClienteFormModal({
   }, [onFechar])
 
   function adicionarTelefone() {
-    const numero = telefone.trim()
-    if (!digitos(numero)) {
+    const numero = digitos(telefone)
+    if (!numero) {
       setErro('Digite o telefone antes de adicionar.')
       return
     }
-    if (telefones.some((t) => digitos(t.numero) === digitos(numero))) {
+    if (telefones.some((t) => digitos(t.numero) === numero)) {
       setErro('Este telefone já foi adicionado.')
       return
     }
@@ -166,7 +172,7 @@ export default function ClienteFormModal({
     }
     const dados = {
       nome: nome.trim(),
-      telefone: telefone.trim(),
+      telefone: digitos(telefone),
       email: email.trim(),
       observacao,
       genero,
@@ -241,10 +247,10 @@ export default function ClienteFormModal({
             <label className={rotulo} htmlFor="cli-tel">
               Telefone *
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 aria-label="Tipo de telefone"
-                className={`${campo} w-32 shrink-0`}
+                className={`${campoSelect} shrink-0 px-2!`}
                 value={tipoTelefone}
                 onChange={(e) => setTipoTelefone(e.target.value as TipoTelefone)}
               >
@@ -254,21 +260,22 @@ export default function ClienteFormModal({
                   </option>
                 ))}
               </select>
-              <span className="flex shrink-0 items-center rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-2.5 text-sm text-[#4A4436]">
+              <span className="flex shrink-0 items-center rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-2.5 py-2 text-sm text-[#4A4436]">
                 +55
               </span>
               <input
                 id="cli-tel"
-                className={campo}
-                placeholder="(81) 99999-9999"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
+                className={`${campo} min-w-[12rem] basis-[12rem] grow`}
+                inputMode="numeric"
+                placeholder="81 99999-9999"
+                value={mascararTelefone(telefone)}
+                onChange={(e) => setTelefone(digitos(e.target.value))}
               />
               <button
                 type="button"
                 aria-label="Adicionar telefone"
                 onClick={adicionarTelefone}
-                className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
               >
                 + adicionar
               </button>
@@ -281,10 +288,10 @@ export default function ClienteFormModal({
                     className="flex items-center gap-1.5 rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-2.5 py-1 text-xs text-[#4A4436]"
                   >
                     {TIPOS_TELEFONE.find((x) => x.valor === t.tipo)?.texto}:{' '}
-                    {t.numero}
+                    {mascararTelefone(t.numero)}
                     <button
                       type="button"
-                      aria-label={`Remover telefone ${t.numero}`}
+                      aria-label={`Remover telefone ${mascararTelefone(t.numero)}`}
                       onClick={() => removerTelefone(t.numero)}
                       className="font-bold text-[#A99E85] hover:text-red-600"
                     >

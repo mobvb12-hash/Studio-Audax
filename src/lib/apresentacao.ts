@@ -42,6 +42,31 @@ export function iniciais(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
 }
 
+/**
+ * Formata um telefone brasileiro para exibição enquanto o usuário digita.
+ *
+ * Entrada aceita qualquer texto — só os dígitos interessam. O resultado é
+ * progressivo (nunca esconde o que já foi digitado):
+ * - celular (11 dígitos, ou número iniciado por 9): `81 99737-3593`
+ * - linha fixa (10 dígitos): `81 3232-1111`
+ * - até 2 dígitos: somente os dígitos
+ * - mais de 11 dígitos: devolvidos intactos, sem formato inventado
+ */
+export function mascararTelefone(bruto: string): string {
+  const d = bruto.replace(/\D/g, '')
+  const n = d.length
+  if (n <= 2 || n > 11) return d
+  const celular = n === 11 || d[2] === '9'
+  if (celular) {
+    return n > 7
+      ? `${d.slice(0, 2)} ${d.slice(2, 7)}-${d.slice(7)}`
+      : `${d.slice(0, 2)} ${d.slice(2)}`
+  }
+  return n > 6
+    ? `${d.slice(0, 2)} ${d.slice(2, 6)}-${d.slice(6)}`
+    : `${d.slice(0, 2)} ${d.slice(2)}`
+}
+
 /** Classe padrão dos campos de texto dos formulários/modais. */
 export const CAMPO_FORM =
   'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
