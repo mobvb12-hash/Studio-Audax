@@ -49,11 +49,19 @@ export function validarConfig(
   return null
 }
 
-/** Apenas os dígitos (DDI+DDD+número) ou null quando não é utilizável. */
+/**
+ * Apenas os dígitos (DDI+DDD+número) ou null quando não é utilizável.
+ *
+ * A Evolution/Baileys recusa celular brasileiro sem DDI (HTTP 400): um
+ * número de 11 dígitos (`11988883593`) é completado com o 55 e vira
+ * `5511988883593`. O que já vem com 13 dígitos e DDI 55 — ou com outro
+ * DDI — passa intacto: o 55 nunca é duplicado.
+ */
 export function normalizarTelefone(telefone: unknown): string | null {
   if (typeof telefone !== 'string') return null
   const digitos = telefone.replace(/\D/g, '')
   if (digitos.length < 8 || digitos.length > 15) return null
+  if (digitos.length === 11) return `55${digitos}`
   return digitos
 }
 

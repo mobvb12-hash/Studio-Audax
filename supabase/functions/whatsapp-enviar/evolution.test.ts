@@ -41,12 +41,24 @@ describe('validarConfig', () => {
 })
 
 describe('normalizarTelefone', () => {
-  it('descarta formatação e mantém só os dígitos', () => {
-    expect(normalizarTelefone('(11) 99999-8888')).toBe('11999998888')
+  it('descarta formatação e adiciona o DDI 55 ao celular de 11 dígitos', () => {
+    expect(normalizarTelefone('(11) 99999-8888')).toBe('5511999998888')
   })
 
-  it('mantém DDI quando presente', () => {
+  it('completa o DDI 55 em celular de 11 dígitos sem formatação', () => {
+    expect(normalizarTelefone('11988883593')).toBe('5511988883593')
+  })
+
+  it('remove espaços, parênteses, hífens e pontos antes de completar o DDI', () => {
+    expect(normalizarTelefone('11.98888-3593')).toBe('5511988883593')
+    expect(normalizarTelefone('(11) 9 8888-3593')).toBe('5511988883593')
+    expect(normalizarTelefone(' 11 98888 3593 ')).toBe('5511988883593')
+  })
+
+  it('mantém DDI quando presente, sem duplicar o 55', () => {
     expect(normalizarTelefone('+55 (11) 99999-8888')).toBe('5511999998888')
+    expect(normalizarTelefone('5511999998888')).toBe('5511999998888')
+    expect(normalizarTelefone('+55 11 99999-8888')).toBe('5511999998888')
   })
 
   it('aceita número já em dígitos', () => {
@@ -79,6 +91,10 @@ describe('validarPedido', () => {
 
   it('aceita pedido válido', () => {
     expect(validarPedido(valido)).toBeNull()
+  })
+
+  it('aceita celular brasileiro de 11 dígitos (DDI é completado na normalização)', () => {
+    expect(validarPedido({ telefone: '11988883593', mensagem: 'Olá!' })).toBeNull()
   })
 
   it('recusa pedido nulo', () => {
@@ -144,6 +160,27 @@ describe('montarEnvioTexto', () => {
     })
     expect(JSON.parse(String(init.body))).toEqual({
       number: '5511999998888',
+      text: 'Olá mundo',
+    })
+  })
+
+  it('celular de 11 dígitos sai com DDI 55 e o payload continua { number, text }', () => {
+    const { init } = montarEnvioTexto(config, {
+      telefone: '11988883593',
+      mensagem: 'Olá mundo',
+    })
+    const corpo = JSON.parse(String(init.body)) as Record<string, unknown>
+    expect(corpo).toEqual({ number: '5511988883593', text: 'Olá mundo' })
+    expect(Object.keys(corpo).sort()).toEqual(['number', 'text'])
+  })
+
+  it('não duplica o DDI quando o telefone já vem com 55', () => {
+    const { init } = montarEnvioTexto(config, {
+      telefone: '+55 11 98888-3593',
+      mensagem: 'Olá mundo',
+    })
+    expect(JSON.parse(String(init.body))).toEqual({
+      number: '5511988883593',
       text: 'Olá mundo',
     })
   })
