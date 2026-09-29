@@ -121,6 +121,25 @@ function Semente() {
       >
         semear-cancelado
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          registrarPagamento({
+            agendamentoId: 'ag-6',
+            data: hojeISO(),
+            hora: '14:00',
+            cliente: 'Pós-fechamento',
+            profissional: 'Cleiton Silva',
+            servico: 'Corte',
+            valor: 50,
+            desconto: 0,
+            formaPagamento: 'pix',
+            statusAgendamento: 'confirmado',
+          })
+        }}
+      >
+        semear-posterior
+      </button>
       <input id="erro-cancelado" data-testid="erro-cancelado" defaultValue="" />
       <button
         type="button"
@@ -287,5 +306,73 @@ describe('Caixa ↔ Comissões — produção real vinda dos pagamentos', () => 
     expect(screen.queryByText('Reabrir comissão')).toBeNull()
     expect(within(linha('Cleiton Silva')).getByText('Fechar')).toBeTruthy()
     expect(screen.getByText(/Reabertura/)).toBeTruthy()
+  })
+
+  it('comissão fechada expõe snapshot congelado e divergência da produção atual', () => {
+    montar()
+    fireEvent.click(screen.getByText('semear'))
+    fireEvent.click(screen.getByText('estornar'))
+    fireEvent.click(within(linha('Cleiton Silva')).getByText('Fechar'))
+    fireEvent.click(screen.getByText('Confirmar fechamento'))
+
+    // Estado "Fechada" e valor congelado identificáveis na listagem
+    expect(
+      within(linha('Cleiton Silva')).getByText(/Fechada R\$ 24,00/),
+    ).toBeTruthy()
+
+    // Modal de detalhe: snapshot explícito, ainda sem divergência
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalhes de Cleiton Silva' }),
+    )
+    const modal = screen
+      .getByText('Detalhamento da produção')
+      .closest('div[class*="rounded-xl"]') as HTMLElement
+    expect(within(modal).getByText('Comissão (fechada)')).toBeTruthy()
+    expect(
+      within(modal).getByText(/Comissão fechada: R\$ 24,00/),
+    ).toBeTruthy()
+    expect(
+      within(modal).getByText(/Valor do fechamento permanece congelado até reabertura/),
+    ).toBeTruthy()
+    expect(
+      within(modal).queryByText('Produção atual diferente do fechamento'),
+    ).toBeNull()
+    const kpiFechado = within(modal)
+      .getByText('Comissão (fechada)')
+      .closest('div') as HTMLElement
+    expect(within(kpiFechado).getByText('R$ 24,00')).toBeTruthy()
+    fireEvent.click(within(modal).getByText('Fechar'))
+
+    // Produção nova depois do fecho → divergência exposta, valor congelado
+    fireEvent.click(screen.getByText('semear-posterior'))
+    expect(
+      within(linha('Cleiton Silva')).getByText(
+        'Produção atual diferente do fechamento',
+      ),
+    ).toBeTruthy()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalhes de Cleiton Silva' }),
+    )
+    const modalDepois = screen
+      .getByText('Detalhamento da produção')
+      .closest('div[class*="rounded-xl"]') as HTMLElement
+    const kpiDepois = within(modalDepois)
+      .getByText('Comissão (fechada)')
+      .closest('div') as HTMLElement
+    expect(within(kpiDepois).getByText('R$ 24,00')).toBeTruthy()
+    expect(
+      within(modalDepois).getByText(
+        /Produção atual diferente do fechamento: produção atual R\$ 44,00 contra R\$ 24,00/,
+      ),
+    ).toBeTruthy()
+    expect(
+      within(modalDepois).getByText(
+        /Valor do fechamento permanece congelado até reabertura/,
+      ),
+    ).toBeTruthy()
+    expect(
+      within(linha('Cleiton Silva')).getByText(/Fechada R\$ 24,00/),
+    ).toBeTruthy()
   })
 })

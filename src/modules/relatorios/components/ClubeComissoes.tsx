@@ -110,6 +110,14 @@ export default function ClubeComissoes({
                 />
               </div>
             </div>
+            {comisAbertas < -0.005 && (
+              <p className="mt-3 text-[13px] text-[#4A4436]">
+                Produção atual diferente do fechamento: fechadas no período{' '}
+                {formatarBRL(comisFech.totalFechado)} contra{' '}
+                {formatarBRL(comisTotais.comissao)} de produção atual. Os
+                fechamentos permanecem congelados até reabertura.
+              </p>
+            )}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
                 <thead>

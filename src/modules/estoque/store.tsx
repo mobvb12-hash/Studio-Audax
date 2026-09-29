@@ -94,11 +94,15 @@ function aplicarSaldo(
   pend: Pendencias,
   produtoId: string,
   estoque: number,
-  aplicar: (id: string, estoque: number) => void,
+  aplicar: (id: string, estoque: number, anterior?: number) => void,
 ): void {
+  // Valor aplicado no MESMO lote (antes do re-render): sem ele o produto
+  // devolvido ao saldo original pareceria "já atualizado" para o closure
+  // antigo e a devolução viraria no-op silencioso.
+  const anterior = pend.saldos?.get(produtoId)
   if (!pend.saldos) pend.saldos = new Map()
   pend.saldos.set(produtoId, estoque)
-  aplicar(produtoId, estoque)
+  aplicar(produtoId, estoque, anterior)
 }
 
 /** A venda já teve baixa: pendente deste lote ou registrada no histórico. */

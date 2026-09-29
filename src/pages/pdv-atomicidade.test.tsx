@@ -49,6 +49,33 @@ vi.mock('@/modules/estoque/store', async (importOriginal) => {
   }
 })
 
+/**
+ * 🟠2 — falha injetada DEPOIS da baixa de estoque. No fechamento do
+ * atendimento a ordem é pagamento → venda → baixa → mudarStatus → onFechar;
+ * aqui a falha acontece na etapa seguinte à baixa, para provar que o
+ * rollback devolve o estoque e desfaz os lançamentos gravados.
+ */
+const controleAgenda = vi.hoisted(() => ({ falhar: false }))
+
+vi.mock('@/modules/agenda/store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/agenda/store')>()
+  return {
+    ...actual,
+    useAgenda: () => {
+      const ctx = actual.useAgenda()
+      return {
+        ...ctx,
+        mudarStatus: (...args: Parameters<typeof ctx.mudarStatus>) => {
+          if (controleAgenda.falhar) {
+            throw new Error('Falha simulada DEPOIS da baixa de estoque')
+          }
+          return ctx.mudarStatus(...args)
+        },
+      }
+    },
+  }
+})
+
 const DIA = hojeISO()
 const CHAVE_LANC = 'studio-audax:caixa:lancamentos:v1'
 const CHAVE_PROD = 'studio-audax:produtos:v1'
@@ -106,6 +133,7 @@ beforeEach(() => {
   localStorage.clear()
   sessionStorage.clear()
   controle.falhar = false
+  controleAgenda.falhar = false
   ctxCaixa = undefined as unknown as ReturnType<typeof useCaixa>
   ctxProdutos = undefined as unknown as ReturnType<typeof useProdutos>
 })
@@ -298,6 +326,42 @@ describe('Fechamento do atendimento — rollback total e retry', () => {
 
     // retry NÃO esbarra em "já foi pago": estado estava limpo
     controle.falhar = false
+    fireEvent.click(screen.getByRole('button', { name: /^Receber/ }))
+    expect(onFechar).toHaveBeenCalled()
+    expect(lancamentos()).toHaveLength(2)
+    expect(statusAgendamento()).toBe('concluido')
+    expect(estoqueDe('prod-1')).toBe(8)
+  })
+
+  it('falha DEPOIS da baixa devolve o estoque e desfaz pagamento e venda', () => {
+    semear()
+    const { onFechar } = montar()
+
+    fireEvent.change(screen.getByLabelText('Produto'), {
+      target: { value: 'prod-1' },
+    })
+    fireEvent.change(screen.getByLabelText('Quantidade'), {
+      target: { value: '2' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    // a baixa acontece; a falha vem na etapa seguinte (mudarStatus)
+    controleAgenda.falhar = true
+    fireEvent.click(screen.getByRole('button', { name: /^Receber/ }))
+
+    // erro original preservado
+    expect(
+      screen.getByText('Falha simulada DEPOIS da baixa de estoque'),
+    ).toBeTruthy()
+    // estoque exatamente igual ao estado anterior à tentativa (10, não 8)
+    expect(estoqueDe('prod-1')).toBe(10)
+    // venda e pagamento desfeitos, agenda intocada, modal segue aberto
+    expect(lancamentos()).toHaveLength(0)
+    expect(statusAgendamento()).toBe('confirmado')
+    expect(onFechar).not.toHaveBeenCalled()
+
+    // retry fecha o atendimento com UMA única baixa (10 - 2 = 8, não 6)
+    controleAgenda.falhar = false
     fireEvent.click(screen.getByRole('button', { name: /^Receber/ }))
     expect(onFechar).toHaveBeenCalled()
     expect(lancamentos()).toHaveLength(2)

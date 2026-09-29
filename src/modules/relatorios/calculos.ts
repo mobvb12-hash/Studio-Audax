@@ -446,13 +446,29 @@ export function produtosDoPeriodo(
 
   const linhas = produtos
     .map((p): ProdutoLinha => {
-      const v = mapa.get(p.id) ?? mapa.get(normalizarTexto(p.nome)) ?? { qtd: 0, receita: 0 }
+      // Venda do PDV/fechamento grava `itens[].produtoId` (chave = id) e a
+      // venda avulsa do Caixa grava só o nome (chave = nome normalizado). Um
+      // mesmo produto pode ser vendido pelos dois caminhos no período, então
+      // as duas chaves são SOMADAS. Cada venda entra em uma única chave
+      // (produtoId tem prioridade dentro do próprio lançamento), portanto
+      // somar nunca conta a mesma venda duas vezes.
+      const chaveId = p.id
+      const chaveNome = normalizarTexto(p.nome)
+      const chaves = chaveId === chaveNome ? [chaveId] : [chaveId, chaveNome]
+      let qtd = 0
+      let receita = 0
+      for (const chave of chaves) {
+        const v = mapa.get(chave)
+        if (!v) continue
+        qtd += v.qtd
+        receita += v.receita
+      }
       return {
         id: p.id,
         nome: p.nome,
         categoria: p.categoria,
-        qtdVendida: v.qtd,
-        receita: arredondar(v.receita),
+        qtdVendida: qtd,
+        receita: arredondar(receita),
         estoqueAtual: p.estoque,
         status: statusEstoque(p),
         ativo: p.ativo,

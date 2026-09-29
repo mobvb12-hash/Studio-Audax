@@ -611,6 +611,35 @@ describe('Relatórios — comissões', () => {
     expect(norm(linhaAudax.textContent)).toContain('R$ 56,00')
     expect(secao.textContent).toContain('Comissões fechadas')
   })
+
+  it('expor divergência quando o fechado é maior que a produção atual', () => {
+    montar()
+    semearBase()
+    act(() => {
+      ctxComissoes.fecharComissao({
+        profissionalId: 'prof-audax',
+        profissionalNome: 'Audax',
+        periodo: periodoMes(),
+        qtdAtendimentos: 2,
+        producao: 250,
+        percentual: 40,
+        comissao: 100,
+      })
+    })
+
+    // 76 de produção atual − 100 fechados = −24 (sem Math.max escondendo 0)
+    expect(celulaKpi('Comissões a pagar')).toContain('R$ 76,00')
+    expect(celulaKpi('Fechadas no período')).toContain('R$ 100,00')
+    expect(celulaKpi('Ainda abertas')).toContain('-R$ 24,00')
+
+    const secao = screen
+      .getByText('Comissões do período')
+      .closest('section') as HTMLElement
+    expect(secao.textContent).toContain('Produção atual diferente do fechamento')
+    expect(secao.textContent).toContain('permanecem congelados até reabertura')
+    // Os valores históricos não mudam: o fecho continua listado em 100
+    expect(norm(secao.textContent)).toContain('R$ 100,00')
+  })
 })
 
 describe('Relatórios — regras do Caixa respeitadas', () => {

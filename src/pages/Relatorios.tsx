@@ -155,10 +155,10 @@ export default function Relatorios() {
     () => fechamentosDoPeriodo(fechamentosFiltrados, periodo),
     [fechamentosFiltrados, periodo],
   )
-  const comisAbertas = Math.max(
-    0,
-    Math.round((comisTotais.comissao - comisFech.totalFechado) * 100) / 100,
-  )
+  // Diferença sem teto: quando o fechamento fica acima da produção atual o
+  // valor fica negativo e a divergência aparece (não é escondida como 0).
+  const comisAbertas =
+    Math.round((comisTotais.comissao - comisFech.totalFechado) * 100) / 100
 
   const temProducao = resumo.qtdAtendimentosPagos > 0
 

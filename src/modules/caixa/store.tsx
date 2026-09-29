@@ -49,6 +49,17 @@ import {
 const CHAVE_LANCAMENTOS = 'studio-audax:caixa:lancamentos:v1'
 const CHAVE_FECHAMENTOS = 'studio-audax:caixa:fechamentos:v1'
 const CHAVE_AUDITORIA = 'studio-audax:caixa:auditoria:v1'
+// Tombstone de lançamento removido: a remoção precisa sobreviver ao F5 —
+// sem ele a próxima carga devolve o registro pela lista do servidor.
+const CHAVE_REMOVIDOS = 'studio-audax:caixa:removidos:v1'
+
+function ehListaIds(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every((id) => typeof id === 'string')
+}
+
+function gravarRemovidos(ids: Set<string>): void {
+  salvarJSON(CHAVE_REMOVIDOS, Array.from(ids))
+}
 
 function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -447,7 +458,13 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       carregarJSON<unknown>(CHAVE_AUDITORIA, null, Array.isArray) === null,
   )
   const alteradosLancamentos = useRef<Set<string>>(new Set())
-  const removidosLancamentos = useRef<Set<string>>(new Set())
+  const removidosLancamentos = useRef<Set<string>>(
+    new Set(
+      instalacaoNova
+        ? []
+        : carregarJSON<string[]>(CHAVE_REMOVIDOS, [], ehListaIds),
+    ),
+  )
   const alteradosFechamentos = useRef<Set<string>>(new Set())
   const alteradosAuditoria = useRef<Set<string>>(new Set())
   const lancamentosLocais = useRef<Lancamento[]>(lancamentos)
@@ -463,6 +480,14 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     auditoriaLocal.current = auditoria
   }, [auditoria])
+
+  // Instalação nova: tombstone gravado por outra instalação não vale aqui —
+  // ele apagaria registro do servidor sem relação com esta máquina.
+  useEffect(() => {
+    if (!instalacaoNova) return
+    if (carregarJSON<unknown>(CHAVE_REMOVIDOS, null, ehListaIds) === null) return
+    gravarRemovidos(new Set())
+  }, [instalacaoNova])
 
   // Supabase é a fonte oficial do Caixa, mas o local nunca é substituído: a
   // integração une os dois lados, reenvia as pendências e o resultado é
@@ -508,6 +533,23 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
             instalacaoNova,
           ),
         )
+
+        // Tombstone sincronizado com o servidor: o que já não existe lá é
+        // descartado; o que ainda aparece (remoção que não chegou a valer) é
+        // apagado de novo — idempotente — e segue protegido nesta máquina.
+        const idsRemotos = new Set(base.lancamentos.map((l) => l.id))
+        let tombstoneMudou = false
+        for (const id of Array.from(removidosLancamentos.current)) {
+          if (idsRemotos.has(id)) {
+            void removerLancamento(id).catch(() =>
+              avisarFalhaSincronizacao(CHAVE_LANCAMENTOS),
+            )
+            continue
+          }
+          removidosLancamentos.current.delete(id)
+          tombstoneMudou = true
+        }
+        if (tombstoneMudou) gravarRemovidos(removidosLancamentos.current)
       })
       .catch((erro) => {
         // leitura remota indisponível: mantém o caixa local intacto e não
@@ -884,6 +926,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     (lancamentoId: string): void => {
       if (!lancamentoId) return
       removidosLancamentos.current.add(lancamentoId)
+      gravarRemovidos(removidosLancamentos.current)
       setLancamentos((atual) => atual.filter((l) => l.id !== lancamentoId))
       sincronizar(CHAVE_LANCAMENTOS, () => removerLancamento(lancamentoId))
     },

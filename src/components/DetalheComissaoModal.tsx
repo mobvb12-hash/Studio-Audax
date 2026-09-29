@@ -83,9 +83,13 @@ export default function DetalheComissaoModal({
     [lancamentos, profissionalNome, periodo],
   )
 
-  const comissaoTotal = fechamento
-    ? fechamento.comissao
-    : calcularComissao(producao.liquido, config.percentual)
+  const comissaoViva = calcularComissao(producao.liquido, config.percentual)
+  const comissaoTotal = fechamento ? fechamento.comissao : comissaoViva
+  // Divergência entre o snapshot congelado e a produção atual (o fechamento
+  // não recalcula; apenas expõe que o fecho ficou para trás).
+  const divergente =
+    fechamento !== undefined &&
+    Math.abs(comissaoViva - fechamento.comissao) > 0.005
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -164,10 +168,29 @@ export default function DetalheComissaoModal({
               {formatarBRL(comissaoTotal)}
             </p>
             <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
-              Comissão
+              {fechamento ? 'Comissão (fechada)' : 'Comissão'}
             </p>
           </div>
         </div>
+
+        {fechamento && (
+          <div className="mt-3 space-y-1.5">
+            <p className="rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#4A4436]">
+              Comissão fechada: {formatarBRL(fechamento.comissao)} — snapshot
+              congelado em{' '}
+              {new Date(fechamento.fechadoEm).toLocaleDateString('pt-BR')}.
+              Valor do fechamento permanece congelado até reabertura.
+            </p>
+            {divergente && (
+              <p className="rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#4A4436]">
+                Produção atual diferente do fechamento: produção atual{' '}
+                {formatarBRL(comissaoViva)} contra{' '}
+                {formatarBRL(fechamento.comissao)} fechados. O valor do
+                fechamento permanece congelado até reabertura.
+              </p>
+            )}
+          </div>
+        )}
 
         {(producao.qtdEstornos > 0 || producao.descontos > 0) && (
           <p className="mt-3 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#4A4436]">

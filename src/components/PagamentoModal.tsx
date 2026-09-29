@@ -4,7 +4,7 @@ import { useAgenda } from '@/modules/agenda/store'
 import type { Agendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
-import type { FormaPagamento } from '@/modules/caixa/types'
+import type { FormaPagamento, Lancamento } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useEstoque } from '@/modules/estoque/store'
 import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
@@ -38,7 +38,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
   const { servicos } = useServicos()
   const { clientes } = useClientes()
   const { produtos } = useProdutos()
-  const { saidaPorVenda } = useEstoque()
+  const { saidaPorVenda, reverterVenda } = useEstoque()
 
   const preco = servicos.find((s) => s.nome === agendamento.servico)?.preco ?? 0
   const clienteId = clientes.find(
@@ -196,6 +196,8 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     salvandoRef.current = true
     let pagamentoId = ''
     let vendaId = ''
+    /** Guarda a venda criada para poder devolver a baixa no rollback. */
+    let vendaCriada: Lancamento | undefined
     try {
       const pagamento = registrarPagamento({
         agendamentoId: agendamento.id,
@@ -229,6 +231,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           profissional: agendamento.profissional,
         })
         vendaId = venda.id
+        vendaCriada = venda
         // Baixa de estoque — idempotente por venda, atômica por venda
         saidaPorVenda(venda.id, venda.data, venda.itens ?? [])
       }
@@ -238,9 +241,31 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       // Rollback total: desfaz o que já foi gravado (pagamento e/ou venda
       // de produtos) para a operação não ficar parcial — sem estado em
       // meio termo, o usuário pode tentar de novo livremente.
+      //
+      // A baixa de estoque pode já ter acontecido quando a falha vem DEPOIS
+      // dela (mudarStatus/onFechar). Nesse caso o estoque é devolvido antes
+      // de remover os lançamentos, senão ficaria saldo menor sem venda e o
+      // retry baixaria de novo. `reverterVenda` é idempotente e não faz nada
+      // quando não houve baixa, então o caminho de falha ANTES da baixa
+      // continua intocado.
+      const erroOriginal =
+        e instanceof Error ? e.message : 'Não foi possível registrar.'
+      let erroDaReversao = ''
+      if (vendaCriada) {
+        try {
+          reverterVenda(vendaCriada)
+        } catch (reversao) {
+          erroDaReversao =
+            reversao instanceof Error ? reversao.message : 'erro desconhecido'
+        }
+      }
       if (vendaId) desfazerLancamento(vendaId)
       if (pagamentoId) desfazerLancamento(pagamentoId)
-      setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
+      setErro(
+        erroDaReversao
+          ? `${erroOriginal} Não foi possível devolver o estoque automaticamente: ${erroDaReversao}.`
+          : erroOriginal,
+      )
     } finally {
       salvandoRef.current = false
     }

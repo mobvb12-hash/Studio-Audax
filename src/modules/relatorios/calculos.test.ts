@@ -363,3 +363,128 @@ describe('produtosDoPeriodo — desconto do PDV rateado (auditoria F19)', () => 
     expect(r.qtdTotalVendida).toBe(0)
   })
 })
+
+// Auditoria C5/C6 — 🟠1: o PDV grava `itens[].produtoId` e a venda avulsa do
+// Caixa grava só o nome. O mesmo produto vendido pelos dois caminhos no
+// período precisa ser SOMADO (a chave não pode escolher só uma das origens)
+// e nenhuma venda pode ser contada duas vezes.
+describe('produtosDoPeriodo — PDV e venda avulsa do mesmo produto (C5/C6 🟠1)', () => {
+  const PERIODO_PROD: Periodo = { inicio: '2026-06-01', fim: '2026-06-30' }
+
+  function produto(
+    overrides: Partial<Produto> & { id: string; nome: string },
+  ): Produto {
+    return {
+      preco: 30,
+      custo: 12,
+      estoque: 5,
+      estoqueMinimo: 2,
+      categoria: '',
+      foto: '',
+      ativo: true,
+      criadoEm: '2026-06-01T00:00:00.000Z',
+      atualizadoEm: '2026-06-01T00:00:00.000Z',
+      ...overrides,
+    }
+  }
+
+  /** Venda do PDV/fechamento — chaveada por produtoId. */
+  function vendaPdv(): Lancamento {
+    return lanc({
+      id: 'v-pdv',
+      data: '2026-06-15',
+      origem: 'produto',
+      valor: 150,
+      desconto: 0,
+      valorLiquido: 150,
+      itens: [
+        { produtoId: 'p1', produto: 'Pomada', quantidade: 3, preco: 50 },
+      ],
+    })
+  }
+
+  /** Venda avulsa do Caixa — chaveada pelo nome normalizado. */
+  function vendaAvulsa(): Lancamento {
+    return lanc({
+      id: 'v-avulsa',
+      data: '2026-06-20',
+      origem: 'produto',
+      produto: 'Pomada',
+      quantidade: 2,
+      valor: 60,
+      desconto: 0,
+      valorLiquido: 60,
+    })
+  }
+
+  it('soma PDV e venda avulsa do mesmo produto no mesmo período', () => {
+    const r = produtosDoPeriodo(
+      [vendaPdv(), vendaAvulsa()],
+      [produto({ id: 'p1', nome: 'Pomada' })],
+      PERIODO_PROD,
+    )
+
+    const pomada = r.linhas.find((l) => l.id === 'p1')!
+    expect(pomada.qtdVendida).toBe(5)
+    expect(pomada.receita).toBe(210)
+    expect(r.qtdTotalVendida).toBe(5)
+    expect(r.receitaTotal).toBe(210)
+
+    // o KPI de Receita de produtos continua batendo com a soma por produto
+    expect(resumoFinanceiro([vendaPdv(), vendaAvulsa()], PERIODO_PROD).receitaProdutos).toBe(210)
+  })
+
+  it('só a venda avulsa também soma normalmente', () => {
+    const r = produtosDoPeriodo(
+      [vendaAvulsa()],
+      [produto({ id: 'p1', nome: 'Pomada' })],
+      PERIODO_PROD,
+    )
+    expect(r.linhas[0].qtdVendida).toBe(2)
+    expect(r.linhas[0].receita).toBe(60)
+    expect(r.receitaTotal).toBe(60)
+  })
+
+  it('uma venda individual não é contada duas vezes', () => {
+    // mesma venda, duas chaves de identificação (id e nome) — só uma é usada
+    const r = produtosDoPeriodo(
+      [vendaPdv()],
+      [produto({ id: 'p1', nome: 'Pomada' })],
+      PERIODO_PROD,
+    )
+    expect(r.linhas[0].qtdVendida).toBe(3)
+    expect(r.linhas[0].receita).toBe(150)
+    expect(r.qtdTotalVendida).toBe(3)
+    expect(r.receitaTotal).toBe(150)
+
+    const avulsa = produtosDoPeriodo(
+      [vendaAvulsa()],
+      [produto({ id: 'p1', nome: 'Pomada' })],
+      PERIODO_PROD,
+    )
+    expect(avulsa.linhas[0].qtdVendida).toBe(2)
+    expect(avulsa.receitaTotal).toBe(60)
+  })
+
+  it('vendas de produtos diferentes não se misturam ao somar as chaves', () => {
+    const gel = lanc({
+      id: 'v-gel',
+      data: '2026-06-21',
+      origem: 'produto',
+      produto: 'Gel',
+      quantidade: 1,
+      valor: 30,
+      valorLiquido: 30,
+    })
+    const r = produtosDoPeriodo(
+      [vendaPdv(), gel],
+      [produto({ id: 'p1', nome: 'Pomada' }), produto({ id: 'p2', nome: 'Gel' })],
+      PERIODO_PROD,
+    )
+    expect(r.linhas.find((l) => l.id === 'p1')!.qtdVendida).toBe(3)
+    expect(r.linhas.find((l) => l.id === 'p1')!.receita).toBe(150)
+    expect(r.linhas.find((l) => l.id === 'p2')!.qtdVendida).toBe(1)
+    expect(r.linhas.find((l) => l.id === 'p2')!.receita).toBe(30)
+    expect(r.receitaTotal).toBe(180)
+  })
+})

@@ -223,6 +223,13 @@ export default function Comissoes() {
                               Fechada {formatarBRL(fechamento.comissao)}
                             </span>
                           )}
+                          {fechamento &&
+                            Math.abs(linha.comissao - fechamento.comissao) >
+                              0.005 && (
+                              <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2 py-0.5 text-[10px] font-semibold text-[#4A4436]">
+                                Produção atual diferente do fechamento
+                              </span>
+                            )}
                         </span>
                       </span>
                     </button>

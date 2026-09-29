@@ -447,14 +447,20 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
    * Aplica novo valor de estoque — usado apenas pelo módulo Estoque (com
    * histórico). Grava o saldo absoluto, então reenviar a mesma aplicação é
    * idempotente: o saldo não muda duas vezes.
+   *
+   * `anterior` é o valor que o chamador acabou de aplicar no mesmo lote de
+   * estado (antes do re-render). Sem essa referência, uma devolução que
+   * retorna ao saldo original seria comparada com o closure antigo e
+   * descartada como "já aplicada".
    */
   const aplicarEstoque = useCallback(
-    (id: string, estoque: number) => {
+    (id: string, estoque: number, anterior?: number) => {
       if (!inteiroNaoNegativo(estoque)) {
         throw new Error('Estoque inválido.')
       }
       const alvo = produtos.find((p) => p.id === id)
-      if (!alvo || alvo.estoque === estoque) return
+      if (!alvo) return
+      if ((anterior ?? alvo.estoque) === estoque) return
       const atualizado: Produto = {
         ...alvo,
         estoque,
