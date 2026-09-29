@@ -405,3 +405,72 @@ describe('Profissionais — cadastro local e Supabase', () => {
     await waitFor(() => expect(salvoLocal()[0]?.nome).toBe('Nome Local'))
   })
 })
+
+// Tombstone de exclusão (mesmo padrão do Caixa): a remoção precisa
+// sobreviver ao F5 — sem ele o registro volta pela lista do servidor e a
+// exclusão "não gruda". Idempotente: reaplicar não afeta quem não foi
+// excluído e o tombstone é limpo quando o Supabase converge.
+describe('Profissionais — exclusão persistida (sem ressurreição no F5)', () => {
+  const CHAVE_TOMB = 'studio-audax:profissionais:removidos:v1'
+
+  it('remoção não confirmada pelo servidor não volta no F5 e é reaplicada até convergir', async () => {
+    gravarLocal([prof('p-1', 'Ana Local'), prof('p-2', 'Bruno Local')])
+    remoto.linhas = [prof('p-1', 'Ana Local'), prof('p-2', 'Bruno Local')]
+    const primeiro = montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(2))
+
+    // servidor recusa a exclusão (ex.: rede fora)
+    remoto.falhaEscrita = true
+    await act(async () => {
+      await ctx.remover('p-1')
+    })
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    // a remoção fica registrada em tombstone; servidor continua com a linha
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(CHAVE_TOMB) ?? '[]')).toEqual([
+        'p-1',
+      ]),
+    )
+    expect(remoto.ids()).toEqual(['p-1', 'p-2'])
+
+    // F5: servidor volta ao normal mas ainda devolve o registro excluído
+    primeiro.unmount()
+    remoto.falhaEscrita = false
+    const segundo = montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    // não ressuscita; o p-2 (nunca excluído) segue intacto
+    expect(ctx.profissionais.map((p) => p.id)).toEqual(['p-2'])
+    await waitFor(() => expect(salvoLocal().map((p) => p.id)).toEqual(['p-2']))
+    // reaplicação idempotente da exclusão pendente
+    expect(repositorio.removerProfissional).toHaveBeenCalledWith('p-1')
+    expect(repositorio.removerProfissional).not.toHaveBeenCalledWith('p-2')
+    await waitFor(() => expect(remoto.ids()).toEqual(['p-2']))
+
+    // servidor convergiu: a próxima carga limpa o tombstone
+    segundo.unmount()
+    montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(CHAVE_TOMB) ?? '[]')).toEqual([]),
+    )
+    expect(ctx.profissionais.map((p) => p.id)).toEqual(['p-2'])
+  })
+
+  it('exclusão confirmada não volta no F5 e não afeta os demais cadastros', async () => {
+    gravarLocal([prof('p-1', 'Ana Local'), prof('p-2', 'Bruno Local')])
+    remoto.linhas = [prof('p-1', 'Ana Local'), prof('p-2', 'Bruno Local')]
+    const primeiro = montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(2))
+
+    await act(async () => {
+      await ctx.remover('p-1')
+    })
+    await waitFor(() => expect(remoto.ids()).toEqual(['p-2']))
+
+    primeiro.unmount()
+    montar()
+    await waitFor(() => expect(ctx.profissionais).toHaveLength(1))
+    expect(ctx.profissionais.map((p) => p.id)).toEqual(['p-2'])
+    expect(ctx.profissionais[0]?.nome).toBe('Bruno Local')
+  })
+})

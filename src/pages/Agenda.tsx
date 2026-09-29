@@ -89,13 +89,35 @@ export default function Agenda({ onNovo }: Props) {
   )
 
   const colunas = useMemo<Coluna[]>(() => {
-    const lista: Coluna[] = profissionais.map((p) => ({
-      nome: p.nome,
-      foto: p.foto ?? '',
-    }))
+    // Uma coluna por nome: cadastros duplicados compartilham a coluna e o
+    // registro ativo é o representante (foto e status). A ordem segue o
+    // cadastro (nome); o histórico nunca é alterado.
+    const escolhidos = new Map<string, { coluna: Coluna; ativo: boolean }>()
+    for (const p of profissionais) {
+      const atual = escolhidos.get(p.nome)
+      if (!atual) {
+        escolhidos.set(p.nome, {
+          coluna: { nome: p.nome, foto: p.foto ?? '' },
+          ativo: p.ativo,
+        })
+        continue
+      }
+      if (p.ativo && !atual.ativo) {
+        escolhidos.set(p.nome, {
+          coluna: { nome: p.nome, foto: p.foto ?? '' },
+          ativo: true,
+        })
+      }
+    }
+    const lista: Coluna[] = [...escolhidos.values()].map((e) => e.coluna)
     for (const ag of doDia) {
-      if (!lista.some((c) => c.nome === ag.profissional))
+      if (!escolhidos.has(ag.profissional)) {
+        escolhidos.set(ag.profissional, {
+          coluna: { nome: ag.profissional, foto: '' },
+          ativo: false,
+        })
         lista.push({ nome: ag.profissional, foto: '' })
+      }
     }
     return lista
   }, [profissionais, doDia])
@@ -134,9 +156,13 @@ export default function Agenda({ onNovo }: Props) {
   // Clique rápido na semana agenda com o primeiro profissional ativo
   const profissionalPadrao =
     (profissionais.find((p) => p.ativo) ?? profissionais[0])?.nome ?? ''
-  // Profissional inativo mantém coluna e histórico, apenas sinalizado
+  // Profissional inativo mantém coluna e histórico, apenas sinalizado.
+  // Com duplicidade de nome, a marca só aparece quando NENHUM cadastro
+  // ativo tem esse nome — o registro ativo representa a coluna. Nome que
+  // só existe em agendamento (sem cadastro) segue sem marca, como antes.
   const profissionalInativo = (nome: string) =>
-    profissionais.some((p) => p.nome === nome && !p.ativo)
+    profissionais.some((p) => p.nome === nome) &&
+    !profissionais.some((p) => p.nome === nome && p.ativo)
 
   const botaoNav =
     'rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-semibold hover:bg-[#F3ECDA]'
@@ -297,6 +323,18 @@ export default function Agenda({ onNovo }: Props) {
                       style={{ gridColumn: c + 2, gridRow: i + 2 }}
                       aria-disabled="true"
                       aria-label={`Bloqueado ${slot.hora} com ${col.nome}`}
+                    />
+                  )
+                if (profissionalInativo(col.nome))
+                  return (
+                    // Coluna só de inativos: mantém o histórico na grade,
+                    // mas não abre novos agendamentos.
+                    <div
+                      key={`${slot.hora}-${col.nome}`}
+                      className="cursor-default border-r border-b border-[#EFE7D3] bg-[#F5EFE0]"
+                      style={{ gridColumn: c + 2, gridRow: i + 2 }}
+                      aria-disabled="true"
+                      aria-label={`Indisponível ${slot.hora} com ${col.nome} — inativo`}
                     />
                   )
                 return (

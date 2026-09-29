@@ -28,6 +28,17 @@ import {
 } from '@/services/supabase/profissionais'
 
 const CHAVE_STORAGE = 'studio-audax:profissionais:v1'
+// Tombstone de profissional removido: a remoção precisa sobreviver ao F5 —
+// sem ele a próxima carga devolve o registro pela lista do servidor.
+const CHAVE_REMOVIDOS = 'studio-audax:profissionais:removidos:v1'
+
+function ehListaIds(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every((id) => typeof id === 'string')
+}
+
+function gravarRemovidos(ids: Set<string>): void {
+  salvarJSON(CHAVE_REMOVIDOS, Array.from(ids))
+}
 
 type ProfissionaisContexto = {
   profissionais: Profissional[]
@@ -87,9 +98,18 @@ const PLACEHOLDERS = [
   { id: 'prof-diego', antigo: 'Diego', novo: 'Ítalo Santos' },
 ] as const
 
-function migrarPlaceholder(p: Profissional): Profissional {
+function migrarPlaceholder(
+  p: Profissional,
+  nomesExistentes: Set<string>,
+): Profissional {
   const ph = PLACEHOLDERS.find((x) => x.id === p.id && x.antigo === p.nome)
-  return ph ? { ...p, nome: ph.novo } : p
+  if (!ph) return p
+  // Já existe cadastro com o nome de destino (ex.: o "Cleiton Silva" criado
+  // pelo usuário antes desta migração): preserva o registro existente e
+  // mantém o placeholder intacto — renomear criaria um segundo cadastro
+  // igual. Decisão estável a cada carga (idempotente).
+  if (nomesExistentes.has(nomeChave(ph.novo))) return p
+  return { ...p, nome: ph.novo }
 }
 
 function carregar(): Profissional[] {
@@ -99,11 +119,11 @@ function carregar(): Profissional[] {
   if (Array.isArray(bruto)) {
     // lista salva (mesmo vazia) é preservada — o seed só entra em
     // instalação nova ou storage corrompido
-    const migrada = (bruto as Partial<Profissional>[])
+    const registros = (bruto as Partial<Profissional>[])
       .map(normalizar)
       .filter((p): p is Profissional => p !== null)
-      .map(migrarPlaceholder)
-    return ordenar(migrada)
+    const nomesExistentes = new Set(registros.map((p) => nomeChave(p.nome)))
+    return ordenar(registros.map((p) => migrarPlaceholder(p, nomesExistentes)))
   }
   const agora = new Date().toISOString()
   return SEED.map((nome) => ({
@@ -271,12 +291,29 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
     () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
   )
   const alterados = useRef<Set<string>>(new Set())
-  const removidos = useRef<Set<string>>(new Set())
+  // Tombstone carregado do storage: exclusões feitas em sessões anteriores
+  // seguem protegidas. Em instalação nova ele não vale (apagaria registro
+  // do servidor sem relação com esta máquina).
+  const removidos = useRef<Set<string>>(
+    new Set(
+      instalacaoNova
+        ? []
+        : carregarJSON<string[]>(CHAVE_REMOVIDOS, [], ehListaIds),
+    ),
+  )
   const listaLocal = useRef<Profissional[]>(profissionais)
 
   useEffect(() => {
     listaLocal.current = profissionais
   }, [profissionais])
+
+  // Instalação nova: tombstone gravado por outra instalação não vale aqui.
+  useEffect(() => {
+    if (!instalacaoNova) return
+    if (carregarJSON<unknown>(CHAVE_REMOVIDOS, null, ehListaIds) === null)
+      return
+    gravarRemovidos(new Set())
+  }, [instalacaoNova])
 
   // Supabase é a fonte oficial, mas a lista local nunca é substituída:
   // a integração une os dois lados, reenvia as pendências locais e o
@@ -299,6 +336,24 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
               instalacaoNova,
             ),
           )
+
+          // Tombstone sincronizado com a lista oficial: id que sumiu é
+          // descartado; id que ainda aparece (remoção que não chegou a
+          // valer) é apagado de novo — idempotente — e segue protegido
+          // nesta máquina.
+          const idsOficiais = new Set(base.map((p) => p.id))
+          let tombstoneMudou = false
+          for (const id of Array.from(removidos.current)) {
+            if (idsOficiais.has(id)) {
+              void removerProfissional(id).catch(() =>
+                avisarFalhaSincronizacao(CHAVE_STORAGE),
+              )
+              continue
+            }
+            removidos.current.delete(id)
+            tombstoneMudou = true
+          }
+          if (tombstoneMudou) gravarRemovidos(removidos.current)
         }
       })
       .catch((erro) => {
@@ -439,6 +494,9 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       removidos.current.add(id)
       alterados.current.delete(id)
+      // Exclusão persistida: sem o tombstone o próximo F5 devolveria o
+      // registro pela lista do servidor (remoção remota pendente).
+      gravarRemovidos(removidos.current)
       setProfissionais((atual) => atual.filter((p) => p.id !== id))
       if (temSupabase) {
         try {

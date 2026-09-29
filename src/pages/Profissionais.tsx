@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
+import { normalizarTexto } from '@/lib/moeda'
 import { useAgenda } from '@/modules/agenda/store'
 import { useCaixa } from '@/modules/caixa/store'
 import { useComissoesOpcional } from '@/modules/comissoes/store'
@@ -10,12 +11,32 @@ import { useProfissionais } from '@/modules/profissionais/store'
 import { profissionalEmUso } from '@/modules/profissionais/regras'
 import type { Profissional } from '@/modules/profissionais/types'
 
+/** Rótulo único para botões de cadastros que dividem o mesmo nome. */
+function identificacao(prof: Profissional): string {
+  const criado = new Date(prof.criadoEm)
+  const quando = Number.isNaN(criado.getTime())
+    ? ''
+    : `criado em ${criado.toLocaleDateString('pt-BR')} · `
+  return `${quando}id ${prof.id}`
+}
+
+function rotuloAcao(
+  acao: string,
+  prof: Profissional,
+  repetido: boolean,
+): string {
+  return repetido ? `${acao} ${prof.nome} (${identificacao(prof)})` : `${acao} ${prof.nome}`
+}
+
 export default function Profissionais() {
   const { profissionais, remover, alternarAtivo } = useProfissionais()
   const { agendamentos, renomearProfissional: renomearNaAgenda } = useAgenda()
   const { lancamentos, renomearProfissional: renomearNoCaixa } = useCaixa()
-  const { fechamentos, renomearProfissional: renomearNasComissoes } =
-    useComissoesOpcional()
+  const {
+    fechamentos,
+    configs,
+    renomearProfissional: renomearNasComissoes,
+  } = useComissoesOpcional()
   const { renomearProfissional: renomearNaEspera } = useEsperaOpcional()
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Profissional | null>(null)
@@ -29,6 +50,22 @@ export default function Profissionais() {
     }
     return mapa
   }, [agendamentos])
+
+  // Cadastros que dividem o mesmo nome (duplicidade legada): recebem
+  // identificação visual e aria-label próprios para o usuário nunca
+  // excluir/inativar o registro errado. O nome histórico não muda.
+  const repetidos = useMemo(() => {
+    const porNome = new Map<string, number>()
+    for (const p of profissionais) {
+      const chave = normalizarTexto(p.nome)
+      porNome.set(chave, (porNome.get(chave) ?? 0) + 1)
+    }
+    return new Set(
+      profissionais
+        .filter((p) => (porNome.get(normalizarTexto(p.nome)) ?? 0) > 1)
+        .map((p) => p.id),
+    )
+  }, [profissionais])
 
   return (
     <div>
@@ -71,6 +108,11 @@ export default function Profissionais() {
                 <p className="truncate text-sm font-bold text-[#1C1A15]">
                   {prof.nome}
                 </p>
+                {repetidos.has(prof.id) && (
+                  <p className="mt-0.5 text-[11px] font-semibold text-[#8A6A14]">
+                    Nome repetido · {identificacao(prof)}
+                  </p>
+                )}
                 <p className="mt-0.5 text-[13px] text-[#4A4436]">
                   {prof.telefone || 'Sem telefone'}
                   {prof.email ? ` · ${prof.email}` : ''}
@@ -98,6 +140,7 @@ export default function Profissionais() {
                     setModalAberto(true)
                   }}
                   className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  aria-label={rotuloAcao('Editar', prof, repetidos.has(prof.id))}
                 >
                   Editar
                 </button>
@@ -105,7 +148,11 @@ export default function Profissionais() {
                   type="button"
                   onClick={() => alternarAtivo(prof.id)}
                   className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  aria-label={`${prof.ativo ? 'Inativar' : 'Reativar'} ${prof.nome}`}
+                  aria-label={rotuloAcao(
+                    prof.ativo ? 'Inativar' : 'Reativar',
+                    prof,
+                    repetidos.has(prof.id),
+                  )}
                 >
                   {prof.ativo ? 'Inativar' : 'Reativar'}
                 </button>
@@ -113,7 +160,7 @@ export default function Profissionais() {
                   type="button"
                   onClick={() => setExcluindo(prof)}
                   className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-                  aria-label={`Excluir ${prof.nome}`}
+                  aria-label={rotuloAcao('Excluir', prof, repetidos.has(prof.id))}
                 >
                   Excluir
                 </button>
@@ -139,18 +186,24 @@ export default function Profissionais() {
       {excluindo && (
         <ConfirmarModal
           titulo="Excluir profissional"
-          texto={`Excluir “${excluindo.nome}”? Os agendamentos e recebimentos já feitos são preservados no histórico.`}
+          texto={`Excluir “${excluindo.nome}”${
+            repetidos.has(excluindo.id) ? ` (${identificacao(excluindo)})` : ''
+          }? Os agendamentos e recebimentos já feitos são preservados no histórico.`}
           rotuloConfirmar="Sim, excluir"
           perigo
           onConfirmar={() => {
+            // Sempre o ID exato da tela: com nome duplicado, o histórico
+            // por nome é compartilhado e as referências por ID (fechamento
+            // e configuração de comissão) pertencem só a este cadastro.
             const uso = profissionalEmUso(excluindo, {
               agendamentos,
               lancamentos,
               fechamentos,
+              configs,
             })
             if (uso.emUso) {
               throw new Error(
-                `“${excluindo.nome}” já aparece em ${uso.agendamentos} agendamento(s), ${uso.lancamentos} lançamento(oes) do caixa e ${uso.comissoes} fechamento(s) de comissão — não é possível excluí-lo. Use “Inativar” para retirá-lo de novos agendamentos.`,
+                `“${excluindo.nome}” já aparece em ${uso.agendamentos} agendamento(s), ${uso.lancamentos} lançamento(oes) do caixa, ${uso.comissoes} fechamento(s) de comissão e ${uso.configuracoes} configuração(ões) de comissão — não é possível excluí-lo. Use “Inativar” para retirá-lo de novos agendamentos.`,
               )
             }
             remover(excluindo.id)

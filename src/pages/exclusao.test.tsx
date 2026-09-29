@@ -268,3 +268,104 @@ describe('Exclusão bloqueada por uso (auditoria F2/F3)', () => {
     ).toHaveLength(1)
   })
 })
+
+// Exclusão segura do cadastro duplicado: o ID exato da tela é o único que
+// sai; a configuração de comissão (indexada por profissionalId) também
+// bloqueia — quem tem vínculo só pode ser inativado.
+describe('Exclusão de profissional — ID exato e configuração de comissão', () => {
+  const CHAVE_PROFS = 'studio-audax:profissionais:v1'
+  const CHAVE_CONFIGS = 'studio-audax:comissoes:configs:v1'
+
+  function semearProfissionais(
+    lista: { id: string; nome: string; ativo?: boolean }[],
+  ) {
+    localStorage.setItem(
+      CHAVE_PROFS,
+      JSON.stringify(
+        lista.map((p, i) => ({
+          id: p.id,
+          nome: p.nome,
+          telefone: '',
+          email: '',
+          foto: '',
+          ativo: p.ativo ?? true,
+          criadoEm: `2026-01-0${i + 1}T00:00:00.000Z`,
+        })),
+      ),
+    )
+  }
+
+  function montarProfissionais() {
+    return render(
+      <ProfissionaisProvider>
+        <AgendaProvider>
+          <CaixaProvider>
+            <ComissoesProvider>
+              <Profissionais />
+            </ComissoesProvider>
+          </CaixaProvider>
+        </AgendaProvider>
+      </ProfissionaisProvider>,
+    )
+  }
+
+  it('profissional com configuração de comissão não é excluído', () => {
+    semearProfissionais([{ id: 'prof-1', nome: 'Ana Lima' }])
+    localStorage.setItem(
+      CHAVE_CONFIGS,
+      JSON.stringify([
+        { profissionalId: 'prof-1', percentual: 35, ativo: true },
+      ]),
+    )
+    montarProfissionais()
+
+    fireEvent.click(screen.getByLabelText('Excluir Ana Lima'))
+    expect(screen.getByText('Excluir profissional')).toBeTruthy()
+    fireEvent.click(screen.getByText('Sim, excluir'))
+
+    const erro = screen.getByText(/já aparece em/)
+    expect(erro.textContent).toContain('0 agendamento(s)')
+    expect(erro.textContent).toContain('0 lançamento(oes) do caixa')
+    expect(erro.textContent).toContain('1 configuração(ões) de comissão')
+    expect(erro.textContent).toContain('Use “Inativar”')
+    // modal continua aberto e o cadastro permanece
+    expect(screen.getByText('Excluir profissional')).toBeTruthy()
+    expect(JSON.parse(localStorage.getItem(CHAVE_PROFS) ?? '[]')).toHaveLength(
+      1,
+    )
+  })
+
+  it('com nome duplicado, exclui apenas o ID exato escolhido na tela', async () => {
+    semearProfissionais([
+      { id: 'prof-a', nome: 'Cleiton Silva', ativo: true },
+      { id: 'prof-b', nome: 'Cleiton Silva', ativo: false },
+    ])
+    montarProfissionais()
+
+    // rótulos únicos: dá para distinguir qual registro será excluído
+    const botoes = screen.getAllByLabelText(/^Excluir Cleiton Silva/)
+    expect(botoes).toHaveLength(2)
+    const rotulos = botoes.map((b) => b.getAttribute('aria-label'))
+    expect(new Set(rotulos).size).toBe(2)
+    // as duas linhas são sinalizadas sem mudar o nome histórico
+    expect(
+      screen.getAllByText(/Nome repetido · .*id prof-[ab]/),
+    ).toHaveLength(2)
+
+    fireEvent.click(screen.getByLabelText(/Excluir Cleiton Silva .*id prof-b/))
+    // o modal identifica o registro exato que será excluído
+    expect(
+      screen.getByText(/Excluir “Cleiton Silva” .*id prof-b\)\?/),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByText('Sim, excluir'))
+
+    await waitFor(() => {
+      const restantes = JSON.parse(localStorage.getItem(CHAVE_PROFS) ?? '[]')
+      expect(restantes.map((p: { id: string }) => p.id)).toEqual(['prof-a'])
+    })
+    // o cadastro com o mesmo nome permanece — não apagou o registro errado
+    // (sem o gêmeo, o rótulo volta a ser o nome puro)
+    expect(screen.getByLabelText('Excluir Cleiton Silva')).toBeTruthy()
+    expect(screen.queryByLabelText(/id prof-b/)).toBeNull()
+  })
+})

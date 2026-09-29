@@ -34,10 +34,16 @@ export default function NovoAgendamentoModal({
     () => servicos.filter((s) => s.ativo),
     [servicos],
   )
-  const profissionaisAtivos = useMemo(
-    () => profissionais.filter((p) => p.ativo),
-    [profissionais],
-  )
+  const profissionaisAtivos = useMemo(() => {
+    // Uma opção por nome: com duplicidade de cadastro, o registro ativo
+    // é o representante da escolha (o select e o agendamento usam nome).
+    const vistos = new Set<string>()
+    return profissionais.filter((p) => {
+      if (!p.ativo || vistos.has(p.nome)) return false
+      vistos.add(p.nome)
+      return true
+    })
+  }, [profissionais])
   const [cliente, setCliente] = useState(clienteInicial ?? '')
   const [telefone, setTelefone] = useState(
     () => (clienteInicial ? porNome(clienteInicial)?.telefone ?? '' : ''),
@@ -97,7 +103,12 @@ export default function NovoAgendamentoModal({
       setErro('Cadastre um profissional no módulo Profissionais antes de agendar.')
       return
     }
-    const profSel = profissionais.find((p) => p.nome === profissional)
+    // Com duplicidade de nome, o cadastro ativo resolve a escolha — o
+    // inativo não pode bloquear o agendamento do registro ativo, nem
+    // sumir da validação (só quando NENHUM registro está ativo é recusa).
+    const profSel =
+      profissionais.find((p) => p.nome === profissional && p.ativo) ??
+      profissionais.find((p) => p.nome === profissional)
     if (!profSel) {
       setErro('Cadastre um profissional no módulo Profissionais antes de agendar.')
       return

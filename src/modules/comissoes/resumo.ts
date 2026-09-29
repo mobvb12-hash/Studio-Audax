@@ -44,14 +44,35 @@ export function linhasDoPeriodo(
       .map((l) => l.profissional as string),
   )
 
-  const base: ProfissionalBasico[] = profissionais.map((p) => ({
-    id: p.id,
-    nome: p.nome,
-    foto: p.foto,
-    ativo: p.ativo,
-  }))
+  // Uma linha por nome: a produção é calculada pelo NOME do profissional e
+  // cadastros duplicados (mesmo nome) fariam o período contar em dobro nos
+  // totais. O registro ativo é o representante (config e fechamento são
+  // indexados por ID). Valores históricos e regras de comissão não mudam.
+  const escolhidos = new Map<string, ProfissionalBasico>()
+  for (const p of profissionais) {
+    const atual = escolhidos.get(p.nome)
+    if (!atual) {
+      escolhidos.set(p.nome, {
+        id: p.id,
+        nome: p.nome,
+        foto: p.foto,
+        ativo: p.ativo,
+      })
+      continue
+    }
+    if (p.ativo !== false && atual.ativo === false) {
+      escolhidos.set(p.nome, {
+        id: p.id,
+        nome: p.nome,
+        foto: p.foto,
+        ativo: p.ativo,
+      })
+    }
+  }
+  const base: ProfissionalBasico[] = [...escolhidos.values()]
   for (const nome of nomesComProducao) {
-    if (!profissionais.some((p) => p.nome === nome)) {
+    if (!escolhidos.has(nome)) {
+      escolhidos.set(nome, { id: `nome:${nome}`, nome })
       base.push({ id: `nome:${nome}`, nome })
     }
   }

@@ -157,6 +157,54 @@ describe('Profissionais — store', () => {
     expect(lista[0].telefone).toBe('(11) 91111-2222')
   })
 
+  // Regressão: a migração do placeholder renomeava "Audax" → "Cleiton Silva"
+  // mesmo quando o usuário já tinha criado um "Cleiton Silva" — dois
+  // cadastros iguais na mesma tela.
+  it('migração não cria duplicado quando já existe “Cleiton Silva”', () => {
+    localStorage.setItem(
+      CHAVE,
+      JSON.stringify([
+        {
+          id: 'prof-audax',
+          nome: 'Audax',
+          telefone: '',
+          email: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'manual-1',
+          nome: 'Cleiton Silva',
+          telefone: '(11) 98888-7777',
+          email: '',
+          foto: '',
+          ativo: true,
+          criadoEm: '2026-02-02T00:00:00.000Z',
+        },
+      ]),
+    )
+    const primeiro = montar()
+    const lista = lerLista()
+    // o registro existente é preservado (id e cadastro intactos)
+    expect(lista.filter((p) => p.nome === 'Cleiton Silva')).toHaveLength(1)
+    expect(lista.find((p) => p.nome === 'Cleiton Silva')?.id).toBe('manual-1')
+    expect(lista.find((p) => p.id === 'manual-1')?.telefone).toBe(
+      '(11) 98888-7777',
+    )
+    // o placeholder não é renomeado por cima — nada é apagado
+    expect(lista.map((p) => p.nome)).toContain('Audax')
+    expect(lista.find((p) => p.id === 'prof-audax')?.nome).toBe('Audax')
+    primeiro.unmount()
+
+    // idempotente: uma nova carga mantém a mesma decisão
+    montar()
+    const recarga = lerLista()
+    expect(recarga.filter((p) => p.nome === 'Cleiton Silva')).toHaveLength(1)
+    expect(recarga.map((p) => p.nome)).toContain('Audax')
+    expect(recarga).toHaveLength(2)
+  })
+
   it('cria funcionário com telefone, e-mail e foto e grava no localStorage', async () => {
     montar()
     await act(async () => {

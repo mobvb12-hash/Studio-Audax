@@ -375,3 +375,114 @@ describe('Remarcar e Bloqueios — apenas profissionais ativos', () => {
   })
 })
 
+describe('Agenda — cadastro duplicado (mesmo nome)', () => {
+  it('um nome duplicado vira uma única coluna e o registro ativo a representa', () => {
+    semearProfissionais([
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-a' },
+      { nome: 'Cleiton Silva', ativo: true, id: 'prof-b' },
+    ])
+    env(<Agenda onNovo={vi.fn()} />)
+
+    // uma coluna só para o nome repetido (sem cabeçalho duplicado)
+    expect(screen.getAllByText('Cleiton Silva')).toHaveLength(1)
+    // o ativo representa a coluna: nenhuma marca de inativo
+    expect(screen.queryByText('Barbeiro(a) · inativo')).toBeNull()
+    // coluna disponível para novos agendamentos
+    expect(
+      screen.getAllByLabelText(/Agendar 10:00 com Cleiton Silva/),
+    ).toHaveLength(1)
+  })
+
+  it('somente inativos com o mesmo nome: coluna única, marcada e sem novos agendamentos', () => {
+    semearProfissionais([
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-a' },
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-b' },
+    ])
+    env(<Agenda onNovo={vi.fn()} />)
+
+    expect(screen.getAllByText('Cleiton Silva')).toHaveLength(1)
+    expect(screen.getByText('Barbeiro(a) · inativo')).toBeTruthy()
+    // a grade mantém o histórico, mas a célula não agenda
+    expect(
+      screen.queryByLabelText(/Agendar 10:00 com Cleiton Silva/),
+    ).toBeNull()
+    expect(
+      screen.getAllByLabelText(/Indisponível 10:00 com Cleiton Silva/),
+    ).toHaveLength(1)
+  })
+
+  it('coluna com ativo + inativo do mesmo nome continua agendável e histórico intacto', () => {
+    semearProfissionais([
+      { nome: 'Cleiton Silva', ativo: true, id: 'prof-a' },
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-b' },
+    ])
+    semearAgendamento({ profissional: 'Cleiton Silva', cliente: 'Ana Souza' })
+    env(<Agenda onNovo={vi.fn()} />)
+
+    // histórico do nome segue na grade
+    expect(screen.getByText('Ana Souza')).toBeTruthy()
+    expect(screen.getAllByText('Cleiton Silva')).toHaveLength(1)
+    expect(screen.queryByText('Barbeiro(a) · inativo')).toBeNull()
+  })
+})
+
+describe('Novo agendamento — duplicidade resolve o profissional ativo', () => {
+  it('salva com o cadastro ativo mesmo havendo inativo com o mesmo nome', () => {
+    semearProfissionais([
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-a' },
+      { nome: 'Cleiton Silva', ativo: true, id: 'prof-b' },
+    ])
+    const onFechar = vi.fn()
+    env(
+      <NovoAgendamentoModal
+        dataInicial={DIA}
+        horarioInicial="15:00"
+        profissionalInicial="Cleiton Silva"
+        onFechar={onFechar}
+      />,
+    )
+
+    // uma única opção no select (a ativa) — sem duplicar a opção
+    const select = screen.getByLabelText('Profissional') as HTMLSelectElement
+    expect(select.textContent?.match(/Cleiton Silva/g)).toHaveLength(1)
+    expect(select.value).toBe('Cleiton Silva')
+
+    fireEvent.change(screen.getByLabelText('Cliente *'), {
+      target: { value: 'Ana Souza' },
+    })
+    fireEvent.click(screen.getByText('Salvar agendamento'))
+    expect(onFechar).toHaveBeenCalled()
+    expect(ctxAgenda.agendamentos).toHaveLength(1)
+    expect(ctxAgenda.agendamentos[0].profissional).toBe('Cleiton Silva')
+  })
+
+  it('recusa quando todos os cadastros com o mesmo nome estão inativos', () => {
+    semearProfissionais([
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-a' },
+      { nome: 'Cleiton Silva', ativo: false, id: 'prof-b' },
+    ])
+    const onFechar = vi.fn()
+    env(
+      <NovoAgendamentoModal
+        dataInicial={DIA}
+        horarioInicial="15:00"
+        profissionalInicial="Cleiton Silva"
+        onFechar={onFechar}
+      />,
+    )
+
+    const select = screen.getByLabelText('Profissional') as HTMLSelectElement
+    expect(select.textContent).toContain('Sem profissionais ativos')
+
+    fireEvent.change(screen.getByLabelText('Cliente *'), {
+      target: { value: 'Ana Souza' },
+    })
+    fireEvent.click(screen.getByText('Salvar agendamento'))
+    expect(
+      screen.getByText('Profissional inativo — escolha outro profissional.'),
+    ).toBeTruthy()
+    expect(onFechar).not.toHaveBeenCalled()
+    expect(ctxAgenda.agendamentos).toHaveLength(0)
+  })
+})
+

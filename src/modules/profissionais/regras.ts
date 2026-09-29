@@ -4,7 +4,7 @@
 // agendamentos, caixa ou fechamentos de comissão).
 import type { Agendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
-import type { FechamentoComissao } from '@/modules/comissoes/types'
+import type { ConfigComissao, FechamentoComissao } from '@/modules/comissoes/types'
 import type { Profissional } from './types'
 
 /** Mensagem de erro amigável ou null quando o profissional é válido. */
@@ -39,6 +39,7 @@ export type UsoProfissional = {
   agendamentos: number
   lancamentos: number
   comissoes: number
+  configuracoes: number
 }
 
 /**
@@ -46,7 +47,14 @@ export type UsoProfissional = {
  * monta as colunas a partir do cadastro (agendamentos futuros de um
  * profissional excluído sumiriam da tela), o caixa e os fechamentos de
  * comissão referenciam o profissional — apagá-lo apagaria o rastro do
- * que já aconteceu. Use "Inativar" para retirar de novos agendamentos.
+ * que já aconteceu. A configuração de comissão é indexada por
+ * `profissionalId`: excluí-la junto apagaria o percentual combinado.
+ * Use "Inativar" para retirar de novos agendamentos.
+ *
+ * Agendamentos e caixa são referenciados por NOME e fechamentos/configs
+ * por ID — a verificação cobre as duas referências. Com duplicidade de
+ * nome, o histórico em comum bloqueia os dois cadastros (e o que se
+ * exclui é sempre o ID exato da tela).
  */
 export function profissionalEmUso(
   prof: Pick<Profissional, 'id' | 'nome'>,
@@ -54,6 +62,7 @@ export function profissionalEmUso(
     agendamentos: Pick<Agendamento, 'profissional'>[]
     lancamentos: Pick<Lancamento, 'profissional'>[]
     fechamentos: Pick<FechamentoComissao, 'profissionalId'>[]
+    configs: Pick<ConfigComissao, 'profissionalId'>[]
   },
 ): UsoProfissional {
   const qtdAgendamentos = entrada.agendamentos.filter(
@@ -65,10 +74,18 @@ export function profissionalEmUso(
   const qtdComissoes = entrada.fechamentos.filter(
     (f) => f.profissionalId === prof.id,
   ).length
+  const qtdConfiguracoes = entrada.configs.filter(
+    (c) => c.profissionalId === prof.id,
+  ).length
   return {
-    emUso: qtdAgendamentos > 0 || qtdLancamentos > 0 || qtdComissoes > 0,
+    emUso:
+      qtdAgendamentos > 0 ||
+      qtdLancamentos > 0 ||
+      qtdComissoes > 0 ||
+      qtdConfiguracoes > 0,
     agendamentos: qtdAgendamentos,
     lancamentos: qtdLancamentos,
     comissoes: qtdComissoes,
+    configuracoes: qtdConfiguracoes,
   }
 }
