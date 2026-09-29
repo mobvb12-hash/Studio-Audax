@@ -1,5 +1,6 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
 import { useEffect, useRef, useState } from 'react'
+import ClienteFormModal from '@/components/ClienteFormModal'
 import { useAgenda } from '@/modules/agenda/store'
 import type { Agendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
@@ -25,6 +26,12 @@ type ItemCarrinho = {
   preco: number
   /** estoque disponível no momento em que o item entrou no carrinho */
   estoque: number
+  /** desconto digitado para ESTE item — sempre decisão do operador */
+  descTexto: string
+}
+
+function arredondar(valor: number): number {
+  return Math.round(valor * 100) / 100
 }
 
 export default function PagamentoModal({ agendamento, onFechar }: Props) {
@@ -32,18 +39,19 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     registrarPagamento,
     registrarVenda,
     desfazerLancamento,
+    renomearCliente,
     diaFechado,
   } = useCaixa()
-  const { mudarStatus } = useAgenda()
+  const { mudarStatus, renomearCliente: renomearNaAgenda } = useAgenda()
   const { servicos } = useServicos()
   const { clientes } = useClientes()
   const { produtos } = useProdutos()
   const { saidaPorVenda, reverterVenda } = useEstoque()
 
   const preco = servicos.find((s) => s.nome === agendamento.servico)?.preco ?? 0
-  const clienteId = clientes.find(
+  const cliente = clientes.find(
     (c) => normalizarTexto(c.nome) === normalizarTexto(agendamento.cliente),
-  )?.id
+  )
 
   const [valor, setValor] = useState(() => String(preco).replace('.', ','))
   const [desconto, setDesconto] = useState('0')
@@ -52,8 +60,13 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [produtoSel, setProdutoSel] = useState('')
   const [qtdTexto, setQtdTexto] = useState('1')
-  /** Desconto digitado no fechamento — nunca automático, decisão do operador. */
-  const [descontoProdutosTexto, setDescontoProdutosTexto] = useState('0')
+  /** Entrega do cliente: vazio = pagou o total exato (cálculo automático). */
+  const [recebidoTexto, setRecebidoTexto] = useState('')
+  /** Valor extra entregue ao profissional — fica fora da receita/comissão. */
+  const [gorjetaTexto, setGorjetaTexto] = useState('')
+  /** Saldo em aberto só entra como dívida se o operador confirmar. */
+  const [dividaOk, setDividaOk] = useState(false)
+  const [editandoCliente, setEditandoCliente] = useState(false)
   const salvandoRef = useRef(false)
   const [erro, setErro] = useState(() =>
     diaFechado(agendamento.data)
@@ -63,37 +76,55 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
-      if (e.key === 'Escape') onFechar()
+      if (e.key !== 'Escape') return
+      // Dentro da edição do cliente o Escape fecha só a edição
+      if (editandoCliente) return
+      onFechar()
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
-  }, [onFechar])
+  }, [onFechar, editandoCliente])
 
+  // --- Valores do serviço --------------------------------------------------
   const valorNum = parseMoeda(valor)
+  const servicoBruto = Number.isFinite(valorNum) && valorNum > 0 ? valorNum : 0
   const descontoNum = parseMoeda(desconto) || 0
-  const liquido = Number.isFinite(valorNum - descontoNum)
-    ? Math.max(0, valorNum - descontoNum)
-    : 0
+  const descontoServ = Math.min(
+    Number.isFinite(descontoNum) && descontoNum > 0 ? descontoNum : 0,
+    servicoBruto,
+  )
+  const servicoLiquido = arredondar(Math.max(0, servicoBruto - descontoServ))
 
-  // Produtos vendidos junto com o atendimento. O preço vem da tabela e o
-  // desconto é sempre informado no fechamento — nenhuma regra automática.
+  // --- Itens (produtos) ----------------------------------------------------
   const produtosVendaveis = produtos.filter((p) => p.ativo && p.estoque > 0)
   const totalProdutos = carrinho.reduce(
     (soma, i) => soma + i.quantidade * i.preco,
     0,
   )
-  const descontoProdutosNum = parseMoeda(descontoProdutosTexto) || 0
-  const descontoProdutosValido =
-    Number.isFinite(descontoProdutosNum) &&
-    descontoProdutosNum >= 0 &&
-    descontoProdutosNum <= totalProdutos
-  // Sem produtos no carrinho o desconto digitado não tem efeito algum
-  const descontoProdutosAplicado = carrinho.length > 0 ? descontoProdutosNum : 0
-  const total = Math.max(
-    0,
-    Math.round((liquido + totalProdutos - descontoProdutosAplicado) * 100) /
-      100,
-  )
+  const descontoProdutos = carrinho.reduce((soma, i) => {
+    const d = parseMoeda(i.descTexto) || 0
+    return soma + (Number.isFinite(d) && d > 0 ? d : 0)
+  }, 0)
+  const apagarDoItem = (i: ItemCarrinho) =>
+    arredondar(Math.max(0, i.quantidade * i.preco - descontoDe(i)))
+
+  function descontoDe(item: ItemCarrinho): number {
+    const d = parseMoeda(item.descTexto) || 0
+    return Number.isFinite(d) && d > 0 ? d : 0
+  }
+
+  // --- Totais da conta -----------------------------------------------------
+  const subtotal = arredondar(servicoBruto + totalProdutos)
+  const descontoTotal = arredondar(descontoServ + descontoProdutos)
+  const total = arredondar(Math.max(0, subtotal - descontoTotal))
+
+  // --- Recebimento (Total / Recebido / Falta / Troco) -----------------------
+  const recebidoNum = recebidoTexto.trim() === '' ? total : parseMoeda(recebidoTexto)
+  const recebido = Number.isFinite(recebidoNum) && recebidoNum >= 0 ? recebidoNum : total
+  const gorjetaNum = parseMoeda(gorjetaTexto) || 0
+  const gorjeta = Number.isFinite(gorjetaNum) && gorjetaNum > 0 ? gorjetaNum : 0
+  const troco = arredondar(Math.max(0, recebido - total - gorjeta))
+  const falta = arredondar(Math.max(0, total - (recebido - gorjeta)))
 
   function adicionarAoCarrinho() {
     setErro('')
@@ -129,7 +160,9 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     setCarrinho((atual) => {
       if (atual.some((i) => i.produtoId === prod.id)) {
         return atual.map((i) =>
-          i.produtoId === prod.id ? { ...i, quantidade: i.quantidade + q } : i,
+          i.produtoId === prod.id
+            ? { ...i, quantidade: i.quantidade + q }
+            : i,
         )
       }
       return [
@@ -140,6 +173,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           quantidade: q,
           preco: prod.preco,
           estoque: prod.estoque,
+          descTexto: '0',
         },
       ]
     })
@@ -149,6 +183,15 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
 
   function removerItem(produtoId: string) {
     setCarrinho((atual) => atual.filter((i) => i.produtoId !== produtoId))
+    setErro('')
+  }
+
+  function definirDescontoItem(produtoId: string, texto: string) {
+    setCarrinho((atual) =>
+      atual.map((i) =>
+        i.produtoId === produtoId ? { ...i, descTexto: texto } : i,
+      ),
+    )
     setErro('')
   }
 
@@ -172,10 +215,40 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       setErro('O desconto não pode ser maior que o valor do serviço.')
       return
     }
-    // Desconto digitado no fechamento: válido apenas entre 0 e o total dos produtos
-    if (carrinho.length > 0 && !descontoProdutosValido) {
+    // Desconto de cada item: válido apenas entre 0 e o total do próprio item
+    for (const item of carrinho) {
+      const bruto = item.quantidade * item.preco
+      const d = descontoDe(item)
+      const digitado = parseMoeda(item.descTexto)
+      if (!Number.isFinite(digitado) || digitado < 0 || d > bruto) {
+        setErro(
+          `Desconto de "${item.produto}" inválido: informe um valor entre 0 e ${formatarBRL(bruto)}.`,
+        )
+        return
+      }
+    }
+    // Recebimento: só valida quando o operador digitou alguma coisa
+    if (recebidoTexto.trim() !== '' && !Number.isFinite(parseMoeda(recebidoTexto))) {
+      setErro('Informe um valor recebido válido (ex.: 100 ou 100,00).')
+      return
+    }
+    if (recebidoTexto.trim() !== '' && parseMoeda(recebidoTexto) < 0) {
+      setErro('O valor recebido não pode ser negativo.')
+      return
+    }
+    if (gorjetaTexto.trim() !== '' && (!Number.isFinite(gorjetaNum) || gorjetaNum < 0)) {
+      setErro('Informe uma gorjeta válida (ou 0).')
+      return
+    }
+    if (gorjeta > 0 && recebido < total + gorjeta) {
       setErro(
-        `Desconto dos produtos inválido: informe um valor entre 0 e ${formatarBRL(totalProdutos)}.`,
+        `Gorjeta de ${formatarBRL(gorjeta)} exige recebido cobrindo o total + gorjeta (${formatarBRL(total + gorjeta)}).`,
+      )
+      return
+    }
+    if (falta > 0 && !dividaOk) {
+      setErro(
+        `Restam ${formatarBRL(falta)} em aberto. Marque "Registrar o restante como dívida" ou ajuste o recebido.`,
       )
       return
     }
@@ -204,7 +277,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
         data: agendamento.data,
         hora: agendamento.horario,
         cliente: agendamento.cliente,
-        clienteId,
+        clienteId: cliente?.id,
         profissional: agendamento.profissional,
         servico: agendamento.servico,
         valor: valorNum,
@@ -212,6 +285,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
         formaPagamento: forma,
         statusAgendamento: agendamento.status,
         observacao,
+        recebido: arredondar(recebido),
+        ...(troco > 0 && { troco }),
+        ...(falta > 0 && { falta: arredondar(falta) }),
+        ...(gorjeta > 0 && { gorjeta: arredondar(gorjeta) }),
       })
       pagamentoId = pagamento.id
       if (carrinho.length > 0) {
@@ -224,10 +301,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
             quantidade: i.quantidade,
             preco: i.preco,
           })),
-          desconto: descontoProdutosNum,
+          desconto: descontoProdutos,
           formaPagamento: forma,
           cliente: agendamento.cliente,
-          clienteId,
+          clienteId: cliente?.id,
           profissional: agendamento.profissional,
         })
         vendaId = venda.id
@@ -277,21 +354,33 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       onClick={onFechar}
     >
       <div
-        className="w-full max-w-lg rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-6 shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-              Registrar pagamento
+              Fechar conta
             </p>
             <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
               {agendamento.cliente}
             </h2>
             <p className="text-[13px] text-[#8A8171]">
-              {agendamento.servico} · {agendamento.profissional} ·{' '}
-              {agendamento.horario}
+              {agendamento.telefone ? `${agendamento.telefone} · ` : ''}
+              {agendamento.profissional} · {agendamento.horario}
             </p>
+            <p className="text-[13px] text-[#8A8171]">
+              {agendamento.servico} · {agendamento.data}
+            </p>
+            {cliente && (
+              <button
+                type="button"
+                onClick={() => setEditandoCliente(true)}
+                className="mt-2 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+              >
+                Editar cliente
+              </button>
+            )}
           </div>
           <button
             type="button"
@@ -303,79 +392,118 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className={rotulo} htmlFor="pag-valor">
-              Valor do serviço (R$) *
-            </label>
-            <input
-              id="pag-valor"
-              className={campo}
-              inputMode="decimal"
-              placeholder="Ex.: 70,00"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className={rotulo} htmlFor="pag-desconto">
-              Desconto (R$)
-            </label>
-            <input
-              id="pag-desconto"
-              className={campo}
-              inputMode="decimal"
-              placeholder="0"
-              value={desconto}
-              onChange={(e) => setDesconto(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className={rotulo} htmlFor="pag-forma">
-              Forma de pagamento *
-            </label>
-            <select
-              id="pag-forma"
-              className={campo}
-              value={forma}
-              onChange={(e) => setForma(e.target.value as FormaPagamento)}
-            >
-              {FORMAS_PAGAMENTO.map((f) => (
-                <option key={f} value={f}>
-                  {FORMAS_ROTULO[f]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col justify-end">
-            <span className={rotulo}>Total a receber</span>
-            <div className="rounded-lg border border-[#E5DCC3] bg-[#F3ECDA] px-3 py-2 text-sm font-bold text-[#8A6A14]">
-              {formatarBRL(total)}
-            </div>
-            <p className="mt-1 text-[11px] text-[#8A8171]">
-              Serviço {formatarBRL(liquido)}
-              {totalProdutos > 0 && ` + produtos ${formatarBRL(totalProdutos)}`}
-              {descontoProdutosAplicado !== 0 &&
-                ` − desconto ${formatarBRL(descontoProdutosAplicado)}`}
-            </p>
-          </div>
-          <div className="sm:col-span-2">
-            <label className={rotulo} htmlFor="pag-obs">
-              Observação
-            </label>
-            <input
-              id="pag-obs"
-              className={campo}
-              placeholder="Opcional"
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-            />
-          </div>
-        </div>
-
         <div className="mt-4 border-t border-[#EFE7D3] pt-4">
-          <p className={rotulo}>Produtos vendidos junto (opcional)</p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <p className={rotulo}>Itens da conta</p>
+          <div className="mt-2 overflow-hidden rounded-lg border border-[#E5DCC3]">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-[#FAF6EB] text-[11px] tracking-wide text-[#8A8171] uppercase">
+                  <th className="px-2 py-1.5 text-left font-semibold">Item</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">
+                    Preço
+                  </th>
+                  <th className="px-2 py-1.5 text-right font-semibold">
+                    Desconto
+                  </th>
+                  <th className="px-2 py-1.5 text-right font-semibold">
+                    A pagar
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EFE7D3]">
+                <tr>
+                  <td className="px-2 py-2 text-[#1C1A15]">
+                    Serviço · {agendamento.servico}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <input
+                      id="pag-valor"
+                      aria-label="Valor do serviço (R$) *"
+                      className={`${campo} w-24 text-right`}
+                      inputMode="decimal"
+                      placeholder="70,00"
+                      value={valor}
+                      onChange={(e) => setValor(e.target.value)}
+                    />
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <input
+                      id="pag-desconto"
+                      aria-label="Desconto (R$)"
+                      className={`${campo} w-20 text-right`}
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={desconto}
+                      onChange={(e) => setDesconto(e.target.value)}
+                    />
+                  </td>
+                  <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                    {formatarBRL(servicoLiquido)}
+                  </td>
+                </tr>
+                {carrinho.map((i) => (
+                  <tr key={i.produtoId}>
+                    <td className="px-2 py-2 text-[#1C1A15]">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate">
+                          {i.quantidade}× {i.produto}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remover ${i.produto}`}
+                          onClick={() => removerItem(i.produtoId)}
+                          className="shrink-0 rounded px-1.5 text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-right text-[#4A4436]">
+                      {formatarBRL(i.quantidade * i.preco)}
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <input
+                        aria-label={`Desconto em ${i.produto} (R$)`}
+                        className={`${campo} w-20 text-right`}
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={i.descTexto}
+                        onChange={(e) =>
+                          definirDescontoItem(i.produtoId, e.target.value)
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                      {formatarBRL(apagarDoItem(i))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-[#E5DCC3] bg-[#FAF6EB]/60 text-xs">
+                  <td className="px-2 py-1.5 text-[#8A8171]" colSpan={1}>
+                    Subtotal
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-medium text-[#4A4436]">
+                    {formatarBRL(subtotal)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-medium text-[#6B8E5A]">
+                    − {formatarBRL(descontoTotal)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-bold text-[#8A6A14]">
+                    {formatarBRL(total)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {carrinho.length === 0 && (
+            <p className="mt-2 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-3 py-2 text-center text-xs text-[#A99E85]">
+              Nenhum produto neste fechamento.
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex-1">
               <label className={rotulo} htmlFor="pag-produto">
                 Produto
@@ -414,67 +542,129 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
               Adicionar
             </button>
           </div>
+        </div>
 
-          {carrinho.length > 0 ? (
-            <ul className="mt-3 divide-y divide-[#EFE7D3] rounded-lg border border-[#E5DCC3] bg-[#FAF6EB]/60">
-              {carrinho.map((i) => (
-                <li
-                  key={i.produtoId}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                >
-                  <span className="min-w-0 truncate text-[#1C1A15]">
-                    {i.quantidade}× {i.produto}{' '}
-                    <span className="text-[#8A8171]">
-                      · {formatarBRL(i.preco)}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="font-semibold text-[#4A4436]">
-                      {formatarBRL(i.quantidade * i.preco)}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Remover ${i.produto}`}
-                      onClick={() => removerItem(i.produtoId)}
-                      className="rounded px-1.5 text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-3 py-2 text-center text-xs text-[#A99E85]">
-              Nenhum produto neste fechamento.
-            </p>
-          )}
-
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div className="sm:w-56">
-              <label className={rotulo} htmlFor="pag-desconto-produtos">
-                Desconto nos produtos (R$)
+        <div className="mt-4 border-t border-[#EFE7D3] pt-4">
+          <p className={rotulo}>Pagamento</p>
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className={rotulo} htmlFor="pag-forma">
+                Forma de pagamento *
+              </label>
+              <select
+                id="pag-forma"
+                className={campo}
+                value={forma}
+                onChange={(e) => setForma(e.target.value as FormaPagamento)}
+              >
+                {FORMAS_PAGAMENTO.map((f) => (
+                  <option key={f} value={f}>
+                    {FORMAS_ROTULO[f]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={rotulo} htmlFor="pag-recebido">
+                Recebido (R$)
               </label>
               <input
-                id="pag-desconto-produtos"
+                id="pag-recebido"
+                className={campo}
+                inputMode="decimal"
+                placeholder="Em branco = total"
+                value={recebidoTexto}
+                onChange={(e) => {
+                  setRecebidoTexto(e.target.value)
+                  setErro('')
+                }}
+              />
+            </div>
+            <div>
+              <label className={rotulo} htmlFor="pag-gorjeta">
+                Gorjeta (R$)
+              </label>
+              <input
+                id="pag-gorjeta"
                 className={campo}
                 inputMode="decimal"
                 placeholder="0"
-                value={descontoProdutosTexto}
-                onChange={(e) => setDescontoProdutosTexto(e.target.value)}
+                value={gorjetaTexto}
+                onChange={(e) => {
+                  setGorjetaTexto(e.target.value)
+                  setErro('')
+                }}
               />
             </div>
-            <p className="text-sm text-[#4A4436]">
-              Produtos{' '}
-              <span className="font-semibold text-[#1C1A15]">
-                {formatarBRL(totalProdutos)}
-              </span>
-              {descontoProdutosAplicado !== 0 && (
-                <span className="ml-2 font-semibold text-[#6B8E5A]">
-                  − {formatarBRL(descontoProdutosAplicado)}
-                </span>
-              )}
-            </p>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-lg border border-[#E5DCC3] bg-[#F3ECDA] px-2 py-1.5">
+              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+                Total
+              </p>
+              <p className="text-sm font-bold text-[#8A6A14]">
+                {formatarBRL(total)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[#E5DCC3] bg-white px-2 py-1.5">
+              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+                Recebido
+              </p>
+              <p className="text-sm font-bold text-[#1C1A15]">
+                {formatarBRL(recebido)}
+              </p>
+            </div>
+            <div
+              className={`rounded-lg border px-2 py-1.5 ${
+                falta > 0
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-[#E5DCC3] bg-white'
+              }`}
+            >
+              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+                Falta
+              </p>
+              <p
+                className={`text-sm font-bold ${falta > 0 ? 'text-red-700' : 'text-[#1C1A15]'}`}
+              >
+                {formatarBRL(falta)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[#E5DCC3] bg-white px-2 py-1.5">
+              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+                Troco
+              </p>
+              <p className="text-sm font-bold text-[#1C1A15]">
+                {formatarBRL(troco)}
+              </p>
+            </div>
+          </div>
+
+          {falta > 0 && (
+            <label className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+              <input
+                type="checkbox"
+                id="pag-divida"
+                checked={dividaOk}
+                onChange={(e) => setDividaOk(e.target.checked)}
+                className="mt-0.5"
+              />
+              Registrar o restante como dívida ({formatarBRL(falta)})
+            </label>
+          )}
+
+          <div className="mt-3">
+            <label className={rotulo} htmlFor="pag-obs">
+              Comentário sobre o fechamento
+            </label>
+            <input
+              id="pag-obs"
+              className={campo}
+              placeholder="Opcional"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+            />
           </div>
         </div>
 
@@ -497,9 +687,20 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
             onClick={salvar}
             className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
           >
-            Receber {formatarBRL(total)}
+            Fechar Conta {formatarBRL(total)}
           </button>
         </div>
+
+        {editandoCliente && cliente && (
+          <ClienteFormModal
+            cliente={cliente}
+            aoRenomear={(antigo, novo) => {
+              renomearNaAgenda(antigo, novo)
+              renomearCliente(antigo, novo)
+            }}
+            onFechar={() => setEditandoCliente(false)}
+          />
+        )}
       </div>
     </div>
   )

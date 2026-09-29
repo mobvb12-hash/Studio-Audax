@@ -121,6 +121,7 @@ describe('Supabase — migrations', () => {
       '../supabase/migrations/007_agenda.sql',
       '../supabase/migrations/008_comissoes.sql',
       '../supabase/migrations/009_clube.sql',
+      '../supabase/migrations/010_caixa_fechamento_conta.sql',
     ])
   })
 

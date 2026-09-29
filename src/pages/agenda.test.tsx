@@ -8,6 +8,8 @@ import {
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
+import { EstoqueProvider } from '@/modules/estoque/store'
+import { ProdutosProvider } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Agenda from './Agenda'
@@ -69,11 +71,15 @@ function montar() {
     <ClientesProvider>
       <ProfissionaisProvider>
         <ServicosProvider>
-          <AgendaProvider>
-            <CaixaProvider>
-              <Agenda onNovo={onNovo} />
-            </CaixaProvider>
-          </AgendaProvider>
+          <ProdutosProvider>
+            <EstoqueProvider>
+              <AgendaProvider>
+                <CaixaProvider>
+                  <Agenda onNovo={onNovo} />
+                </CaixaProvider>
+              </AgendaProvider>
+            </EstoqueProvider>
+          </ProdutosProvider>
         </ServicosProvider>
       </ProfissionaisProvider>
     </ClientesProvider>,
@@ -106,8 +112,22 @@ describe('Agenda — visão dia', () => {
     fireEvent.click(screen.getByText('Lucas Mendes'))
     expect(screen.getByText('Confirmado')).toBeTruthy()
     expect(screen.getByText('Remarcar')).toBeTruthy()
-    expect(screen.getByText('Concluir e receber')).toBeTruthy()
+    expect(screen.getByText('Finalizar atendimento')).toBeTruthy()
     expect(screen.getByText('Cancelar')).toBeTruthy()
+  })
+
+  it('Finalizar atendimento abre a tela de fechar conta', () => {
+    semearAgendamento()
+    montar()
+    fireEvent.click(screen.getByText('Lucas Mendes'))
+    fireEvent.click(screen.getByText('Finalizar atendimento'))
+
+    expect(screen.getByText('Fechar conta')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: /^Fechar Conta\s+R\$/ }),
+    ).toBeTruthy()
+    expect(screen.getByLabelText('Forma de pagamento *')).toBeTruthy()
+    expect(screen.getByLabelText('Recebido (R$)')).toBeTruthy()
   })
 
   it('célula de bloqueio fica desabilitada só para o profissional afetado', () => {

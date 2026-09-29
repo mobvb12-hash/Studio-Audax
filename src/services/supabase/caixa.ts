@@ -9,6 +9,7 @@
 //     quem chama compare com o esperado — é o que permite reenviar pendência
 //     sem nunca duplicar: o upsert é por `id`, a chave gerada pelo app.
 import { supabase } from '@/lib/supabase'
+import { FORMAS_PAGAMENTO } from '@/modules/caixa/types'
 import type {
   EventoAuditoria,
   Fechamento,
@@ -42,6 +43,10 @@ export type LancamentoRow = {
   itens: unknown
   categoria: string | null
   observacao: string | null
+  recebido: number | string | null
+  troco: number | string | null
+  falta: number | string | null
+  gorjeta: number | string | null
   estornado: boolean | null
   estornado_em: string | null
   criado_em: string | null
@@ -77,6 +82,16 @@ function numero(valor: unknown, padrao = 0): number {
   return padrao
 }
 
+/** Número opcional do fechamento (recebido/troco/falta/gorjeta): ausente = undefined. */
+function numeroOpcional(valor: unknown): number | undefined {
+  if (typeof valor === 'number' && Number.isFinite(valor)) return valor
+  if (typeof valor === 'string' && valor.trim() !== '') {
+    const convertido = Number(valor)
+    if (Number.isFinite(convertido)) return convertido
+  }
+  return undefined
+}
+
 function erroDeLeitura(mensagem: string | undefined, tabela: string): Error {
   return new Error(mensagem || `Falha ao ler ${tabela} no Supabase.`)
 }
@@ -105,9 +120,7 @@ export function paraLancamento(row: LancamentoRow): Lancamento {
     desconto: numero(row.desconto),
     valorLiquido: numero(row.valor_liquido),
     formaPagamento: (
-      ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'outro'].includes(
-        row.forma_pagamento,
-      )
+      (FORMAS_PAGAMENTO as string[]).includes(row.forma_pagamento)
         ? row.forma_pagamento
         : 'outro'
     ) as Lancamento['formaPagamento'],
@@ -125,6 +138,10 @@ export function paraLancamento(row: LancamentoRow): Lancamento {
     itens: itens.length > 0 ? (itens as Lancamento['itens']) : undefined,
     categoria: texto(row.categoria) || undefined,
     observacao: texto(row.observacao) || undefined,
+    recebido: numeroOpcional(row.recebido),
+    troco: numeroOpcional(row.troco),
+    falta: numeroOpcional(row.falta),
+    gorjeta: numeroOpcional(row.gorjeta),
     criadoEm: texto(row.criado_em) || new Date().toISOString(),
     estornado: row.estornado === true,
     estornadoEm: texto(row.estornado_em) || undefined,
@@ -176,6 +193,10 @@ export function linhaLancamento(l: Lancamento) {
     itens: l.itens ?? [],
     categoria: l.categoria ?? '',
     observacao: l.observacao ?? '',
+    recebido: l.recebido ?? null,
+    troco: l.troco ?? null,
+    falta: l.falta ?? null,
+    gorjeta: l.gorjeta ?? null,
     estornado: l.estornado ?? false,
     estornado_em: l.estornadoEm ?? null,
     criado_em: l.criadoEm,

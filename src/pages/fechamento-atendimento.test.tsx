@@ -189,11 +189,11 @@ function adicionarProduto(produtoId: string, quantidade: string) {
 }
 
 function receber() {
-  fireEvent.click(screen.getByRole('button', { name: /^Receber/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^Fechar Conta/ }))
 }
 
-function definirDescontoProdutos(valor: string) {
-  fireEvent.change(screen.getByLabelText('Desconto nos produtos (R$)'), {
+function definirDescontoDoItem(produto: string, valor: string) {
+  fireEvent.change(screen.getByLabelText(`Desconto em ${produto} (R$)`), {
     target: { value: valor },
   })
 }
@@ -210,7 +210,7 @@ describe('Fase 3 — produtos no fechamento do atendimento', () => {
     // total a receber = serviço líquido (70) + 2 shampoo (70)
     adicionarProduto('prod-1', '2')
     expect(
-      screen.getByRole('button', { name: /^Receber\s+R\$\s*140,00/ }),
+      screen.getByRole('button', { name: /^Fechar Conta\s+R\$\s*140,00/ }),
     ).toBeTruthy()
     receber()
 
@@ -354,11 +354,11 @@ describe('Fase 3 — produtos no fechamento do atendimento', () => {
     const { onFechar } = montar()
 
     adicionarProduto('prod-1', '2') // 2 × 35 = 70 em produtos
-    definirDescontoProdutos('10')
+    definirDescontoDoItem('Shampoo', '10')
 
     // total = serviço 70 + produtos 70 − desconto 10
     expect(
-      screen.getByRole('button', { name: /^Receber\s+R\$\s*130,00/ }),
+      screen.getByRole('button', { name: /^Fechar Conta\s+R\$\s*130,00/ }),
     ).toBeTruthy()
     receber()
 
@@ -382,15 +382,17 @@ describe('Fase 3 — produtos no fechamento do atendimento', () => {
     expect(onFechar).toHaveBeenCalledTimes(1)
   })
 
-  it('desconto maior que o total dos produtos é recusado sem lançar nada', () => {
+  it('desconto maior que o total do próprio item é recusado sem lançar nada', () => {
     semear([produto()])
     const { onFechar } = montar()
 
-    adicionarProduto('prod-1', '1') // produtos = 35
-    definirDescontoProdutos('50')
+    adicionarProduto('prod-1', '1') // item = 35
+    definirDescontoDoItem('Shampoo', '50')
     receber()
 
-    expect(screen.getByText(/Desconto dos produtos inválido/)).toBeTruthy()
+    expect(
+      screen.getByText(/Desconto de "Shampoo" inválido/),
+    ).toBeTruthy()
 
     // nenhum lançamento: nem atendimento, nem produto
     expect(lancamentos()).toHaveLength(0)
@@ -400,23 +402,28 @@ describe('Fase 3 — produtos no fechamento do atendimento', () => {
     expect(onFechar).not.toHaveBeenCalled()
   })
 
-  it('desconto digitado sem produtos no carrinho não altera total nem lançamento', () => {
-    semear([produto()])
-    montar()
+  it('desconto de um item não altera o outro item nem o serviço', () => {
+    semear([produto(), produto({ id: 'prod-2', nome: 'Pomada', preco: 40 })])
+    const { onFechar } = montar()
 
-    definirDescontoProdutos('10')
-    // botão continua batendo com o que será lançado: só serviço, R$ 70,00
+    adicionarProduto('prod-1', '1') // Shampoo 35
+    adicionarProduto('prod-2', '1') // Pomada 40
+    definirDescontoDoItem('Shampoo', '5')
+
+    // serviço 70 + Shampoo 35 + Pomada 40 − desconto 5
     expect(
-      screen.getByRole('button', { name: /^Receber\s+R\$\s*70,00/ }),
+      screen.getByRole('button', { name: /^Fechar Conta\s+R\$\s*140,00/ }),
     ).toBeTruthy()
     receber()
 
     const lances = lancamentos()
-    expect(lances).toHaveLength(1)
-    expect(lances[0].origem).toBe('atendimento')
-    expect(lances[0].desconto).toBe(0)
-    expect(lances[0].valorLiquido).toBe(70)
-    expect(movimentacoes()).toHaveLength(0)
+    expect(lances).toHaveLength(2)
+    expect(lances.find((l) => l.origem === 'atendimento')!.valorLiquido).toBe(70)
+    const venda = lances.find((l) => l.origem === 'produto')!
+    expect(venda.valor).toBe(75)
+    expect(venda.desconto).toBe(5)
+    expect(venda.valorLiquido).toBe(70)
+    expect(onFechar).toHaveBeenCalledTimes(1)
   })
 
   it('fechamento persiste após F5 (releitura do localStorage)', () => {
@@ -424,7 +431,7 @@ describe('Fase 3 — produtos no fechamento do atendimento', () => {
     const primeiro = montar()
 
     adicionarProduto('prod-1', '2')
-    definirDescontoProdutos('5')
+    definirDescontoDoItem('Shampoo', '5')
     receber()
 
     // F5: desmonta e monta de novo com o mesmo armazenamento

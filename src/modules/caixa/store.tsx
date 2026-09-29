@@ -69,14 +69,32 @@ function formaVazia(): Record<FormaPagamento, number> {
   return {
     dinheiro: 0,
     pix: 0,
+    pix_integrado: 0,
     cartao_credito: 0,
     cartao_debito: 0,
+    transferencia: 0,
+    pre_pago: 0,
     outro: 0,
   }
 }
 
 function arredondar(valor: number): number {
   return Math.round(valor * 100) / 100
+}
+
+/**
+ * Campo opcional do fechamento de conta (recebido, troco, falta, gorjeta):
+ * só valida quando o operador informou — nunca inventa valor.
+ */
+function numeroRecebimento(
+  valor: number | undefined,
+  rotulo: string,
+): number | undefined {
+  if (valor === undefined) return undefined
+  if (!Number.isFinite(valor) || valor < 0) {
+    throw new Error(`${rotulo} inválido.`)
+  }
+  return arredondar(valor)
 }
 
 function agoraHora(): string {
@@ -140,6 +158,8 @@ const VAZIO: CaixaContexto = {
     porProfissional: [],
     qtdAtendimentos: 0,
     qtdProdutos: 0,
+    gorjetas: 0,
+    dividas: 0,
   }),
   jaPago: () => undefined,
   registrarPagamento: () => {
@@ -677,6 +697,8 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       let despesas = 0
       let qtdAtendimentos = 0
       let qtdProdutos = 0
+      let gorjetas = 0
+      let dividas = 0
 
       for (const l of doDia) {
         if (l.tipo === 'despesa') {
@@ -685,6 +707,10 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         }
         descontos += l.desconto
         porForma[l.formaPagamento] += l.valorLiquido
+        // Informativos do fechamento: gorjeta não é receita e dívida não é
+        // dinheiro em caixa, por isso ficam fora de todos os totais.
+        if (l.gorjeta) gorjetas += l.gorjeta
+        if (l.falta) dividas += l.falta
         if (l.origem === 'atendimento') {
           receitasAtendimentos += l.valorLiquido
           qtdAtendimentos += 1
@@ -726,6 +752,8 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
           .sort((a, b) => b.valor - a.valor),
         qtdAtendimentos,
         qtdProdutos,
+        gorjetas: arredondar(gorjetas),
+        dividas: arredondar(dividas),
       }
     },
     [lancamentos],
@@ -781,6 +809,13 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       if (!FORMAS_PAGAMENTO.includes(input.formaPagamento)) {
         throw new Error('Selecione a forma de pagamento.')
       }
+      const recebido = numeroRecebimento(input.recebido, 'Valor recebido')
+      const troco = numeroRecebimento(input.troco, 'Troco')
+      const falta = numeroRecebimento(input.falta, 'Valor em aberto')
+      const gorjeta = numeroRecebimento(input.gorjeta, 'Gorjeta')
+      if (falta !== undefined && falta > 0 && recebido === undefined) {
+        throw new Error('Saldo em aberto exige informar o valor recebido.')
+      }
       bloquearSeFechado(input.data)
 
       const valorLiquido = arredondar(input.valor - input.desconto)
@@ -801,6 +836,10 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         servico: input.servico,
         agendamentoId: input.agendamentoId,
         observacao: input.observacao?.trim() || undefined,
+        ...(recebido !== undefined && { recebido }),
+        ...(troco !== undefined && { troco }),
+        ...(falta !== undefined && { falta }),
+        ...(gorjeta !== undefined && { gorjeta }),
         criadoEm: new Date().toISOString(),
       }
       return registrarLancamento(novo)

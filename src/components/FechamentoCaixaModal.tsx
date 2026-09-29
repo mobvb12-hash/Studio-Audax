@@ -87,6 +87,18 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
           />
           <Linha rotulo="Descontos" valor={formatarBRL(resumo.descontos)} />
           <Linha rotulo="Total recebido" valor={formatarBRL(resumo.totalRecebido)} />
+          {(resumo.gorjetas ?? 0) > 0 && (
+            <Linha
+              rotulo="Gorjetas (fora da receita)"
+              valor={formatarBRL(resumo.gorjetas ?? 0)}
+            />
+          )}
+          {(resumo.dividas ?? 0) > 0 && (
+            <Linha
+              rotulo="Dívidas em aberto (a receber)"
+              valor={formatarBRL(resumo.dividas ?? 0)}
+            />
+          )}
           <Linha rotulo="Despesas" valor={formatarBRL(resumo.despesas)} />
           <div className="flex items-center justify-between border-t-2 border-[#E5DCC3] py-2.5 text-sm">
             <span className="font-bold text-[#1C1A15]">Resultado líquido</span>

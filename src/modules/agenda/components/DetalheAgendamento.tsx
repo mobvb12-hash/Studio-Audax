@@ -141,8 +141,8 @@ export default function DetalheAgendamento({
                   className="rounded-lg bg-[#5FA83E] px-3 py-2 text-xs font-semibold text-white hover:bg-[#549531]"
                 >
                   {ag.status === 'concluido'
-                    ? 'Registrar pagamento'
-                    : 'Concluir e receber'}
+                    ? 'Fechar conta'
+                    : 'Finalizar atendimento'}
                 </button>
               )}
               {emAberto && (

@@ -3,6 +3,7 @@ import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
 import { STATUS_ROTULO, type StatusAgendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
+import { FORMAS_ROTULO } from '@/modules/caixa/types'
 import type { Cliente } from '@/modules/clientes/types'
 import {
   statusAssinatura,
@@ -82,6 +83,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
   )
 
   const totalGasto = recebido.reduce((soma, l) => soma + l.valorLiquido, 0)
+  const emAberto = recebido.reduce((soma, l) => soma + (l.falta ?? 0), 0)
   const concluidos = historico.filter((ag) => ag.status === 'concluido').length
   const ultimoConcluido = historico.find((ag) => ag.status === 'concluido')?.data
 
@@ -214,6 +216,16 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
               Total gasto
             </p>
           </div>
+          {emAberto > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-center">
+              <p className="text-lg leading-none font-bold text-red-700">
+                {formatarBRL(emAberto)}
+              </p>
+              <p className="mt-1 text-[10px] tracking-[0.1em] text-red-600 uppercase">
+                Em aberto
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
@@ -297,8 +309,15 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
                       {l.descricao}
                     </p>
                     <p className="text-xs text-[#8A8171]">
-                      {formatarDataLonga(l.data)} · {l.hora}
+                      {formatarDataLonga(l.data)} · {l.hora} ·{' '}
+                      {FORMAS_ROTULO[l.formaPagamento]}
+                      {l.desconto > 0 && ` · desconto ${formatarBRL(l.desconto)}`}
                     </p>
+                    {(l.falta ?? 0) > 0 && (
+                      <p className="text-xs font-semibold text-red-600">
+                        Em aberto {formatarBRL(l.falta ?? 0)}
+                      </p>
+                    )}
                   </div>
                   <span className="shrink-0 text-sm font-semibold text-[#8A6A14]">
                     {formatarBRL(l.valorLiquido)}

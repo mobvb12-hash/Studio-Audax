@@ -189,8 +189,11 @@ const resumo: ResumoFechamento = {
   porForma: {
     dinheiro: 0,
     pix: 70,
+    pix_integrado: 0,
     cartao_credito: 0,
     cartao_debito: 0,
+    transferencia: 0,
+    pre_pago: 0,
     outro: 0,
   },
   porProfissional: [{ nome: 'Cleiton', valor: 70, qtd: 1 }],

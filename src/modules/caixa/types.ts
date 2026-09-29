@@ -4,8 +4,11 @@ import type { StatusAgendamento } from '@/modules/agenda/types'
 export type FormaPagamento =
   | 'dinheiro'
   | 'pix'
+  | 'pix_integrado'
   | 'cartao_credito'
   | 'cartao_debito'
+  | 'transferencia'
+  | 'pre_pago'
   | 'outro'
 
 export type TipoLancamento = 'receita' | 'despesa'
@@ -49,6 +52,16 @@ export type Lancamento = {
   itens?: ItemVenda[]
   categoria?: string
   observacao?: string
+  /**
+   * Fechamento de conta (opcionais — só quando o operador informa o recebimento):
+   * `recebido` = total entregue pelo cliente, `troco` = devolvido,
+   * `falta` = saldo em aberto (dívida) e `gorjeta` = valor extra, que NÃO
+   * entra em valor/desconto/valorLiquido (não muda receita nem comissão).
+   */
+  recebido?: number
+  troco?: number
+  falta?: number
+  gorjeta?: number
   criadoEm: string
   estornado?: boolean
   estornadoEm?: string
@@ -66,6 +79,10 @@ export type ResumoFechamento = {
   porProfissional: { nome: string; valor: number; qtd: number }[]
   qtdAtendimentos: number
   qtdProdutos: number
+  /** Gorjetas registradas no dia — informativa, fora da receita/comissão */
+  gorjetas?: number
+  /** Saldos em aberto (dívidas) fechados no dia — ainda não recebidos */
+  dividas?: number
 }
 
 export type Fechamento = {
@@ -100,6 +117,14 @@ export type NovoPagamentoInput = {
   /** Status atual do agendamento — cancelado/não compareceu não geram receita */
   statusAgendamento: StatusAgendamento
   observacao?: string
+  /** Total entregue pelo cliente no fechamento (opcional) */
+  recebido?: number
+  /** Troco devolvido (opcional) */
+  troco?: number
+  /** Saldo em aberto deixado como dívida (opcional) */
+  falta?: number
+  /** Gorjeta registrada no fechamento — não altera receita nem comissão */
+  gorjeta?: number
 }
 
 export type NovaVendaProdutoInput = {
@@ -149,16 +174,22 @@ export type NovaDespesaInput = {
 export const FORMAS_PAGAMENTO: FormaPagamento[] = [
   'dinheiro',
   'pix',
+  'pix_integrado',
   'cartao_credito',
   'cartao_debito',
+  'transferencia',
+  'pre_pago',
   'outro',
 ]
 
 export const FORMAS_ROTULO: Record<FormaPagamento, string> = {
   dinheiro: 'Dinheiro',
   pix: 'PIX',
+  pix_integrado: 'PIX integrado',
   cartao_credito: 'Cartão crédito',
   cartao_debito: 'Cartão débito',
+  transferencia: 'Transferência',
+  pre_pago: 'Pré-pago',
   outro: 'Outros',
 }
 

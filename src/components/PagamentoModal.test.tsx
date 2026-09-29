@@ -34,6 +34,10 @@ function Estado() {
         pagamentos: lancamentos.map((l) => ({
           valorLiquido: l.valorLiquido,
           formaPagamento: l.formaPagamento,
+          recebido: l.recebido,
+          troco: l.troco,
+          falta: l.falta,
+          gorjeta: l.gorjeta,
         })),
       })}
     </output>
@@ -93,7 +97,7 @@ describe('PagamentoModal', () => {
     fireEvent.change(screen.getByLabelText('Forma de pagamento *'), {
       target: { value: 'pix' },
     })
-    fireEvent.click(screen.getByText('Receber R$ 60,00'))
+    fireEvent.click(screen.getByText('Fechar Conta R$ 60,00'))
 
     const estado = lerEstado()
     expect(estado.status).toBe('concluido')
@@ -107,7 +111,7 @@ describe('PagamentoModal', () => {
     fireEvent.change(screen.getByLabelText('Desconto (R$)'), {
       target: { value: '100' },
     })
-    fireEvent.click(screen.getByText('Receber R$ 0,00'))
+    fireEvent.click(screen.getByText('Fechar Conta R$ 0,00'))
     expect(
       screen.getByText(/desconto não pode ser maior/),
     ).toBeTruthy()
@@ -119,17 +123,136 @@ describe('PagamentoModal', () => {
     expect(
       screen.getByText(/O caixa de 2026-09-25 está fechado/),
     ).toBeTruthy()
-    fireEvent.click(screen.getByText('Receber R$ 70,00'))
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
     expect(lerEstado().pagamentos).toHaveLength(0)
   })
 
   it('impede pagamento duplicado do mesmo atendimento', () => {
     montar()
-    fireEvent.click(screen.getByText('Receber R$ 70,00'))
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
     expect(lerEstado().pagamentos).toHaveLength(1)
 
-    fireEvent.click(screen.getByText('Receber R$ 70,00'))
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
     expect(screen.getByText(/já foi pago/)).toBeTruthy()
     expect(lerEstado().pagamentos).toHaveLength(1)
+  })
+})
+
+describe('Fechar conta — recebido, troco, falta e dívida', () => {
+  it('recebido acima do total calcula o troco e grava os dois valores', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Recebido (R$)'), {
+      target: { value: '100' },
+    })
+    expect(screen.getByText('R$ 30,00')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+    const [pag] = lerEstado().pagamentos
+    expect(pag.recebido).toBe(100)
+    expect(pag.troco).toBe(30)
+    expect(pag.falta).toBeUndefined()
+    expect(lerEstado().status).toBe('concluido')
+  })
+
+  it('saldo em aberto só entra como dívida com a opção marcada', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Recebido (R$)'), {
+      target: { value: '40' },
+    })
+    expect(screen.getByText('R$ 30,00')).toBeTruthy() // falta
+
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+    expect(screen.getByText(/Restam R\$ 30,00 em aberto/)).toBeTruthy()
+    expect(lerEstado().pagamentos).toHaveLength(0)
+    expect(lerEstado().status).toBe('confirmado')
+
+    fireEvent.click(
+      screen.getByLabelText('Registrar o restante como dívida (R$ 30,00)'),
+    )
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+    const [pag] = lerEstado().pagamentos
+    expect(pag.recebido).toBe(40)
+    expect(pag.falta).toBe(30)
+    expect(lerEstado().status).toBe('concluido')
+  })
+
+  it('forma de pagamento nova (transferência) entra no lançamento', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Forma de pagamento *'), {
+      target: { value: 'transferencia' },
+    })
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+    expect(lerEstado().pagamentos[0].formaPagamento).toBe('transferencia')
+  })
+
+  it('gorjeta fica fora da receita e não muda o valor lançado', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Gorjeta (R$)'), {
+      target: { value: '10' },
+    })
+    fireEvent.change(screen.getByLabelText('Recebido (R$)'), {
+      target: { value: '80' },
+    })
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+
+    const [pag] = lerEstado().pagamentos
+    expect(pag.gorjeta).toBe(10)
+    expect(pag.valorLiquido).toBe(70)
+    expect(pag.troco).toBeUndefined()
+    expect(pag.falta).toBeUndefined()
+  })
+
+  it('gorjeta exige recebido cobrindo total + gorjeta', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Gorjeta (R$)'), {
+      target: { value: '10' },
+    })
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+    expect(screen.getByText(/exige recebido cobrindo/)).toBeTruthy()
+    expect(lerEstado().pagamentos).toHaveLength(0)
+    expect(lerEstado().status).toBe('confirmado')
+  })
+})
+
+describe('Fechar conta — todas as formas de pagamento', () => {
+  it.each([
+    'dinheiro',
+    'pix',
+    'pix_integrado',
+    'cartao_credito',
+    'cartao_debito',
+    'transferencia',
+    'pre_pago',
+    'outro',
+  ])('forma "%s" fecha a conta e grava no lançamento', (forma) => {
+    montar()
+    fireEvent.change(screen.getByLabelText('Forma de pagamento *'), {
+      target: { value: forma },
+    })
+    fireEvent.click(screen.getByText('Fechar Conta R$ 70,00'))
+
+    const estado = lerEstado()
+    expect(estado.status).toBe('concluido')
+    expect(estado.pagamentos).toHaveLength(1)
+    expect(estado.pagamentos[0].formaPagamento).toBe(forma)
+    expect(estado.pagamentos[0].valorLiquido).toBe(70)
+  })
+
+  it('seletor oferece as 8 formas na ordem oficial', () => {
+    montar()
+    const opcoes = Array.from(
+      (screen.getByLabelText('Forma de pagamento *') as HTMLSelectElement)
+        .options,
+    ).map((o) => o.value)
+    expect(opcoes).toEqual([
+      'dinheiro',
+      'pix',
+      'pix_integrado',
+      'cartao_credito',
+      'cartao_debito',
+      'transferencia',
+      'pre_pago',
+      'outro',
+    ])
   })
 })
