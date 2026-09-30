@@ -5,11 +5,12 @@ import { useAgenda } from '@/modules/agenda/store'
 import type { Agendamento } from '@/modules/agenda/types'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
-import type { FormaPagamento, Lancamento } from '@/modules/caixa/types'
+import type { FormaPagamento, ItemServico, Lancamento } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useEstoque } from '@/modules/estoque/store'
 import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
+import { useProfissionais } from '@/modules/profissionais/store'
 import { useServicos } from '@/modules/servicos/store'
 import { formatarBRL, normalizarTexto, parseMoeda } from '@/lib/moeda'
 
@@ -30,6 +31,14 @@ type ItemCarrinho = {
   descTexto: string
 }
 
+/** Serviço adicional cobrado na mesma conta (§4 — multi-serviço). */
+type ItemAdicional = {
+  chave: number
+  servicoId: string
+  servico: string
+  valorTexto: string
+}
+
 function arredondar(valor: number): number {
   return Math.round(valor * 100) / 100
 }
@@ -46,12 +55,19 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
   const { servicos } = useServicos()
   const { clientes } = useClientes()
   const { produtos } = useProdutos()
+  const { profissionais } = useProfissionais()
   const { saidaPorVenda, reverterVenda } = useEstoque()
 
   const preco = servicos.find((s) => s.nome === agendamento.servico)?.preco ?? 0
+  const servicoPrincipal = servicos.find((s) => s.nome === agendamento.servico)
   const cliente = clientes.find(
     (c) => normalizarTexto(c.nome) === normalizarTexto(agendamento.cliente),
   )
+  // Comissão casa por id quando o cadastro existe (§5.3) — rename nunca
+  // quebra a produção; sem cadastro, fica só o nome.
+  const profissionalId = profissionais.find(
+    (p) => normalizarTexto(p.nome) === normalizarTexto(agendamento.profissional),
+  )?.id
 
   const [valor, setValor] = useState(() => String(preco).replace('.', ','))
   const [desconto, setDesconto] = useState('0')
@@ -60,6 +76,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [produtoSel, setProdutoSel] = useState('')
   const [qtdTexto, setQtdTexto] = useState('1')
+  /** Serviços adicionais da mesma conta (o principal fica no campo "valor"). */
+  const [extras, setExtras] = useState<ItemAdicional[]>([])
+  const [servicoSel, setServicoSel] = useState('')
+  const proximaChaveRef = useRef(1)
   /** Entrega do cliente: vazio = pagou o total exato (cálculo automático). */
   const [recebidoTexto, setRecebidoTexto] = useState('')
   /** Valor extra entregue ao profissional — fica fora da receita/comissão. */
@@ -85,13 +105,19 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [onFechar, editandoCliente])
 
-  // --- Valores do serviço --------------------------------------------------
+  // --- Valores dos serviços ------------------------------------------------
   const valorNum = parseMoeda(valor)
   const servicoBruto = Number.isFinite(valorNum) && valorNum > 0 ? valorNum : 0
+  const extrasBruto = extras.reduce((soma, x) => {
+    const n = parseMoeda(x.valorTexto)
+    return soma + (Number.isFinite(n) && n > 0 ? n : 0)
+  }, 0)
+  /** Bruto de TODOS os serviços da conta — é o teto do desconto global (§4). */
+  const servicoBrutoTotal = arredondar(servicoBruto + extrasBruto)
   const descontoNum = parseMoeda(desconto) || 0
   const descontoServ = Math.min(
     Number.isFinite(descontoNum) && descontoNum > 0 ? descontoNum : 0,
-    servicoBruto,
+    servicoBrutoTotal,
   )
   const servicoLiquido = arredondar(Math.max(0, servicoBruto - descontoServ))
 
@@ -114,7 +140,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
   }
 
   // --- Totais da conta -----------------------------------------------------
-  const subtotal = arredondar(servicoBruto + totalProdutos)
+  const subtotal = arredondar(servicoBrutoTotal + totalProdutos)
   const descontoTotal = arredondar(descontoServ + descontoProdutos)
   const total = arredondar(Math.max(0, subtotal - descontoTotal))
 
@@ -195,6 +221,46 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     setErro('')
   }
 
+  // --- Serviços adicionais (mesma conta) ------------------------------------
+  function adicionarServico() {
+    setErro('')
+    const s = servicos.find((x) => x.id === servicoSel)
+    if (!s) {
+      setErro('Selecione um serviço.')
+      return
+    }
+    if (!s.ativo) {
+      setErro('Serviço inativo — não é possível cobrar.')
+      return
+    }
+    if (!Number.isFinite(s.preco) || s.preco < 0) {
+      setErro(`Preço do serviço "${s.nome}" inválido.`)
+      return
+    }
+    setExtras((atual) => [
+      ...atual,
+      {
+        chave: proximaChaveRef.current++,
+        servicoId: s.id,
+        servico: s.nome,
+        valorTexto: String(s.preco).replace('.', ','),
+      },
+    ])
+    setServicoSel('')
+  }
+
+  function removerServicoExtra(chave: number) {
+    setExtras((atual) => atual.filter((x) => x.chave !== chave))
+    setErro('')
+  }
+
+  function definirValorExtra(chave: number, texto: string) {
+    setExtras((atual) =>
+      atual.map((x) => (x.chave === chave ? { ...x, valorTexto: texto } : x)),
+    )
+    setErro('')
+  }
+
   function salvar() {
     if (salvandoRef.current) return
     if (diaFechado(agendamento.data)) {
@@ -211,9 +277,19 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       setErro('Informe um desconto válido (ou 0).')
       return
     }
-    if (descontoNum > valorNum) {
-      setErro('O desconto não pode ser maior que o valor do serviço.')
+    if (descontoNum > servicoBrutoTotal) {
+      setErro('O desconto não pode ser maior que o valor dos serviços.')
       return
+    }
+    // Valor de cada serviço adicional: só aceita número ≥ 0
+    for (const x of extras) {
+      const n = parseMoeda(x.valorTexto)
+      if (!Number.isFinite(n) || n < 0) {
+        setErro(
+          `Valor do serviço "${x.servico}" inválido: informe um número (ex.: 70 ou 70,00).`,
+        )
+        return
+      }
     }
     // Desconto de cada item: válido apenas entre 0 e o total do próprio item
     for (const item of carrinho) {
@@ -272,6 +348,19 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
     /** Guarda a venda criada para poder devolver a baixa no rollback. */
     let vendaCriada: Lancamento | undefined
     try {
+      // §4 — multi-serviço: UM lançamento por conta, com os serviços detalhados
+      const servicosDaConta: ItemServico[] = [
+        {
+          servicoId: servicoPrincipal?.id,
+          servico: agendamento.servico,
+          preco: arredondar(servicoBruto),
+        },
+        ...extras.map((x) => ({
+          servicoId: x.servicoId,
+          servico: x.servico,
+          preco: arredondar(parseMoeda(x.valorTexto) || 0),
+        })),
+      ]
       const pagamento = registrarPagamento({
         agendamentoId: agendamento.id,
         data: agendamento.data,
@@ -279,8 +368,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
         cliente: agendamento.cliente,
         clienteId: cliente?.id,
         profissional: agendamento.profissional,
-        servico: agendamento.servico,
-        valor: valorNum,
+        profissionalId,
+        servico: servicosDaConta.map((s) => s.servico).join(' + '),
+        servicos: servicosDaConta,
+        valor: servicoBrutoTotal,
         desconto: descontoNum,
         formaPagamento: forma,
         statusAgendamento: agendamento.status,
@@ -306,6 +397,9 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           cliente: agendamento.cliente,
           clienteId: cliente?.id,
           profissional: agendamento.profissional,
+          profissionalId,
+          // Vínculo com a conta: permite que a reabertura devolva esta baixa
+          agendamentoId: agendamento.id,
         })
         vendaId = venda.id
         vendaCriada = venda
@@ -441,6 +535,48 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                     {formatarBRL(servicoLiquido)}
                   </td>
                 </tr>
+                {extras.map((x) => {
+                  const bruto = parseMoeda(x.valorTexto)
+                  const brutoValido =
+                    Number.isFinite(bruto) && bruto > 0 ? bruto : 0
+                  return (
+                    <tr key={x.chave}>
+                      <td className="px-2 py-2 text-[#1C1A15]">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate">
+                            Serviço · {x.servico}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Remover serviço ${x.servico}`}
+                            onClick={() => removerServicoExtra(x.chave)}
+                            className="shrink-0 rounded px-1.5 text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <input
+                          aria-label={`Valor de ${x.servico} (R$)`}
+                          className={`${campo} w-24 text-right`}
+                          inputMode="decimal"
+                          placeholder="70,00"
+                          value={x.valorTexto}
+                          onChange={(e) =>
+                            definirValorExtra(x.chave, e.target.value)
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-right text-xs text-[#A99E85]">
+                        —
+                      </td>
+                      <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                        {formatarBRL(brutoValido)}
+                      </td>
+                    </tr>
+                  )
+                })}
                 {carrinho.map((i) => (
                   <tr key={i.produtoId}>
                     <td className="px-2 py-2 text-[#1C1A15]">
@@ -502,6 +638,36 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
               Nenhum produto neste fechamento.
             </p>
           )}
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className={rotulo} htmlFor="pag-servico-adicional">
+                Serviço adicional
+              </label>
+              <select
+                id="pag-servico-adicional"
+                className={campo}
+                value={servicoSel}
+                onChange={(e) => setServicoSel(e.target.value)}
+              >
+                <option value="">Selecione um serviço...</option>
+                {servicos
+                  .filter((s) => s.ativo)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nome} · {formatarBRL(s.preco)}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={adicionarServico}
+              className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            >
+              Incluir serviço
+            </button>
+          </div>
 
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex-1">

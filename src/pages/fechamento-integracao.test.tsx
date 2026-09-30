@@ -18,6 +18,7 @@ import { preferenciasPadrao } from '@/modules/clientes/types'
 import { ClubeProvider } from '@/modules/clube/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
+import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import type { Produto } from '@/modules/produtos/types'
 import { formasPagamento, resumoFinanceiro } from '@/modules/relatorios/calculos'
 import { ServicosProvider } from '@/modules/servicos/store'
@@ -116,15 +117,17 @@ function montar() {
       <ServicosProvider>
         <ProdutosProvider>
           <EstoqueProvider>
-            <CaixaProvider>
-              <AgendaProvider>
-                <Captura />
-                <PagamentoModal
-                  agendamento={AGENDAMENTO}
-                  onFechar={() => undefined}
-                />
-              </AgendaProvider>
-            </CaixaProvider>
+            <ProfissionaisProvider>
+              <CaixaProvider>
+                <AgendaProvider>
+                  <Captura />
+                  <PagamentoModal
+                    agendamento={AGENDAMENTO}
+                    onFechar={() => undefined}
+                  />
+                </AgendaProvider>
+              </CaixaProvider>
+            </ProfissionaisProvider>
           </EstoqueProvider>
         </ProdutosProvider>
       </ServicosProvider>

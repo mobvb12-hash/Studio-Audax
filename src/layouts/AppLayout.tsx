@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import { useAuth } from '@/modules/auth/useAuth'
+import { podeAcessarPagina } from '@/modules/auth/permissoes'
 
 export type PaginaId =
   | 'painel'
@@ -106,9 +107,26 @@ export default function AppLayout({
 }: AppLayoutProps) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [confirmandoSaida, setConfirmandoSaida] = useState(false)
-  const { sair, saindo, erroSaida } = useAuth()
+  const { sair, saindo, erroSaida, perfil } = useAuth()
+  const papel = perfil?.papel ?? null
+
+  // Filtrar seções e itens baseado nas permissões do papel
+  const secoesVisiveis = SECOES.map((secao) => ({
+    ...secao,
+    itens: secao.itens.filter((item) => podeAcessarPagina(papel, item.id)),
+  })).filter((secao) => secao.itens.length > 0)
+
+  // Se a página atual não é acessível, redirecionar para a primeira disponível
+  const paginaValida = secoesVisiveis.some((s) => s.itens.some((i) => i.id === paginaAtual))
+  if (!paginaValida && secoesVisiveis.length > 0) {
+    const primeiraPagina = secoesVisiveis[0].itens[0].id
+    onNavegar(primeiraPagina)
+    // Retornar null para evitar renderizar a página incorreta durante o redirecionamento
+    return null
+  }
 
   const navegar = (pagina: PaginaId) => {
+    if (!podeAcessarPagina(papel, pagina)) return
     setMenuAberto(false)
     onNavegar(pagina)
   }
@@ -166,7 +184,7 @@ export default function AppLayout({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {SECOES.map((secao) => (
+          {secoesVisiveis.map((secao) => (
             <div key={secao.titulo} className="mb-5">
               <p className="px-3 pb-2 text-[11px] font-semibold tracking-[0.2em] text-[#8A8171] uppercase">
                 {secao.titulo}

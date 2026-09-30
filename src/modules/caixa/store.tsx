@@ -113,6 +113,8 @@ export type CaixaContexto = {
   lancamentosDoDia: (data: string) => Lancamento[]
   resumoDoDia: (data: string) => ResumoFechamento
   jaPago: (agendamentoId: string) => Lancamento | undefined
+  /** Existe fechamento (ativo ou estornado) para este atendimento? */
+  possuiFechamento: (agendamentoId: string) => boolean
   registrarPagamento: (input: NovoPagamentoInput) => Lancamento
   venderProduto: (input: NovaVendaProdutoInput) => Lancamento
   /** Venda do PDV: vários produtos → UMA única movimentação no Caixa */
@@ -129,6 +131,22 @@ export type CaixaContexto = {
   desfazerLancamento: (lancamentoId: string) => void
   fecharCaixa: (data: string) => Fechamento
   reabrirCaixa: (data: string, motivo: string) => void
+  /**
+   * Reabre a CONTA de um atendimento: estorna o fechamento ativo (e as vendas
+   * vinculadas, devolvendo estoque via callback), grava auditoria `reabertura`
+   * com motivo e libera um novo fechamento. Nunca apaga histórico.
+   */
+  reabrirConta: (
+    agendamentoId: string,
+    motivo: string,
+    reverterEstoque?: (vendas: Lancamento[]) => void,
+  ) => void
+  /**
+   * Vínculo não-destrutivo de uma venda antiga (lançamento de produto sem
+   * `agendamentoId`) à conta de um atendimento. Não altera valor, forma,
+   * receita nem estoque — só liga os registros e grava auditoria `vinculo`.
+   */
+  vincularVenda: (vendaId: string, agendamentoId: string) => void
   /** Propaga renomeações de cadastro para os lançamentos existentes */
   renomearProfissional: (antigo: string, novo: string) => void
   renomearServico: (antigo: string, novo: string) => void
@@ -162,6 +180,7 @@ const VAZIO: CaixaContexto = {
     dividas: 0,
   }),
   jaPago: () => undefined,
+  possuiFechamento: () => false,
   registrarPagamento: () => {
     throw new Error('useCaixa precisa do CaixaProvider.')
   },
@@ -183,6 +202,12 @@ const VAZIO: CaixaContexto = {
     throw new Error('useCaixa precisa do CaixaProvider.')
   },
   reabrirCaixa: () => {},
+  reabrirConta: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
+  vincularVenda: () => {
+    throw new Error('useCaixa precisa do CaixaProvider.')
+  },
   renomearProfissional: () => {},
   renomearServico: () => {},
   renomearCliente: () => {},
@@ -770,6 +795,19 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [lancamentos],
   )
 
+  /**
+   * Existe (ou existiu) fechamento de conta para este atendimento? Estornado
+   * conta aqui: é o que permite a Agenda liberar o botão "Ver Fechamento"
+   * depois de uma reabertura (histórico continua acessível).
+   */
+  const possuiFechamento = useCallback(
+    (agendamentoId: string) =>
+      lancamentos.some(
+        (l) => l.origem === 'atendimento' && l.agendamentoId === agendamentoId,
+      ),
+    [lancamentos],
+  )
+
   const bloquearSeFechado = useCallback(
     (data: string) => {
       if (diaFechado(data)) {
@@ -833,7 +871,15 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         cliente: input.cliente,
         clienteId: input.clienteId,
         profissional: input.profissional,
+        profissionalId: input.profissionalId,
         servico: input.servico,
+        servicos: input.servicos && input.servicos.length > 0
+          ? input.servicos.map((s) => ({
+              servicoId: s.servicoId,
+              servico: s.servico,
+              preco: arredondar(s.preco),
+            }))
+          : undefined,
         agendamentoId: input.agendamentoId,
         observacao: input.observacao?.trim() || undefined,
         ...(recebido !== undefined && { recebido }),
@@ -880,6 +926,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         valorLiquido: arredondar(bruto - input.desconto),
         formaPagamento: input.formaPagamento,
         profissional: input.profissional?.trim() || undefined,
+        profissionalId: input.profissionalId,
         produto: input.produto.trim(),
         quantidade: input.quantidade,
         observacao: input.observacao?.trim() || undefined,
@@ -940,6 +987,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         cliente: input.cliente?.trim() || undefined,
         clienteId: input.clienteId,
         profissional: input.profissional?.trim() || undefined,
+        profissionalId: input.profissionalId,
         produto: nomes.join(', '),
         quantidade: qtdTotal,
         itens: input.itens.map((i) => ({
@@ -948,6 +996,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
           quantidade: i.quantidade,
           preco: arredondar(i.preco),
         })),
+        agendamentoId: input.agendamentoId,
         observacao: input.observacao?.trim() || undefined,
         criadoEm: new Date().toISOString(),
       }
@@ -1122,6 +1171,140 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     [fechamentos, sincronizar],
   )
 
+  /**
+   * REABERTURA DE CONTA (Fase 11.2) — modelo seguro:
+   *
+   * fechamento ativo → ESTORNA o financeiro (primitiva existente `estornar`,
+   * que apenas marca sem apagar) → registra evento de auditoria `reabertura`
+   * com motivo + identificação → conta volta a ficar em aberto para um NOVO
+   * fechamento posterior (novo lançamento, novo id — nunca duplica receita).
+   *
+   * O histórico é preservado: nada é deletado nem editado silenciosamente.
+   * As vendas de produto vinculadas ao atendimento (mesmo `agendamentoId`)
+   * também são estornadas e têm a baixa de estoque devolvida — a reversão é
+   * idempotente (por `vendaId`) e vem injetada via `reverterEstoque`, pois o
+   * estoque vive em outro provider.
+   *
+   * Venda avulsa (sem `agendamentoId`) não é afetada.
+   */
+  const reabrirConta = useCallback(
+    (
+      agendamentoId: string,
+      motivo: string,
+      reverterEstoque?: (vendas: Lancamento[]) => void,
+    ) => {
+      if (!agendamentoId) throw new Error('Atendimento sem identificação.')
+      if (motivo.trim().length < 3) {
+        throw new Error('Informe o motivo da reabertura (mín. 3 letras).')
+      }
+      const alvo = lancamentos.find(
+        (l) =>
+          l.origem === 'atendimento' &&
+          l.agendamentoId === agendamentoId &&
+          !l.estornado,
+      )
+      if (!alvo) {
+        throw new Error(
+          'Não há fechamento ativo para reabrir neste atendimento.',
+        )
+      }
+      bloquearSeFechado(alvo.data)
+
+      const vendas = lancamentos.filter(
+        (l) =>
+          l.origem === 'produto' &&
+          l.agendamentoId === agendamentoId &&
+          !l.estornado,
+      )
+
+      // Estoque antes do financeiro: `reverterVenda` é idempotente e só
+      // devolve quando houve baixa; com vendas vazias não toca em nada.
+      reverterEstoque?.(vendas)
+      for (const venda of vendas) {
+        estornar(venda.id)
+      }
+      estornar(alvo.id)
+
+      // Evento `reabertura` — ação já prevista no schema (005_caixa.sql) e
+      // no tipo EventoAuditoria; a identificação do lançamento/atendimento
+      // vai no fim da descrição para recuperação exata (endsWith).
+      const reabertoEm = new Date().toISOString()
+      const evento: EventoAuditoria = {
+        id: gerarId(),
+        acao: 'reabertura',
+        data: alvo.data,
+        descricao: `Conta reaberta: ${alvo.descricao} — atendimento ${agendamentoId}`,
+        motivo: motivo.trim(),
+        criadoEm: reabertoEm,
+      }
+      alteradosAuditoria.current.add(evento.id)
+      setAuditoria((atual) => [...atual, evento])
+      sincronizar(CHAVE_AUDITORIA, () => criarEventoAuditoria(evento))
+    },
+    [lancamentos, bloquearSeFechado, estornar, sincronizar],
+  )
+
+  /**
+   * Vínculo de venda antiga à conta (§5.2 — não-destrutivo):
+   *
+   * venda sem `agendamentoId` → passa a apontar para o atendimento escolhido.
+   * Nada de valor, receita, comissão ou estoque muda; o que muda é só o
+   * vínculo, e isso fica registrado em auditoria (`acao: 'vinculo'`).
+   *
+   * Não exige caixa aberto: a venda é antiga por definição e o vínculo não
+   * altera nenhum total do dia (ele já estava contado desde o lançamento).
+   */
+  const vincularVenda = useCallback(
+    (vendaId: string, agendamentoId: string) => {
+      if (!vendaId) throw new Error('Venda sem identificação.')
+      if (!agendamentoId) throw new Error('Atendimento sem identificação.')
+      const venda = lancamentos.find((l) => l.id === vendaId)
+      if (!venda || venda.origem !== 'produto') {
+        throw new Error('Venda não encontrada.')
+      }
+      if (venda.estornado) {
+        throw new Error('Venda estornada não pode ser vinculada.')
+      }
+      if (venda.agendamentoId === agendamentoId) return
+      if (venda.agendamentoId) {
+        throw new Error(
+          'Esta venda já está vinculada a outro atendimento. Estorne e reabra a conta para corrigir.',
+        )
+      }
+      const conta = lancamentos.find(
+        (l) =>
+          l.origem === 'atendimento' &&
+          l.agendamentoId === agendamentoId &&
+          !l.estornado,
+      )
+      if (!conta) {
+        throw new Error(
+          'Não há conta ativa para este atendimento — feche a conta antes de vincular.',
+        )
+      }
+
+      const vinculado: Lancamento = { ...venda, agendamentoId }
+      const evento: EventoAuditoria = {
+        id: gerarId(),
+        acao: 'vinculo',
+        data: venda.data,
+        descricao: `Venda vinculada: ${venda.descricao} — atendimento ${agendamentoId}`,
+        criadoEm: new Date().toISOString(),
+      }
+      alteradosLancamentos.current.add(vendaId)
+      alteradosAuditoria.current.add(evento.id)
+      setLancamentos((atual) =>
+        atual.map((l) => (l.id === vendaId ? vinculado : l)),
+      )
+      setAuditoria((atual) => [...atual, evento])
+      sincronizar(CHAVE_LANCAMENTOS, async () => {
+        await atualizarLancamento(vendaId, vinculado)
+        await criarEventoAuditoria(evento)
+      })
+    },
+    [lancamentos, sincronizar],
+  )
+
   // Propagação compara por chave normalizada (mesma regra do dedupe do
   // cadastro): dado legado com caixa/acentos diferentes não engancha.
   const renomearProfissional = useCallback(
@@ -1213,6 +1396,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       lancamentosDoDia,
       resumoDoDia,
       jaPago,
+      possuiFechamento,
       registrarPagamento,
       venderProduto,
       registrarVenda,
@@ -1222,6 +1406,8 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       estornar,
       fecharCaixa,
       reabrirCaixa,
+      reabrirConta,
+      vincularVenda,
       renomearProfissional,
       renomearServico,
       renomearCliente,
@@ -1236,6 +1422,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       lancamentosDoDia,
       resumoDoDia,
       jaPago,
+      possuiFechamento,
       registrarPagamento,
       venderProduto,
       registrarVenda,
@@ -1245,6 +1432,8 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       estornar,
       fecharCaixa,
       reabrirCaixa,
+      reabrirConta,
+      vincularVenda,
       renomearProfissional,
       renomearServico,
       renomearCliente,

@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState, Suspense, lazy } from 'react'
 import type { ReactNode } from 'react'
 import AvisoPersistencia from '@/components/AvisoPersistencia'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
+import SemPermissao from '@/components/SemPermissao'
 import TelaLogin from '@/components/TelaLogin'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AuthProvider } from '@/modules/auth/AuthProvider'
 import { useAuth } from '@/modules/auth/useAuth'
+import { podeAcessarPagina } from '@/modules/auth/permissoes'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
@@ -21,23 +23,27 @@ import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import { WhatsProvider } from '@/modules/whatsapp/store'
-import Agenda, { type SlotAgendamento } from '@/pages/Agenda'
-import Caixa from '@/pages/Caixa'
-import Clientes from '@/pages/Clientes'
-import Clube from '@/pages/Clube'
-import Comissoes from '@/pages/Comissoes'
-import Crm from '@/pages/Crm'
-import Dashboard from '@/pages/Dashboard'
-import Espera from '@/pages/Espera'
-import Financeiro from '@/pages/Financeiro'
-import Ia from '@/pages/Ia'
-import PDV from '@/pages/PDV'
-import Produtos from '@/pages/Produtos'
-import Profissionais from '@/pages/Profissionais'
-import Relatorios from '@/pages/Relatorios'
-import Servicos from '@/pages/Servicos'
-import Whats from '@/pages/Whats'
+import type { SlotAgendamento } from '@/pages/Agenda'
+import AgendarPublico from '@/pages/AgendarPublico'
 import ErrorBoundary from '@/components/ErrorBoundary'
+
+// Code splitting - lazy load pages
+const DashboardLazy = lazy(() => import('@/pages/Dashboard'))
+const AgendaLazy = lazy(() => import('@/pages/Agenda'))
+const EsperaLazy = lazy(() => import('@/pages/Espera'))
+const CaixaLazy = lazy(() => import('@/pages/Caixa'))
+const ClientesLazy = lazy(() => import('@/pages/Clientes'))
+const CrmLazy = lazy(() => import('@/pages/Crm'))
+const WhatsLazy = lazy(() => import('@/pages/Whats'))
+const ServicosLazy = lazy(() => import('@/pages/Servicos'))
+const ProfissionaisLazy = lazy(() => import('@/pages/Profissionais'))
+const ComissoesLazy = lazy(() => import('@/pages/Comissoes'))
+const FinanceiroLazy = lazy(() => import('@/pages/Financeiro'))
+const RelatoriosLazy = lazy(() => import('@/pages/Relatorios'))
+const PDVLazy = lazy(() => import('@/pages/PDV'))
+const ProdutosLazy = lazy(() => import('@/pages/Produtos'))
+const ClubeLazy = lazy(() => import('@/pages/Clube'))
+const IaLazy = lazy(() => import('@/pages/Ia'))
 
 const ROTULOS: Record<PaginaId, string> = {
   painel: 'Painel',
@@ -95,59 +101,139 @@ const IMPLEMENTADAS: PaginaId[] = [
   'ia',
 ]
 
+import type { PapelPerfil } from '@/modules/auth/tipos'
+
+function PaginaProtegida({ pagina: paginaId, children, papel, onNegado }: {
+  pagina: PaginaId
+  children: ReactNode
+  papel: PapelPerfil | null | undefined
+  onNegado: () => void
+}) {
+  if (!podeAcessarPagina(papel, paginaId)) {
+    return <SemPermissao pagina={paginaId} onVoltar={onNegado} />
+  }
+  return <>{children}</>
+}
+
 function Conteudo() {
   const [pagina, setPagina] = useState<PaginaId>('painel')
   const [modalAberto, setModalAberto] = useState(false)
   const [inicial, setInicial] = useState<SlotAgendamento | null>(null)
+  const { perfil } = useAuth()
+  const papel = perfil?.papel ?? null
 
   function abrirNovo(slot?: SlotAgendamento) {
     setInicial(slot ?? null)
     setModalAberto(true)
   }
 
+  const handleNegado = () => setPagina('painel')
+
   return (
     <AppLayout paginaAtual={pagina} onNavegar={setPagina}>
       {/* Falha numa página não derruba o layout: a barreira por página
           reseta ao trocar de módulo (key). */}
       <ErrorBoundary key={pagina}>
-      {pagina === 'painel' && (
-        <Dashboard
-          onNovo={() => abrirNovo()}
-          onIrPara={setPagina}
-          onIrParaEstoque={() => {
-            try {
-              sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')
-            } catch {
-              // sessionStorage indisponível: tela abre sem o filtro
-            }
-            setPagina('estoque')
-          }}
-        />
-      )}
-      {pagina === 'agenda' && <Agenda onNovo={abrirNovo} />}
-      {pagina === 'fila' && <Espera />}
-      {pagina === 'caixa' && <Caixa />}
-      {pagina === 'clientes' && <Clientes />}
-      {pagina === 'crm' && <Crm />}
-      {pagina === 'whatsapp' && <Whats />}
-      {pagina === 'servicos' && <Servicos />}
-      {pagina === 'profissionais' && <Profissionais />}
-      {pagina === 'comissoes' && <Comissoes />}
-      {pagina === 'financeiro' && <Financeiro />}
-      {pagina === 'relatorios' && <Relatorios />}
-      {pagina === 'pdv' && <PDV />}
-      {pagina === 'estoque' && <Produtos />}
-      {pagina === 'clube' && <Clube />}
-      {pagina === 'ia' && <Ia />}
-      {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
-      {modalAberto && (
-        <NovoAgendamentoModal
-          dataInicial={inicial?.data}
-          horarioInicial={inicial?.horario}
-          profissionalInicial={inicial?.profissional}
-          onFechar={() => setModalAberto(false)}
-        />
-      )}
+        <PaginaProtegida pagina="painel" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Painel…</div>}>
+            <DashboardLazy
+              onNovo={() => abrirNovo()}
+              onIrPara={setPagina}
+              onIrParaEstoque={() => {
+                try {
+                  sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')
+                } catch {
+                  // sessionStorage indisponível: tela abre sem o filtro
+                }
+                setPagina('estoque')
+              }}
+            />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="agenda" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Agenda…</div>}>
+            <AgendaLazy onNovo={abrirNovo} />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="fila" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Fila…</div>}>
+            <EsperaLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="caixa" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Caixa…</div>}>
+            <CaixaLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="clientes" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clientes…</div>}>
+            <ClientesLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="crm" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando CRM…</div>}>
+            <CrmLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="whatsapp" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando WhatsApp…</div>}>
+            <WhatsLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="servicos" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Serviços…</div>}>
+            <ServicosLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="profissionais" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Profissionais…</div>}>
+            <ProfissionaisLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="comissoes" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Comissões…</div>}>
+            <ComissoesLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="financeiro" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Financeiro…</div>}>
+            <FinanceiroLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="relatorios" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Relatórios…</div>}>
+            <RelatoriosLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="pdv" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando PDV…</div>}>
+            <PDVLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="estoque" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Estoque…</div>}>
+            <ProdutosLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="clube" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clube…</div>}>
+            <ClubeLazy />
+          </Suspense>
+        </PaginaProtegida>
+        <PaginaProtegida pagina="ia" papel={papel} onNegado={handleNegado}>
+          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando IA…</div>}>
+            <IaLazy />
+          </Suspense>
+        </PaginaProtegida>
+        {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
+        {modalAberto && (
+          <NovoAgendamentoModal
+            dataInicial={inicial?.data}
+            horarioInicial={inicial?.horario}
+            profissionalInicial={inicial?.profissional}
+            onFechar={() => setModalAberto(false)}
+          />
+        )}
       </ErrorBoundary>
     </AppLayout>
   )
@@ -205,7 +291,28 @@ function AreaProtegida({ children }: { children: ReactNode }) {
   return <SupabaseAusente />
 }
 
+/** `#/agendar` (hash) ou `/agendar` (pathname) = página pública do cliente. */
+function ehRotaPublica(): boolean {
+  if (typeof window === 'undefined') return false
+  const hash = window.location.hash.replace(/^#/, '')
+  if (hash === '/agendar' || hash.startsWith('/agendar/')) return true
+  return /\/agendar\/?$/.test(window.location.pathname)
+}
+
 function App() {
+  // Rota PÚBLICA do cliente (§16): `#/agendar` (ou `/agendar`) abre o
+  // agendamento FORA do portão de sessão — sem login para o cliente.
+  const [rotaPublica, setRotaPublica] = useState(() => ehRotaPublica())
+  useEffect(() => {
+    const aoMudar = () => setRotaPublica(ehRotaPublica())
+    window.addEventListener('hashchange', aoMudar)
+    window.addEventListener('popstate', aoMudar)
+    return () => {
+      window.removeEventListener('hashchange', aoMudar)
+      window.removeEventListener('popstate', aoMudar)
+    }
+  }, [])
+
   return (
     <AuthProvider>
       <AvisoPersistencia />
@@ -217,7 +324,10 @@ function App() {
         o portão não abre: ele mostra a tela de ausência de configuração em
         vez de entregar o painel.
       */}
-      <AreaProtegida>
+      {rotaPublica ? (
+        <AgendarPublico />
+      ) : (
+        <AreaProtegida>
         <ClientesProvider>
           <ProfissionaisProvider>
             <ProdutosProvider>
@@ -250,6 +360,7 @@ function App() {
           </ProfissionaisProvider>
         </ClientesProvider>
       </AreaProtegida>
+      )}
     </AuthProvider>
   )
 }

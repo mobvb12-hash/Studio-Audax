@@ -35,7 +35,9 @@ export type LancamentoRow = {
   cliente: string | null
   cliente_id: string | null
   profissional: string | null
+  profissional_id: string | null
   servico: string | null
+  servicos: unknown
   agendamento_id: string | null
   assinatura_id: string | null
   produto: string | null
@@ -108,6 +110,7 @@ function objeto(valor: unknown): Record<string, unknown> | undefined {
 /** Converte a linha do banco no lançamento do app (fidelidade total). */
 export function paraLancamento(row: LancamentoRow): Lancamento {
   const itens = Array.isArray(row.itens) ? row.itens : []
+  const servicos = Array.isArray(row.servicos) ? row.servicos : []
   return {
     id: row.id,
     tipo: row.tipo === 'despesa' ? 'despesa' : 'receita',
@@ -127,7 +130,11 @@ export function paraLancamento(row: LancamentoRow): Lancamento {
     cliente: texto(row.cliente) || undefined,
     clienteId: texto(row.cliente_id) || undefined,
     profissional: texto(row.profissional) || undefined,
+    profissionalId: texto(row.profissional_id) || undefined,
     servico: texto(row.servico) || undefined,
+    servicos: servicos.length > 0
+      ? (servicos as Lancamento['servicos'])
+      : undefined,
     agendamentoId: texto(row.agendamento_id) || undefined,
     assinaturaId: texto(row.assinatura_id) || undefined,
     produto: texto(row.produto) || undefined,
@@ -159,9 +166,15 @@ export function paraFechamento(row: FechamentoRow): Fechamento {
 }
 
 export function paraEvento(row: AuditoriaRow): EventoAuditoria {
+  const acao: EventoAuditoria['acao'] =
+    row.acao === 'reabertura'
+      ? 'reabertura'
+      : row.acao === 'vinculo'
+        ? 'vinculo'
+        : 'estorno'
   return {
     id: row.id,
-    acao: row.acao === 'reabertura' ? 'reabertura' : 'estorno',
+    acao,
     data: texto(row.data),
     descricao: texto(row.descricao),
     motivo: texto(row.motivo) || undefined,
@@ -185,7 +198,9 @@ export function linhaLancamento(l: Lancamento) {
     cliente: l.cliente ?? null,
     cliente_id: l.clienteId ?? null,
     profissional: l.profissional ?? null,
+    profissional_id: l.profissionalId ?? null,
     servico: l.servico ?? '',
+    servicos: l.servicos ?? null,
     agendamento_id: l.agendamentoId ?? null,
     assinatura_id: l.assinaturaId ?? null,
     produto: l.produto ?? '',

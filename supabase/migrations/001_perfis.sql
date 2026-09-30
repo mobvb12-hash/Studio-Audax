@@ -3,7 +3,7 @@ create table if not exists public.perfis (
   user_id uuid not null unique references auth.users(id) on delete cascade,
   nome text not null,
   email text not null,
-  papel text not null default 'admin' check (papel in ('admin', 'recepcao', 'profissional')),
+  papel text not null default 'recepcao' check (papel in ('dono', 'admin', 'gerente', 'recepcao', 'profissional')),
   ativo boolean not null default true,
   criado_em timestamptz not null default now()
 );

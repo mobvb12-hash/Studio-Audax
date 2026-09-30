@@ -215,6 +215,9 @@ export default function PDV() {
         cliente: cliente?.nome,
         clienteId: cliente?.id,
         profissional: profissional || undefined,
+        // §5.3 — produção casa por id quando o cadastro existe
+        profissionalId:
+          profissionais.find((p) => p.nome === profissional)?.id,
       })
       vendaId = venda.id
       // Baixa automática de estoque — uma movimentação por produto da venda

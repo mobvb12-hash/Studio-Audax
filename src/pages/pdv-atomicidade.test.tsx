@@ -18,12 +18,12 @@ import Caixa from './Caixa'
 import PDV from './PDV'
 
 /**
- * Auditoria Fase 11 — atomicidade do PDV: injeta a falha exata da janela
- * (a baixa de estoque lança DEPOIS de o caixa gravar) para provar que a
- * compensação desfaz a gravação e que o retry não duplica receita.
- * A flag é checada NO MOMENTO DA CHAMADA porque os componentes capturam
+ * Auditoria Fase 11 ï¿½ atomicidade do PDV: injeta a falha exata da janela
+ * (a baixa de estoque lanï¿½a DEPOIS de o caixa gravar) para provar que a
+ * compensaï¿½ï¿½o desfaz a gravaï¿½ï¿½o e que o retry nï¿½o duplica receita.
+ * A flag ï¿½ checada NO MOMENTO DA CHAMADA porque os componentes capturam
  * `saidaPorVenda` por destructure no render. `vi.hoisted` garante que o
- * teste e a fábrica do mock enxerguem o mesmo objeto de controle.
+ * teste e a fï¿½brica do mock enxerguem o mesmo objeto de controle.
  */
 const controle = vi.hoisted(() => ({ falhar: false }))
 
@@ -50,10 +50,10 @@ vi.mock('@/modules/estoque/store', async (importOriginal) => {
 })
 
 /**
- * ??2 — falha injetada DEPOIS da baixa de estoque. No fechamento do
- * atendimento a ordem é pagamento ? venda ? baixa ? mudarStatus ? onFechar;
- * aqui a falha acontece na etapa seguinte à baixa, para provar que o
- * rollback devolve o estoque e desfaz os lançamentos gravados.
+ * ??2 ï¿½ falha injetada DEPOIS da baixa de estoque. No fechamento do
+ * atendimento a ordem ï¿½ pagamento ? venda ? baixa ? mudarStatus ? onFechar;
+ * aqui a falha acontece na etapa seguinte ï¿½ baixa, para provar que o
+ * rollback devolve o estoque e desfaz os lanï¿½amentos gravados.
  */
 const controleAgenda = vi.hoisted(() => ({ falhar: false }))
 
@@ -138,8 +138,8 @@ beforeEach(() => {
   ctxProdutos = undefined as unknown as ReturnType<typeof useProdutos>
 })
 
-describe('PDV — atomicidade: falha na baixa desfaz a gravação', () => {
-  it('caixa não fica com venda sem estoque e o retry grava uma única vez', () => {
+describe('PDV ï¿½ atomicidade: falha na baixa desfaz a gravaï¿½ï¿½o', () => {
+  it('caixa nï¿½o fica com venda sem estoque e o retry grava uma ï¿½nica vez', () => {
     env(<PDV />)
     const id = criarProduto('Creme capilar', 5)
 
@@ -157,13 +157,13 @@ describe('PDV — atomicidade: falha na baixa desfaz a gravação', () => {
     controle.falhar = true
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar venda' }))
 
-    // erro visível, NADA registrou (compensação) e o carrinho ficou intacto
+    // erro visï¿½vel, NADA registrou (compensaï¿½ï¿½o) e o carrinho ficou intacto
     expect(screen.getByText('Falha simulada na baixa de estoque')).toBeTruthy()
     expect(ctxCaixa.lancamentos).toHaveLength(0)
     expect(ctxProdutos.porId(id)?.estoque).toBe(5)
     expect(screen.getByDisplayValue('2')).toBeTruthy()
 
-    // retry: agora sim — e sem duplicar a receita
+    // retry: agora sim ï¿½ e sem duplicar a receita
     controle.falhar = false
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar venda' }))
     expect(ctxCaixa.lancamentos).toHaveLength(1)
@@ -173,7 +173,7 @@ describe('PDV — atomicidade: falha na baixa desfaz a gravação', () => {
     ).toBeTruthy()
   })
 
-  it('venda avulsa no Caixa segue a mesma compensação', () => {
+  it('venda avulsa no Caixa segue a mesma compensaï¿½ï¿½o', () => {
     env(<Caixa />)
     const id = criarProduto('Pomada modeladora', 5)
 
@@ -199,12 +199,12 @@ describe('PDV — atomicidade: falha na baixa desfaz a gravação', () => {
   })
 })
 
-describe('Fechamento do atendimento — rollback total e retry', () => {
+describe('Fechamento do atendimento ï¿½ rollback total e retry', () => {
   const AGENDAMENTO: Agendamento = {
     id: 'ag-1',
     cliente: 'Ana Souza',
     telefone: '11 99999-0000',
-    servico: 'Corte Degradê',
+    servico: 'Corte Degradï¿½',
     profissional: 'Cleiton Silva',
     data: DIA,
     horario: '10:00',
@@ -239,7 +239,7 @@ describe('Fechamento do atendimento — rollback total e retry', () => {
       JSON.stringify([
         {
           id: 'sv-1',
-          nome: 'Corte Degradê',
+          nome: 'Corte Degradï¿½',
           preco: 70,
           duracaoMin: 40,
           categoria: 'Cabelo',
@@ -268,21 +268,23 @@ describe('Fechamento do atendimento — rollback total e retry', () => {
     const onFechar = vi.fn()
     render(
       <ClientesProvider>
-        <ServicosProvider>
-          <ProdutosProvider>
-            <EstoqueProvider>
-              <CaixaProvider>
-                <AgendaProvider>
-                  <Captura />
-                  <PagamentoModal
-                    agendamento={AGENDAMENTO}
-                    onFechar={onFechar}
-                  />
-                </AgendaProvider>
-              </CaixaProvider>
-            </EstoqueProvider>
-          </ProdutosProvider>
-        </ServicosProvider>
+        <ProfissionaisProvider>
+          <ServicosProvider>
+            <ProdutosProvider>
+              <EstoqueProvider>
+                <CaixaProvider>
+                  <AgendaProvider>
+                    <Captura />
+                    <PagamentoModal
+                      agendamento={AGENDAMENTO}
+                      onFechar={onFechar}
+                    />
+                  </AgendaProvider>
+                </CaixaProvider>
+              </EstoqueProvider>
+            </ProdutosProvider>
+          </ServicosProvider>
+        </ProfissionaisProvider>
       </ClientesProvider>,
     )
     return { onFechar }
@@ -302,7 +304,7 @@ describe('Fechamento do atendimento — rollback total e retry', () => {
     )!.estoque
   }
 
-  it('falha na baixa desfaz pagamento E venda — retry fecha o atendimento', () => {
+  it('falha na baixa desfaz pagamento E venda ï¿½ retry fecha o atendimento', () => {
     semear()
     const { onFechar } = montar()
 
@@ -324,7 +326,7 @@ describe('Fechamento do atendimento — rollback total e retry', () => {
     expect(estoqueDe('prod-1')).toBe(10)
     expect(onFechar).not.toHaveBeenCalled()
 
-    // retry NÃO esbarra em "já foi pago": estado estava limpo
+    // retry Nï¿½O esbarra em "jï¿½ foi pago": estado estava limpo
     controle.falhar = false
     fireEvent.click(screen.getByRole('button', { name: /^Fechar Conta/ }))
     expect(onFechar).toHaveBeenCalled()
@@ -353,14 +355,14 @@ describe('Fechamento do atendimento — rollback total e retry', () => {
     expect(
       screen.getByText('Falha simulada DEPOIS da baixa de estoque'),
     ).toBeTruthy()
-    // estoque exatamente igual ao estado anterior à tentativa (10, não 8)
+    // estoque exatamente igual ao estado anterior ï¿½ tentativa (10, nï¿½o 8)
     expect(estoqueDe('prod-1')).toBe(10)
     // venda e pagamento desfeitos, agenda intocada, modal segue aberto
     expect(lancamentos()).toHaveLength(0)
     expect(statusAgendamento()).toBe('confirmado')
     expect(onFechar).not.toHaveBeenCalled()
 
-    // retry fecha o atendimento com UMA única baixa (10 - 2 = 8, não 6)
+    // retry fecha o atendimento com UMA ï¿½nica baixa (10 - 2 = 8, nï¿½o 6)
     controleAgenda.falhar = false
     fireEvent.click(screen.getByRole('button', { name: /^Fechar Conta/ }))
     expect(onFechar).toHaveBeenCalled()

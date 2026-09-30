@@ -111,7 +111,7 @@ describe('Supabase — migrations', () => {
     const nomes = Object.keys(scripts)
       .filter((caminho) => caminho.includes('/migrations/'))
       .sort()
-    expect(nomes).toEqual([
+expect(nomes).toEqual([
       '../supabase/migrations/001_perfis.sql',
       '../supabase/migrations/002_profissionais_servicos.sql',
       '../supabase/migrations/003_clientes.sql',
@@ -123,6 +123,9 @@ describe('Supabase — migrations', () => {
       '../supabase/migrations/009_clube.sql',
       '../supabase/migrations/010_caixa_fechamento_conta.sql',
       '../supabase/migrations/011_caixa_valores_pagamento.sql',
+      '../supabase/migrations/012_agendamento_publico.sql',
+      '../supabase/migrations/013_caixa_servicos_profissional.sql',
+      '../supabase/migrations/014_rls_role_based.sql',
     ])
   })
 

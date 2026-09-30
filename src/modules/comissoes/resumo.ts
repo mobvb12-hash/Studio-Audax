@@ -80,7 +80,15 @@ export function linhasDoPeriodo(
   return base
     .map(({ id, nome, foto, ativo }) => {
       const config = configDe(id)
-      const producao = calcularProducao(lancamentos, nome, periodo)
+      // Linhas de cadastro têm id real → produção casa primeiro por ele
+      // (rename não quebra). Linhas sintéticas `nome:*` (sem cadastro) caem
+      // no nome normalizado dentro de calcularProducao.
+      const producao = calcularProducao(
+        lancamentos,
+        nome,
+        periodo,
+        id.startsWith('nome:') ? undefined : id,
+      )
       return {
         chave: id,
         profissionalId: id,
@@ -133,7 +141,14 @@ export function linhasDetalhadasDoPeriodo(
 ): LinhaDetalhada[] {
   return linhasDoPeriodo(lancamentos, profissionais, configDe, periodo).map(
     (linha) => {
-      const detalhe = calcularProducao(lancamentos, linha.nome, periodo)
+      const detalhe = calcularProducao(
+        lancamentos,
+        linha.nome,
+        periodo,
+        linha.profissionalId.startsWith('nome:')
+          ? undefined
+          : linha.profissionalId,
+      )
       return {
         ...linha,
         descontos: detalhe.descontos,

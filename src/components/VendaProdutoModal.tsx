@@ -81,6 +81,9 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
         desconto: descontoNum,
         formaPagamento: forma,
         profissional,
+        // §5.3 — produção casa por id quando o cadastro existe
+        profissionalId:
+          profissionais.find((p) => p.nome === profissional)?.id,
         observacao,
       })
       vendaId = lancamento.id

@@ -2,6 +2,7 @@
 // Cancelados, não comparecidos e não pagos nunca geram lançamento no Caixa;
 // estornos são excluídos da produção e reportados à parte.
 import type { Lancamento } from '@/modules/caixa/types'
+import { normalizarTexto } from '@/lib/moeda'
 import type { Periodo } from './types'
 
 export type ProducaoProfissional = {
@@ -34,13 +35,35 @@ export function dentroDoPeriodo(data: string, periodo: Periodo): boolean {
   return data >= periodo.inicio && data <= periodo.fim
 }
 
+/**
+ * Este lançamento pertence ao profissional?
+ *
+ * Vínculo seguro (§5.3): quando AMBOS têm id (lançamento novo + cadastro),
+ * o id manda — rename, caixa ou acentos diferentes nunca mais quebram o
+ * match. Lançamento legado (sem id) cai no nome normalizado, que é a regra
+ * que o sistema sempre usou (melhorada: normaliza antes de comparar).
+ */
+function ehDoProfissional(
+  l: Lancamento,
+  profissional: string,
+  profissionalId?: string,
+): boolean {
+  if (profissionalId && l.profissionalId) {
+    return l.profissionalId === profissionalId
+  }
+  return normalizarTexto(l.profissional ?? '') === normalizarTexto(profissional)
+}
+
 export function calcularProducao(
   lancamentos: Lancamento[],
   profissional: string,
   periodo: Periodo,
+  profissionalId?: string,
 ): ProducaoProfissional {
   const doProfissional = lancamentos.filter(
-    (l) => l.profissional === profissional && dentroDoPeriodo(l.data, periodo),
+    (l) =>
+      ehDoProfissional(l, profissional, profissionalId) &&
+      dentroDoPeriodo(l.data, periodo),
   )
 
   const servicos = doProfissional.filter((l) => l.origem === 'atendimento')

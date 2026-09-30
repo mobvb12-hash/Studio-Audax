@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import VerFechamentoModal from '@/components/VerFechamentoModal'
 import { formatarDataCurta } from '@/modules/agenda/catalogo'
 import { estiloBadge } from '@/modules/agenda/presentacao'
 import { somaMinutos } from '@/modules/agenda/regras'
@@ -7,6 +8,7 @@ import {
   type Agendamento,
   type StatusAgendamento,
 } from '@/modules/agenda/types'
+import { useCaixa } from '@/modules/caixa/store'
 
 export default function DetalheAgendamento({
   ag,
@@ -33,18 +35,27 @@ export default function DetalheAgendamento({
   const bloqueado = ag.status === 'cancelado' || ag.status === 'nao_compareceu'
   const emAberto = ag.status === 'pendente' || ag.status === 'confirmado'
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
+  const [verFechamento, setVerFechamento] = useState(false)
+  // Fechamento (ativo ou estornado) existe? Libera "Ver Fechamento" também
+  // no ramo em aberto — depois de uma reabertura o histórico continua
+  // acessível e a conta aparece como estornado/reaberto.
+  const { possuiFechamento } = useCaixa()
+  const temHistorico = possuiFechamento(ag.id)
   const remarcacoes = ag.remarcacoes ?? []
   const ultimaRemarcacao = remarcacoes[remarcacoes.length - 1]
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
+      // Com o Ver Fechamento aberto, o Escape fecha só ele
+      if (verFechamento) return
       if (e.key === 'Escape') onFechar()
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
-  }, [onFechar])
+  }, [onFechar, verFechamento])
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
       onClick={onFechar}
@@ -117,9 +128,18 @@ export default function DetalheAgendamento({
 
         <div className="mt-5 flex flex-wrap gap-2">
           {pago ? (
-            <span className="rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-3 py-2 text-xs font-semibold text-[#3F6B33]">
-              Pagamento registrado — opções liberadas apenas no Caixa
-            </span>
+            <>
+              <span className="rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-3 py-2 text-xs font-semibold text-[#3F6B33]">
+                Pagamento registrado — opções liberadas apenas no Caixa
+              </span>
+              <button
+                type="button"
+                onClick={() => setVerFechamento(true)}
+                className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+              >
+                Ver Fechamento
+              </button>
+            </>
           ) : (
             <>
               {ag.status === 'pendente' && (
@@ -144,6 +164,20 @@ export default function DetalheAgendamento({
                     ? 'Fechar conta'
                     : 'Finalizar atendimento'}
                 </button>
+              )}
+              {!pago && temHistorico && (
+                <>
+                  <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                    Conta em correção — fechamento anterior no histórico
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setVerFechamento(true)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                  >
+                    Ver Fechamento
+                  </button>
+                </>
               )}
               {emAberto && (
                 <button
@@ -245,5 +279,13 @@ export default function DetalheAgendamento({
         </button>
       </div>
     </div>
+
+    {verFechamento && (
+      <VerFechamentoModal
+        agendamento={ag}
+        onFechar={() => setVerFechamento(false)}
+      />
+    )}
+    </>
   )
 }

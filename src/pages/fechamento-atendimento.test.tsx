@@ -9,6 +9,7 @@ import { ClubeProvider } from '@/modules/clube/store'
 import { ClientesProvider } from '@/modules/clientes/store'
 import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
+import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import type { Produto } from '@/modules/produtos/types'
 import { ServicosProvider } from '@/modules/servicos/store'
 
@@ -119,13 +120,15 @@ function montar() {
       <ServicosProvider>
         <ProdutosProvider>
           <EstoqueProvider>
-            <CaixaProvider>
-              <ClubeProvider>
-                <AgendaProvider>
-                  <PagamentoModal agendamento={AGENDAMENTO} onFechar={onFechar} />
-                </AgendaProvider>
-              </ClubeProvider>
-            </CaixaProvider>
+            <ProfissionaisProvider>
+              <CaixaProvider>
+                <ClubeProvider>
+                  <AgendaProvider>
+                    <PagamentoModal agendamento={AGENDAMENTO} onFechar={onFechar} />
+                  </AgendaProvider>
+                </ClubeProvider>
+              </CaixaProvider>
+            </ProfissionaisProvider>
           </EstoqueProvider>
         </ProdutosProvider>
       </ServicosProvider>

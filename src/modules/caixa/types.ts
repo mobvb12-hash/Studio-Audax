@@ -22,6 +22,19 @@ export type ItemVenda = {
   preco: number
 }
 
+/**
+ * Linha de serviço de uma conta — uma conta pode ter vários serviços além do
+ * serviço do agendamento (ex.: cliente reabriu a conta para lançar um serviço
+ * que faltou). O lançamento continua sendo UM (nunca duplica receita); este
+ * array guarda apenas o detalhamento das linhas.
+ */
+export type ItemServico = {
+  servicoId?: string
+  servico: string
+  /** valor bruto digitado para ESTA linha (sem desconto) */
+  preco: number
+}
+
 export type Lancamento = {
   id: string
   tipo: TipoLancamento
@@ -41,7 +54,15 @@ export type Lancamento = {
   cliente?: string
   clienteId?: string
   profissional?: string
+  /**
+   * Vínculo seguro do profissional para comissão: o id do cadastro evita que
+   * rename/caixa-acentos quebrem o match de produção. Ausente em dado antigo —
+   * a produção cai no nome normalizado como sempre.
+   */
+  profissionalId?: string
   servico?: string
+  /** Detalhe das linhas de serviço da conta (1..N linhas, um lançamento) */
+  servicos?: ItemServico[]
   /** Liga o recebimento ao agendamento — impede pagamento duplicado */
   agendamentoId?: string
   /** Liga o recebimento à assinatura do Audax Club */
@@ -95,7 +116,7 @@ export type Fechamento = {
 
 export type EventoAuditoria = {
   id: string
-  acao: 'estorno' | 'reabertura'
+  acao: 'estorno' | 'reabertura' | 'vinculo'
   /** Dia do caixa afetado */
   data: string
   descricao: string
@@ -110,6 +131,14 @@ export type NovoPagamentoInput = {
   cliente: string
   clienteId?: string
   profissional: string
+  /** id do cadastro do profissional (comissão segura contra rename) */
+  profissionalId?: string
+  /**
+   * Linhas de serviço da conta. A primeira é o serviço do agendamento (ou o
+   * valor digitado); as demais são serviços adicionais lançados na mesma
+   * conta. Quando ausente, o lançamento usa apenas `servico`/`valor`.
+   */
+  servicos?: ItemServico[]
   servico: string
   valor: number
   desconto: number
@@ -135,6 +164,7 @@ export type NovaVendaProdutoInput = {
   desconto: number
   formaPagamento: FormaPagamento
   profissional?: string
+  profissionalId?: string
   observacao?: string
 }
 
@@ -147,7 +177,14 @@ export type NovaVendaInput = {
   cliente?: string
   clienteId?: string
   profissional?: string
+  profissionalId?: string
   observacao?: string
+  /**
+   * Vínculo opcional com o atendimento (fechamento de conta). Permite que a
+   * reabertura da conta devolva a baixa de estoque destas vendas — venda
+   * avulsa (PDV) não informa e continua sem vínculo.
+   */
+  agendamentoId?: string
 }
 
 /** Recebimento de assinatura do Audax Club (pagamento/renovação) */

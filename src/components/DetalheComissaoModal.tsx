@@ -79,8 +79,14 @@ export default function DetalheComissaoModal({
   const profissional = profissionais.find((p) => p.id === profissionalId)
 
   const producao = useMemo(
-    () => calcularProducao(lancamentos, profissionalNome, periodo),
-    [lancamentos, profissionalNome, periodo],
+    () =>
+      calcularProducao(
+        lancamentos,
+        profissionalNome,
+        periodo,
+        profissionalId.startsWith('nome:') ? undefined : profissionalId,
+      ),
+    [lancamentos, profissionalNome, periodo, profissionalId],
   )
 
   const comissaoViva = calcularComissao(producao.liquido, config.percentual)

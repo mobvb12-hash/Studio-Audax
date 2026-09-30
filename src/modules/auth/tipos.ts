@@ -36,7 +36,7 @@ export type ClienteAuth = {
   sair(): Promise<void>
 }
 
-export type PapelPerfil = 'admin' | 'recepcao' | 'profissional'
+export type PapelPerfil = 'dono' | 'admin' | 'gerente' | 'recepcao' | 'profissional'
 
 export type PerfilInfo = {
   id: string
