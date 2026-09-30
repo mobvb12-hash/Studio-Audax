@@ -122,6 +122,7 @@ describe('Supabase — migrations', () => {
       '../supabase/migrations/008_comissoes.sql',
       '../supabase/migrations/009_clube.sql',
       '../supabase/migrations/010_caixa_fechamento_conta.sql',
+      '../supabase/migrations/011_caixa_valores_pagamento.sql',
     ])
   })
 
@@ -452,3 +453,4 @@ describe('Supabase — Audax Club (a 009 espelha o que o app grava)', () => {
     expect(lancamento).not.toMatch(/references/i)
   })
 })
+
