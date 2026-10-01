@@ -70,6 +70,39 @@ export function deveEnviarResposta(decisao: DecisaoEnvio): boolean {
   return destino === teste
 }
 
+/** Diagnóstico de FORMATO do bloqueio — só contagens/booleans, NUNCA números. */
+export type DiagnosticoDestino = {
+  digitosDestino: number | null
+  digitosTeste: number | null
+  destinoComeca55: boolean
+  testeComeca55: boolean
+  mesmoFormato: boolean
+  mesmoNumero: boolean
+}
+
+/**
+ * Reproduz a MESMA comparação de `deveEnviarResposta` (normalizar os dois
+ * lados com `normalizarNumero`) e devolve apenas metadados de formato para
+ * o log do bloqueio `destinatario-nao-autorizado`: quantidades de dígitos,
+ * prefixo 55 e os resultados de igualdade. Os números nunca saem daqui.
+ */
+export function montarDiagnosticoDestino(
+  remetente: unknown,
+  numeroTeste: unknown,
+): DiagnosticoDestino {
+  const destino = normalizarNumero(remetente)
+  const teste = normalizarNumero(numeroTeste)
+  const ambos = destino !== null && teste !== null
+  return {
+    digitosDestino: destino === null ? null : destino.length,
+    digitosTeste: teste === null ? null : teste.length,
+    destinoComeca55: destino !== null && destino.startsWith('55'),
+    testeComeca55: teste !== null && teste.startsWith('55'),
+    mesmoFormato: ambos && destino.length === teste.length,
+    mesmoNumero: ambos && destino === teste,
+  }
+}
+
 /**
  * Lê a credencial server-to-server SOMENTE do ambiente: JSON
  * `SUPABASE_SECRET_KEYS` com a chave `default` (formato `sb_secret_*`).

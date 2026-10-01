@@ -37,6 +37,7 @@ import {
   deveEnviarResposta,
   interpretarEnvio,
   lerChaveSecreta,
+  montarDiagnosticoDestino,
   montarPedidoEnvio,
   normalizarNumero,
 } from './envio.ts'
@@ -488,6 +489,9 @@ export default {
         }
       } else if (resultadoIa.estado === 'gerada') {
         // Sinal de segurança: resposta pronta mas destinatário fora da lista.
+        // Diagnóstico de FORMATO (contagens/booleans — nunca os números)
+        // para explicar por que destino !== teste após a MESMA normalização
+        // usada na regra de autorização (montarDiagnosticoDestino).
         console.log(
           '[whatsapp-envio]',
           JSON.stringify({
@@ -497,6 +501,7 @@ export default {
             destinatario: destinoMascarado,
             servico: servicoIdentificado,
             estadoIa: resultadoIa.estado,
+            diagnostico: montarDiagnosticoDestino(remetenteBruto, numeroTeste),
           }),
         )
       }

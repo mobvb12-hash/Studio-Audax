@@ -3,6 +3,7 @@ import {
   deveEnviarResposta,
   interpretarEnvio,
   lerChaveSecreta,
+  montarDiagnosticoDestino,
   montarPedidoEnvio,
   normalizarNumero,
 } from './envio'
@@ -69,6 +70,92 @@ describe('deveEnviarResposta — lista de teste', () => {
   it('NUNCA envia resposta nula ou vazia', () => {
     expect(deveEnviarResposta(gerada(null))).toBe(false)
     expect(deveEnviarResposta(gerada('   '))).toBe(false)
+  })
+
+  it('BLOQUEIA remetente com 12 dígitos vs teste com 13 dígitos (caso real)', () => {
+    expect(
+      deveEnviarResposta({
+        ...gerada(),
+        remetente: '551198888777',
+        numeroTeste: '5581997373593',
+      }),
+    ).toBe(false)
+  })
+
+  it('PERMITE remetente com 13 dígitos equivalente ao teste (mesmo número)', () => {
+    expect(
+      deveEnviarResposta({
+        ...gerada(),
+        remetente: '+55 (81) 9 9737-3593',
+        numeroTeste: '5581997373593',
+      }),
+    ).toBe(true)
+    expect(
+      deveEnviarResposta({ ...gerada(), remetente: NUMERO_TESTE, numeroTeste: '81 99737-3593' }),
+    ).toBe(true)
+  })
+})
+
+describe('montarDiagnosticoDestino — só formato, nunca números', () => {
+  it('12 vs 13 dígitos: bloqueia e reporta a divergência sem expor os números', () => {
+    const diagnostico = montarDiagnosticoDestino('551198888777', '5581997373593')
+    expect(diagnostico).toEqual({
+      digitosDestino: 12,
+      digitosTeste: 13,
+      destinoComeca55: true,
+      testeComeca55: true,
+      mesmoFormato: false,
+      mesmoNumero: false,
+    })
+  })
+
+  it('13 vs 13 do MESMO número: formato e número coincidem', () => {
+    const diagnostico = montarDiagnosticoDestino('+55 (81) 9 9737-3593', '5581997373593')
+    expect(diagnostico).toEqual({
+      digitosDestino: 13,
+      digitosTeste: 13,
+      destinoComeca55: true,
+      testeComeca55: true,
+      mesmoFormato: true,
+      mesmoNumero: true,
+    })
+  })
+
+  it('11 dígitos sem DDI é completado para 55 nos dois lados', () => {
+    const diagnostico = montarDiagnosticoDestino('81997373593', '81 99737-3593')
+    expect(diagnostico.digitosDestino).toBe(13)
+    expect(diagnostico.digitosTeste).toBe(13)
+    expect(diagnostico.mesmoNumero).toBe(true)
+  })
+
+  it('entradas não utilizáveis viram null/false sem lançar erro', () => {
+    expect(montarDiagnosticoDestino(null, '')).toEqual({
+      digitosDestino: null,
+      digitosTeste: null,
+      destinoComeca55: false,
+      testeComeca55: false,
+      mesmoFormato: false,
+      mesmoNumero: false,
+    })
+    expect(montarDiagnosticoDestino('123', '5581997373593').digitosDestino).toBeNull()
+  })
+
+  it('a mensagem de log serializada NUNCA contém telefone completo (só chaves permitidas)', () => {
+    const serializado = JSON.stringify(
+      montarDiagnosticoDestino('551198888777', '5581997373593'),
+    )
+    expect(serializado).not.toContain(NUMERO_TESTE)
+    expect(serializado).not.toContain('551198888777')
+    expect(serializado).not.toContain('997373593')
+    expect(serializado).not.toMatch(/\d{9,}/)
+    expect(Object.keys(montarDiagnosticoDestino('x', 'y')).sort()).toEqual([
+      'destinoComeca55',
+      'digitosDestino',
+      'digitosTeste',
+      'mesmoFormato',
+      'mesmoNumero',
+      'testeComeca55',
+    ])
   })
 })
 
@@ -225,6 +312,19 @@ describe('extrairRemetente — origem única do destinatário', () => {
 
   it('aceita body em lista (formato alternativo da Evolution)', () => {
     const corpo = { ...payload(), body: [payload().body] }
+    expect(extrairRemetente(corpo)).toBe(NUMERO_TESTE)
+  })
+
+  it('aceita payload real da Evolution com a mensagem sob `data`', () => {
+    const corpo = {
+      event: 'MESSAGES_UPSERT',
+      instance: 'studio-audax',
+      destination: 'https://exemplo.supabase.co/functions/v1/whatsapp-webhook',
+      data: {
+        key: { remoteJid: JID_TESTE, fromMe: false, id: 'MSGDATA' },
+        message: { conversation: 'Quanto custa o Corte Degradê?' },
+      },
+    }
     expect(extrairRemetente(corpo)).toBe(NUMERO_TESTE)
   })
 
