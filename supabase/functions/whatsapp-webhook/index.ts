@@ -25,6 +25,12 @@ import {
   interpretarEventoWebhook,
   variantesConfiguracao,
 } from './evento.ts'
+import {
+  interpretarRespostaIa,
+  lerConfigIa,
+  mapearFontes,
+  processarMensagem,
+} from './ia.ts'
 
 const TIMEOUT_EVOLUTION_MS = 15_000
 
@@ -318,6 +324,52 @@ export default {
         chaves: evento.chaves,
       }),
     )
+
+    // ---------------------------------------------------------------------
+    // Camada inicial de IA — somente perguntas informativas com dados
+    // oficiais (etapa 1). Esta etapa NÃO envia resposta: o resultado é apenas
+    // medido em log (envio automático pendente; sem IA_URL/IA_API_KEY/
+    // IA_MODELO a camada fica inerte). Fontes: exclusivamente as funções
+    // públicas SECURITY DEFINER já existentes (catálogo + expediente) lidas
+    // com o cliente anônimo — nunca service_role, nunca escrita no banco.
+    // ---------------------------------------------------------------------
+    if (evento.recebida && evento.texto) {
+      const resultadoIa = await processarMensagem({
+        texto: evento.texto,
+        config: lerConfigIa((nome) => Deno.env.get(nome)),
+        carregarFontes: async () => {
+          const [catalogo, slots] = await Promise.all([
+            ctx.supabase.rpc('agendamento_publico_catalogo'),
+            ctx.supabase.rpc('agendamento_publico_slots', {
+              p_data: new Date().toISOString().slice(0, 10),
+            }),
+          ])
+          if (catalogo.error || slots.error) {
+            throw new Error('fontes oficiais indisponíveis')
+          }
+          return mapearFontes(catalogo.data, slots.data)
+        },
+        gerar: async (requisicao) => {
+          const resposta = await fetch(requisicao.url, {
+            ...requisicao.init,
+            signal: AbortSignal.timeout(20_000),
+          })
+          return interpretarRespostaIa(resposta.status, await resposta.text())
+        },
+      })
+      // Somente metadados: nenhum texto de mensagem é registrado aqui.
+      console.log(
+        '[whatsapp-ia]',
+        JSON.stringify({
+          intencao: resultadoIa.intencao.tipo,
+          motivo:
+            resultadoIa.intencao.tipo === 'bloqueada' ? resultadoIa.intencao.motivo : null,
+          estado: resultadoIa.estado,
+          respostaTamanho: (resultadoIa.resposta ?? '').length,
+        }),
+      )
+      // Sem envio nesta etapa: resposta gerada fica aqui (pendência documentada).
+    }
 
     // Sempre 200: não há auto-resposta ao cliente nem rejeição em cascata —
     // a Evolution não precisa reenviar o que já foi entregue.
