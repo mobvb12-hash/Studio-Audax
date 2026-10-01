@@ -6,6 +6,11 @@
 --
 -- Esta migration deve rodar APÓS a 001_perfis.sql e as outras que criam as tabelas.
 -- É idempotente: usa DROP POLICY IF EXISTS + CREATE POLICY.
+--
+-- Também remove a política genérica `acesso_autenticado` (laço do bootstrap em
+-- schema.sql: "for all to authenticated using (true)"): policies permissivas são
+-- combinadas com OR pelo Postgres, então sem este drop ela permaneceria ativa em
+-- paralelo às policies por papel e anularia todo o controle de acesso.
 -- ============================================================================
 
 -- Função auxiliar para obter o papel do usuário autenticado
@@ -70,6 +75,30 @@ grant execute on function public.current_user_is_admin() to authenticated;
 grant execute on function public.current_user_is_gerente_ou_acima() to authenticated;
 grant execute on function public.current_user_is_recepcao_ou_acima() to authenticated;
 grant execute on function public.current_profissional_id() to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Remove a política genérica do bootstrap (schema.sql): "acesso_autenticado"
+-- "for all to authenticated using (true)". Idempotente e à prova de drift:
+-- só tenta o drop se a tabela existir (build só com as migrations 001-009
+-- não cria marketing_listas / automacoes_tratadas / ia_tratadas).
+-- ----------------------------------------------------------------------------
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'agendamentos', 'automacoes_tratadas', 'bloqueios', 'caixa_auditoria',
+    'caixa_fechamentos', 'caixa_lancamentos', 'clientes', 'clube_assinaturas',
+    'clube_pagamentos', 'comissoes_auditoria', 'comissoes_configs',
+    'comissoes_fechamentos', 'crm_interacoes', 'espera_pedidos',
+    'estoque_movimentacoes', 'ia_tratadas', 'marketing_listas', 'perfis',
+    'produtos', 'profissionais', 'servicos', 'whatsapp_mensagens'
+  ] loop
+    if to_regclass('public.' || t) is not null then
+      execute format('drop policy if exists acesso_autenticado on %I', t);
+    end if;
+  end loop;
+end $$;
 
 -- ============================================================================
 -- PROFISSIONAIS
@@ -891,133 +920,19 @@ create policy "whatsapp_mensagens_update"
   );
 
 -- ============================================================================
--- IA SUGESTÕES
--- ============================================================================
--- Admin/Gerente: vê todas
--- Recepção: vê
--- Profissional: não acessa
--- ============================================================================
-drop policy if exists ia_acesso_autenticado on public.ia_sugestoes;
 
-create policy "ia_sugestoes_select"
-  on public.ia_sugestoes for select
-  to authenticated
-  using (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  );
 
-create policy "ia_sugestoes_insert"
-  on public.ia_sugestoes for insert
-  to authenticated
-  with check (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  );
 
-create policy "ia_sugestoes_update"
-  on public.ia_sugestoes for update
-  to authenticated
-  using (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  )
-  with check (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  );
 
 -- ============================================================================
--- AUTOMAÇÕES
--- ============================================================================
--- Admin/Gerente: gerencia
--- ============================================================================
-drop policy if exists automacoes_acesso_autenticado on public.automacoes;
 
-create policy "automacoes_select"
-  on public.automacoes for select
-  to authenticated
-  using (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-  );
 
-create policy "automacoes_insert"
-  on public.automacoes for insert
-  to authenticated
-  with check (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-  );
 
-create policy "automacoes_update"
-  on public.automacoes for update
-  to authenticated
-  using (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-  )
-  with check (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-  );
-
-create policy "automacoes_delete"
-  on public.automacoes for delete
-  to authenticated
-  using (
-    public.current_user_is_admin()
-  );
 
 -- ============================================================================
--- MARKETING
--- ============================================================================
--- Admin/Gerente/Recepção: acesso
--- ============================================================================
-drop policy if exists marketing_acesso_autenticado on public.marketing_campanhas;
 
-create policy "marketing_campanhas_select"
-  on public.marketing_campanhas for select
-  to authenticated
-  using (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  );
 
-create policy "marketing_campanhas_insert"
-  on public.marketing_campanhas for insert
-  to authenticated
-  with check (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  );
 
-create policy "marketing_campanhas_update"
-  on public.marketing_campanhas for update
-  to authenticated
-  using (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  )
-  with check (
-    public.current_user_is_admin()
-    or public.current_user_is_gerente_ou_acima()
-    or public.current_user_is_recepcao_ou_acima()
-  );
-
-create policy "marketing_campanhas_delete"
-  on public.marketing_campanhas for delete
-  to authenticated
-  using (
-    public.current_user_is_admin()
-  );
 
 -- ============================================================================
 -- GRANT EXECUTE PARA ANON (agendamento público)
