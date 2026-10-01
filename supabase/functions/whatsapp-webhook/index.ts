@@ -13,19 +13,29 @@
 //      válida (mesmo portão do whatsapp-enviar) — a anon key não configura nada.
 //
 // O que esta função NÃO faz (regra da etapa):
-//   - não responde a mensagem de WhatsApp (nenhum fetch de envio);
+//   - não responde qualquer cliente: a FASE 3 envia a resposta GERADA da IA
+//     SOMENTE ao número de teste autorizado (secret IA_NUMERO_TESTE) — sem
+//     secret de número configurado, nada sai;
 //   - não persiste nada (nenhuma escrita em banco, nenhuma tabela nova);
 //   - não guarda dados pessoais: o log carrega só texto mascarado e tamanho.
-// Segredos (EVOLUTION_*, SUPABASE_URL) vivem somente no ambiente da função;
-// a apikey que a Evolution coloca NO CORPO do evento nunca é logada nem devolvida.
+// Segredos (EVOLUTION_*, SUPABASE_URL, IA_*) vivem somente no ambiente da
+// função; a apikey que a Evolution coloca NO CORPO do evento nunca é logada
+// nem devolvida. O envio sai exclusivamente pela função existente
+// `whatsapp-enviar` (Bearer service_role) — esta função nunca fala com a
+// Evolution para enviar.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { withSupabase } from '@supabase/server'
 import {
+  extrairRemetente,
   ehMensagemDeTeste,
   interpretarEventoWebhook,
+  mascararRemetente,
   variantesConfiguracao,
 } from './evento.ts'
+import { deveEnviarResposta, interpretarEnvio, montarPedidoEnvio, normalizarNumero } from './envio.ts'
 import {
+  type FontesOficiais,
+  identificarServico,
   interpretarRespostaIa,
   lerConfigIa,
   mapearFontes,
@@ -326,16 +336,19 @@ export default {
     )
 
     // ---------------------------------------------------------------------
-    // Camada inicial de IA — somente perguntas informativas com dados
-    // oficiais (etapa 1). Esta etapa NÃO envia resposta: o resultado é apenas
-    // medido em log (envio automático pendente; sem IA_URL/IA_API_KEY/
-    // IA_MODELO a camada fica inerte). Fontes: exclusivamente as funções
-    // públicas SECURITY DEFINER já existentes (catálogo + expediente) lidas
-    // com o cliente anônimo — nunca service_role, nunca escrita no banco.
+    // FASE 3 — IA informativa + envio da resposta GERADA ao número de teste.
+    // Classificação e geração são da camada ./ia.ts; o envio sai SOMENTE
+    // pela função existente ./whatsapp-enviar (modo server-to-server, Bearer
+    // service_role) — nunca direto para a Evolution, nunca com segredo no
+    // corpo. Destinatário: remetente do evento E que esteja na lista
+    // IA_NUMERO_TESTE (a IA nunca escolhe para quem enviar). Fontes:
+    // exclusivamente as funções públicas SECURITY DEFINER já existentes
+    // (catálogo + expediente) lidas com o cliente anônimo — nunca escrita.
     // ---------------------------------------------------------------------
     if (evento.recebida && evento.texto) {
       const inicioIa = Date.now()
       const configIa = lerConfigIa((nome) => Deno.env.get(nome))
+      let fontesCarregadas: FontesOficiais | null = null
       const resultadoIa = await processarMensagem({
         texto: evento.texto,
         config: configIa,
@@ -349,7 +362,9 @@ export default {
           if (catalogo.error || slots.error) {
             throw new Error('fontes oficiais indisponíveis')
           }
-          return mapearFontes(catalogo.data, slots.data)
+          const fontes = mapearFontes(catalogo.data, slots.data)
+          fontesCarregadas = fontes
+          return fontes
         },
         gerar: async (requisicao) => {
           const resposta = await fetch(requisicao.url, {
@@ -359,8 +374,12 @@ export default {
           return interpretarRespostaIa(resposta.status, await resposta.text())
         },
       })
-      // Log técnico: metadados + resposta GERADA pelo provedor (saída do
-      // bot, só dados oficiais). O texto recebido do cliente NUNCA é logado.
+      const servicoIdentificado = fontesCarregadas
+        ? identificarServico(evento.texto, fontesCarregadas)
+        : null
+      // Log técnico: metadados + serviço identificado + resposta GERADA
+      // (saída do bot, só dados oficiais). O texto recebido do cliente
+      // NUNCA é logado.
       console.log(
         '[whatsapp-ia]',
         JSON.stringify({
@@ -368,13 +387,91 @@ export default {
           motivo:
             resultadoIa.intencao.tipo === 'bloqueada' ? resultadoIa.intencao.motivo : null,
           estado: resultadoIa.estado,
+          servico: servicoIdentificado,
           modelo: configIa?.modelo ?? null,
           duracaoMs: Date.now() - inicioIa,
           respostaTamanho: (resultadoIa.resposta ?? '').length,
           resposta: resultadoIa.resposta,
         }),
       )
-      // Sem envio nesta etapa: resposta gerada fica aqui (pendência documentada).
+
+      // Envio: somente resposta GERADA + destinatário autorizado. O texto
+      // da IA vira SOMENTE o campo `mensagem` do whatsapp-enviar.
+      const numeroTeste = (Deno.env.get('IA_NUMERO_TESTE') ?? '').trim()
+      const remetenteBruto = extrairRemetente(corpo)
+      const autorizado = deveEnviarResposta({
+        estado: resultadoIa.estado,
+        resposta: resultadoIa.resposta,
+        remetente: remetenteBruto,
+        numeroTeste,
+      })
+      const destinoMascarado = remetenteBruto
+        ? mascararRemetente(`${remetenteBruto}@s.whatsapp.net`)
+        : evento.remetente
+
+      if (autorizado && remetenteBruto && resultadoIa.resposta) {
+        const inicioEnvio = Date.now()
+        const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        const baseSupabase = segredos.base
+        try {
+          const { url, init } = montarPedidoEnvio(baseSupabase, serviceRole, {
+            telefone: normalizarNumero(remetenteBruto) ?? '',
+            mensagem: resultadoIa.resposta,
+          })
+          const respostaEnvio = await fetch(url, {
+            ...init,
+            signal: AbortSignal.timeout(15_000),
+          })
+          const corpoEnvio = await respostaEnvio.text()
+          const resultadoEnvio = interpretarEnvio(respostaEnvio.status, corpoEnvio)
+          console.log(
+            '[whatsapp-envio]',
+            JSON.stringify({
+              envioIniciado: true,
+              ok: resultadoEnvio.ok,
+              status: respostaEnvio.status,
+              duracaoMs: Date.now() - inicioEnvio,
+              motivo: resultadoEnvio.ok ? null : (resultadoEnvio.motivo ?? null),
+              destinatario: destinoMascarado,
+              servico: servicoIdentificado,
+              estadoIa: resultadoIa.estado,
+            }),
+          )
+        } catch (erro) {
+          const estourou = erro instanceof Error && erro.name === 'TimeoutError'
+          const nosso = erro instanceof Error && /INVÁLID|ausente|vazia|acima de/i.test(erro.message)
+          console.log(
+            '[whatsapp-envio]',
+            JSON.stringify({
+              envioIniciado: true,
+              ok: false,
+              status: null,
+              duracaoMs: Date.now() - inicioEnvio,
+              motivo: estourou
+                ? 'whatsapp-enviar não respondeu em 15s.'
+                : nosso
+                  ? (erro as Error).message
+                  : 'Falha ao contatar o whatsapp-enviar.',
+              destinatario: destinoMascarado,
+              servico: servicoIdentificado,
+              estadoIa: resultadoIa.estado,
+            }),
+          )
+        }
+      } else if (resultadoIa.estado === 'gerada') {
+        // Sinal de segurança: resposta pronta mas destinatário fora da lista.
+        console.log(
+          '[whatsapp-envio]',
+          JSON.stringify({
+            envioIniciado: false,
+            ok: false,
+            motivo: 'destinatario-nao-autorizado',
+            destinatario: destinoMascarado,
+            servico: servicoIdentificado,
+            estadoIa: resultadoIa.estado,
+          }),
+        )
+      }
     }
 
     // Sempre 200: não há auto-resposta ao cliente nem rejeição em cascata —

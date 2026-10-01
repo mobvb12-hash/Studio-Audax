@@ -152,6 +152,26 @@ export function montarPromptSistema(contexto: string): string {
   ].join('\n')
 }
 
+/** FASE 3 — serviço do catálogo citado na pergunta (para log técnico). */
+export function identificarServico(texto: string, fontes: FontesOficiais): string | null {
+  const normalizar = (valor: string) =>
+    valor
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  const alvo = normalizar(texto ?? '')
+  if (!alvo) return null
+  const nomes = (fontes.servicos ?? [])
+    .filter((servico) => servico.ativo !== false && servico.nome && servico.nome.trim())
+    .map((servico) => servico.nome.trim())
+    .filter((nome) => alvo.includes(normalizar(nome)))
+  if (!nomes.length) return null
+  // Mais longo primeiro: "Corte + Barba" vence "Barba" na mesma pergunta.
+  nomes.sort((a, b) => b.length - a.length)
+  return nomes[0]
+}
+
 /** Configuração do provedor — nomes de secret do ambiente; valores NUNCA aqui. */
 export function lerConfigIa(ler: (nome: string) => string | undefined): ConfigIa | null {
   const url = (ler('IA_URL') ?? '').trim()

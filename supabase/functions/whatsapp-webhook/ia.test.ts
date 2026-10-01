@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   classificarIntencao,
   formatarPreco,
+  identificarServico,
   interpretarRespostaIa,
   lerConfigIa,
   mapearFontes,
@@ -661,5 +662,45 @@ describe('FASE 2 — preços vêm SOMENTE do catálogo, nunca fixos no prompt', 
     expect(serializado).not.toContain('feriado')
     expect(serializado).not.toContain('ocupad')
     expect(serializado).not.toContain('bloqueio')
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// FASE 3 — serviço identificado no log técnico (origem: catálogo oficial).
+// ---------------------------------------------------------------------------
+describe('identificarServico — log técnico da fase 3', () => {
+  const fontes: FontesOficiais = {
+    servicos: [
+      { nome: 'Corte + Barba', preco: 110 },
+      { nome: 'Corte Degradê', preco: 70 },
+      { nome: 'Barba', preco: 50 },
+      { nome: 'Serviço desativado', preco: 10, ativo: false },
+    ],
+    profissionais: [],
+    expediente: null,
+    endereco: null,
+  }
+
+  it('encontra o serviço citado na pergunta', () => {
+    expect(identificarServico('Quanto custa o Corte Degradê?', fontes)).toBe('Corte Degradê')
+    expect(identificarServico('quanto custa a barba?', fontes)).toBe('Barba')
+  })
+
+  it('ignora caixa e acentos', () => {
+    expect(identificarServico('CORTE DEGRADE sai quanto?', fontes)).toBe('Corte Degradê')
+  })
+
+  it('escolhe o nome mais longo quando dois casam', () => {
+    expect(identificarServico('preço do Corte + Barba completo', fontes)).toBe('Corte + Barba')
+  })
+
+  it('nunca retorna serviço desativado', () => {
+    expect(identificarServico('quanto custa o serviço desativado?', fontes)).toBeNull()
+  })
+
+  it('retorna null quando nenhum serviço é citado', () => {
+    expect(identificarServico('qual o horário de funcionamento?', fontes)).toBeNull()
+    expect(identificarServico('', fontes)).toBeNull()
   })
 })

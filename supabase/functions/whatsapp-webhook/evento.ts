@@ -87,6 +87,23 @@ export function mascararRemetente(remoteJid: string | null): string | null {
   return `***${digitos.slice(-4)} (${digitos.length} digitos)`
 }
 
+/**
+ * FASE 3 — dígitos do remetente do evento, usados SOMENTE como destino do
+ * envio (comparados com a lista de teste). Diferente de `remetente` no
+ * `EventoInterpretado`, este valor é bruto: quem chama é obrigado a nunca
+ * registrá-lo em log (usar `mascararRemetente`).
+ */
+export function extrairRemetente(bruto: unknown): string | null {
+  const registro = objeto(bruto)
+  if (!registro) return null
+  const caixa = primeiroObjeto(registro.body) ?? primeiroObjeto(registro.data)
+  const chave = objeto(caixa ? caixa.key : null)
+  const remoteJid = chave && typeof chave.remoteJid === 'string' ? chave.remoteJid : null
+  if (!remoteJid) return null
+  const digitos = remoteJid.split('@')[0].replace(/\D/g, '')
+  return digitos.length >= 8 && digitos.length <= 15 ? digitos : null
+}
+
 /** Texto do teste de recebimento desta etapa (nada além é classificado). */
 export function ehMensagemDeTeste(texto: string | null): boolean {
   return (texto ?? '').trim().startsWith('Teste recebimento')
