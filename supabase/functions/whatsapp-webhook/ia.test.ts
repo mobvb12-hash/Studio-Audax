@@ -10,6 +10,7 @@ import {
   montarPromptSistema,
   montarRequisicaoIa,
   processarMensagem,
+  sanitizarMensagemErro,
   textoRecusa,
 } from './ia'
 import type { FontesOficiais, RequisicaoIa } from './ia'
@@ -354,6 +355,7 @@ describe('interpretarRespostaIa', () => {
     expect(interpretarRespostaIa(200, corpo)).toEqual({
       ok: true,
       texto: 'O corte custa R$ 45,00.',
+      status: 200,
     })
   })
 
@@ -363,7 +365,12 @@ describe('interpretarRespostaIa', () => {
 
   it('erro do provedor vira motivo curto', () => {
     const corpo = JSON.stringify({ error: { message: 'chave inválida' } })
-    expect(interpretarRespostaIa(401, corpo)).toEqual({ ok: false, motivo: 'chave inválida' })
+    expect(interpretarRespostaIa(401, corpo)).toEqual({
+      ok: false,
+      motivo: 'chave inválida',
+      status: 401,
+      tipo: 'http',
+    })
   })
 
   it('corpo não-JSON vira motivo genérico com o status', () => {
@@ -702,5 +709,163 @@ describe('identificarServico — log técnico da fase 3', () => {
   it('retorna null quando nenhum serviço é citado', () => {
     expect(identificarServico('qual o horário de funcionamento?', fontes)).toBeNull()
     expect(identificarServico('', fontes)).toBeNull()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// FASE 3 — observabilidade: diagnóstico seguro da chamada ao provedor.
+// O log [whatsapp-ia] registra status HTTP, tipo de erro, mensagem de erro
+// SANITIZADA e duração — nunca chave, Bearer, secret ou corpo da requisição.
+// ---------------------------------------------------------------------------
+describe('processarMensagem — diagnostico da chamada (fase 3)', () => {
+  const fontes = async (): FontesOficiais => ({
+    servicos: [{ nome: 'Corte Degradê', preco: 70, duracaoMin: 40 }],
+    profissionais: [],
+    expediente: null,
+    endereco: null,
+  })
+
+  it('falha HTTP registra status, tipo e mensagem do provedor', async () => {
+    const resultado = await processarMensagem({
+      texto: 'Quanto custa o Corte Degradê?',
+      config,
+      carregarFontes: fontes,
+      gerar: async () => ({
+        ok: false,
+        motivo: 'models/gemini-3.1-flash-lite is temporarily unavailable.',
+        status: 503,
+        tipo: 'http',
+      }),
+    })
+    expect(resultado.estado).toBe('falha-provedor')
+    expect(resultado.diagnostico).toEqual({
+      status: 503,
+      tipoErro: 'http',
+      mensagemErro: 'models/gemini-3.1-flash-lite is temporarily unavailable.',
+      duracaoChamadaMs: expect.any(Number),
+    })
+    expect(resultado.diagnostico?.duracaoChamadaMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('timeout do provedor vira tipo timeout sem status', async () => {
+    const resultado = await processarMensagem({
+      texto: 'Quanto custa o Corte Degradê?',
+      config,
+      carregarFontes: fontes,
+      gerar: async () => {
+        const erro = new Error('The operation was aborted due to timeout')
+        erro.name = 'TimeoutError'
+        throw erro
+      },
+    })
+    expect(resultado.estado).toBe('falha-provedor')
+    expect(resultado.diagnostico?.status).toBeNull()
+    expect(resultado.diagnostico?.tipoErro).toBe('timeout')
+    expect(resultado.diagnostico?.mensagemErro).toContain('timeout')
+  })
+
+  it('erro de rede vira tipo rede', async () => {
+    const resultado = await processarMensagem({
+      texto: 'Quanto custa o Corte Degradê?',
+      config,
+      carregarFontes: fontes,
+      gerar: async () => {
+        throw new TypeError('fetch failed')
+      },
+    })
+    expect(resultado.diagnostico?.tipoErro).toBe('rede')
+    expect(resultado.diagnostico?.mensagemErro).toBe('fetch failed')
+    expect(resultado.diagnostico?.status).toBeNull()
+  })
+
+  it('resposta 200 sem conteúdo vira tipo sem-conteudo', async () => {
+    const resultado = await processarMensagem({
+      texto: 'Quanto custa o Corte Degradê?',
+      config,
+      carregarFontes: fontes,
+      gerar: async () => interpretarRespostaIa(200, JSON.stringify({ choices: [] })),
+    })
+    expect(resultado.estado).toBe('falha-provedor')
+    expect(resultado.diagnostico?.status).toBe(200)
+    expect(resultado.diagnostico?.tipoErro).toBe('sem-conteudo')
+    expect(resultado.diagnostico?.mensagemErro).toBe('Resposta do provedor sem conteúdo.')
+  })
+
+  it('sucesso registra status 200 e nenhum erro', async () => {
+    const resultado = await processarMensagem({
+      texto: 'Quanto custa o Corte Degradê?',
+      config,
+      carregarFontes: fontes,
+      gerar: async () => ({ ok: true, texto: 'R$ 70,00.', status: 200 }),
+    })
+    expect(resultado.estado).toBe('gerada')
+    expect(resultado.diagnostico).toEqual({
+      status: 200,
+      tipoErro: null,
+      mensagemErro: null,
+      duracaoChamadaMs: expect.any(Number),
+    })
+  })
+
+  it('sem chamada ao provedor não gera diagnostico (bloqueio, config e fontes)', async () => {
+    const bloqueada = await processarMensagem({
+      texto: 'cancela meu horário',
+      config,
+      carregarFontes: fontes,
+      gerar: async () => ({ ok: true, texto: 'não deveria' }),
+    })
+    expect(bloqueada.diagnostico).toBeNull()
+
+    const semConfig = await processarMensagem({
+      texto: 'quanto custa',
+      config: null,
+      carregarFontes: fontes,
+      gerar: async () => ({ ok: true, texto: 'não deveria' }),
+    })
+    expect(semConfig.estado).toBe('sem-provedor')
+    expect(semConfig.diagnostico).toBeNull()
+
+    const semFontes = await processarMensagem({
+      texto: 'quanto custa',
+      config,
+      carregarFontes: async () => {
+        throw new Error('rpc falhou')
+      },
+      gerar: async () => ({ ok: true, texto: 'não deveria' }),
+    })
+    expect(semFontes.estado).toBe('falha-fontes')
+    expect(semFontes.diagnostico).toBeNull()
+  })
+})
+
+describe('sanitizarMensagemErro — nenhum secret chega ao log', () => {
+  it('oculta Bearer, chaves Google, supabase, OpenAI e tokens longos', () => {
+    const bruto =
+      'erro ao chamar: Bearer sbp_abc123def456gh789 com AIzaSyExampleKey123456789012345678 e sk-proj-abcdefghijklmnop123456 e sb_secret_xyz_1234567890'
+    const limpo = sanitizarMensagemErro(bruto) ?? ''
+    expect(limpo).not.toContain('sbp_abc')
+    expect(limpo).not.toContain('AIzaSy')
+    expect(limpo).not.toContain('sk-proj')
+    expect(limpo).not.toContain('sb_secret')
+    expect(limpo).toContain('Bearer [oculto]')
+    expect(limpo).toContain('[oculto]')
+  })
+
+  it('trunca em 300 caracteres e aceita entrada não-string', () => {
+    const prosa = 'mensagem de erro longa do provedor. '.repeat(30).trim()
+    expect(sanitizarMensagemErro(prosa)).toHaveLength(300)
+    expect(sanitizarMensagemErro('   ')).toBeNull()
+    expect(sanitizarMensagemErro(null)).toBeNull()
+    expect(sanitizarMensagemErro(42)).toBeNull()
+  })
+
+  it('mantém texto de erro comum do provedor intacto', () => {
+    expect(sanitizarMensagemErro('quota exceeded for model')).toBe(
+      'quota exceeded for model',
+    )
+    expect(sanitizarMensagemErro('Resposta do provedor sem conteúdo.')).toBe(
+      'Resposta do provedor sem conteúdo.',
+    )
   })
 })

@@ -47,16 +47,36 @@ export type FontesOficiais = {
 
 export type RequisicaoIa = { url: string; init: RequestInit }
 
+/** Tipo de erro da chamada ao provedor — SEMPRE sem credenciais. */
+export type TipoErroIa = 'http' | 'sem-conteudo' | 'resposta-invalida' | 'timeout' | 'rede'
+
+/**
+ * FASE 3 — diagnóstico seguro da chamada ao provedor para o log técnico.
+ * `mensagemErro` passa SEMPRE por `sanitizarMensagemErro` (nunca contém
+ * chave, Bearer ou secret); nunca inclui corpo da requisição nem headers.
+ */
+export type DiagnosticoChamada = {
+  status: number | null
+  tipoErro: TipoErroIa | null
+  mensagemErro: string | null
+  duracaoChamadaMs: number
+}
+
 export type ResultadoResposta = {
   ok: boolean
   texto?: string
   motivo?: string
+  /** HTTP status retornado pelo provedor, quando a resposta chegou */
+  status?: number
+  tipo?: TipoErroIa
 }
 
 export type ResultadoProcessamento = {
   intencao: IntencaoIa
   estado: 'bloqueada' | 'sem-provedor' | 'falha-fontes' | 'gerada' | 'falha-provedor'
   resposta: string | null
+  /** null quando não houve chamada ao provedor (bloqueio/config/fontes) */
+  diagnostico: DiagnosticoChamada | null
 }
 
 // Padrões de bloqueio — segurança primeiro (interna antes de ação).
@@ -211,6 +231,24 @@ export function montarRequisicaoIa(
   }
 }
 
+/**
+ * Remove qualquer traço de credencial de uma mensagem de erro antes do log:
+ * Bearer, chaves de API e tokens longos viram `[oculto]`. A mensagem fica
+ * truncada em 300 caracteres.
+ */
+export function sanitizarMensagemErro(mensagem: unknown): string | null {
+  if (typeof mensagem !== 'string' || !mensagem.trim()) return null
+  const limpo = mensagem
+    .replace(/Bearer\s+[0-9A-Za-z._~+/=-]+/gi, 'Bearer [oculto]')
+    .replace(/AIza[0-9A-Za-z_-]{10,}/g, '[oculto]')
+    .replace(/\bsb_secret_[0-9A-Za-z_-]+/g, '[oculto]')
+    .replace(/\bsbp_[0-9A-Za-z_-]+/g, '[oculto]')
+    .replace(/\bsk-[0-9A-Za-z_-]{8,}/g, '[oculto]')
+    .replace(/\b[A-Za-z0-9_-]{35,}\b/g, '[oculto]')
+    .trim()
+  return limpo ? limpo.slice(0, 300) : null
+}
+
 /** Interpreta a resposta do provedor sem vazar corpo arbitrário (máx. 300). */
 export function interpretarRespostaIa(status: number, corpo: string): ResultadoResposta {
   if (status >= 200 && status < 300) {
@@ -220,23 +258,38 @@ export function interpretarRespostaIa(status: number, corpo: string): ResultadoR
       }
       const conteudo = json.choices?.[0]?.message?.content
       if (typeof conteudo === 'string' && conteudo.trim()) {
-        return { ok: true, texto: conteudo.trim() }
+        return { ok: true, texto: conteudo.trim(), status }
       }
-      return { ok: false, motivo: 'Resposta do provedor sem conteúdo.' }
+      return {
+        ok: false,
+        motivo: 'Resposta do provedor sem conteúdo.',
+        status,
+        tipo: 'sem-conteudo',
+      }
     } catch {
-      return { ok: false, motivo: 'Resposta do provedor inválida.' }
+      return {
+        ok: false,
+        motivo: 'Resposta do provedor inválida.',
+        status,
+        tipo: 'resposta-invalida',
+      }
     }
   }
   try {
     const json = JSON.parse(corpo) as { error?: { message?: unknown } }
     const mensagem = json.error?.message
     if (typeof mensagem === 'string' && mensagem.trim()) {
-      return { ok: false, motivo: mensagem.trim().slice(0, 300) }
+      return { ok: false, motivo: mensagem.trim().slice(0, 300), status, tipo: 'http' }
     }
   } catch {
     // corpo não-JSON → genérico
   }
-  return { ok: false, motivo: `O provedor de IA recusou a chamada (HTTP ${status}).` }
+  return {
+    ok: false,
+    motivo: `O provedor de IA recusou a chamada (HTTP ${status}).`,
+    status,
+    tipo: 'http',
+  }
 }
 
 function lista(bruto: unknown): Record<string, unknown>[] {
@@ -304,20 +357,25 @@ export async function processarMensagem(
   const intencao = classificarIntencao(entrada.texto)
 
   if (intencao.tipo === 'bloqueada') {
-    return { intencao, estado: 'bloqueada', resposta: textoRecusa(intencao.motivo) }
+    return {
+      intencao,
+      estado: 'bloqueada',
+      resposta: textoRecusa(intencao.motivo),
+      diagnostico: null,
+    }
   }
   if (!entrada.config) {
-    return { intencao, estado: 'sem-provedor', resposta: null }
+    return { intencao, estado: 'sem-provedor', resposta: null, diagnostico: null }
   }
   if (!entrada.carregarFontes || !entrada.gerar) {
-    return { intencao, estado: 'falha-fontes', resposta: null }
+    return { intencao, estado: 'falha-fontes', resposta: null, diagnostico: null }
   }
 
   let fontes: FontesOficiais
   try {
     fontes = await entrada.carregarFontes()
   } catch {
-    return { intencao, estado: 'falha-fontes', resposta: null }
+    return { intencao, estado: 'falha-fontes', resposta: null, diagnostico: null }
   }
 
   const requisicao = montarRequisicaoIa(
@@ -325,13 +383,48 @@ export async function processarMensagem(
     montarContextoOficial(fontes),
     entrada.texto,
   )
+  const inicioChamada = Date.now()
   try {
     const resultado = await entrada.gerar(requisicao)
+    const duracaoChamadaMs = Date.now() - inicioChamada
     if (resultado.ok && resultado.texto && resultado.texto.trim()) {
-      return { intencao, estado: 'gerada', resposta: resultado.texto.trim() }
+      return {
+        intencao,
+        estado: 'gerada',
+        resposta: resultado.texto.trim(),
+        diagnostico: {
+          status: resultado.status ?? null,
+          tipoErro: null,
+          mensagemErro: null,
+          duracaoChamadaMs,
+        },
+      }
     }
-    return { intencao, estado: 'falha-provedor', resposta: null }
-  } catch {
-    return { intencao, estado: 'falha-provedor', resposta: null }
+    return {
+      intencao,
+      estado: 'falha-provedor',
+      resposta: null,
+      diagnostico: {
+        status: resultado.status ?? null,
+        tipoErro: resultado.tipo ?? (resultado.ok ? 'sem-conteudo' : 'http'),
+        mensagemErro: sanitizarMensagemErro(resultado.motivo),
+        duracaoChamadaMs,
+      },
+    }
+  } catch (erro) {
+    const estourou = erro instanceof Error && erro.name === 'TimeoutError'
+    return {
+      intencao,
+      estado: 'falha-provedor',
+      resposta: null,
+      diagnostico: {
+        status: null,
+        tipoErro: estourou ? 'timeout' : 'rede',
+        mensagemErro: sanitizarMensagemErro(
+          erro instanceof Error ? erro.message : 'erro desconhecido',
+        ),
+        duracaoChamadaMs: Date.now() - inicioChamada,
+      },
+    }
   }
 }

@@ -377,9 +377,11 @@ export default {
       const servicoIdentificado = fontesCarregadas
         ? identificarServico(evento.texto, fontesCarregadas)
         : null
-      // Log técnico: metadados + serviço identificado + resposta GERADA
-      // (saída do bot, só dados oficiais). O texto recebido do cliente
-      // NUNCA é logado.
+      // Log técnico: metadados + serviço identificado + diagnóstico seguro
+      // da chamada ao provedor (HTTP status, tipo de erro, mensagem de erro
+      // SANITIZADA, duração) + resposta GERADA (saída do bot, só dados
+      // oficiais). O texto recebido do cliente NUNCA é logado e nenhum
+      // secret (IA_API_KEY / Bearer / EVOLUTION / service_role) entra aqui.
       console.log(
         '[whatsapp-ia]',
         JSON.stringify({
@@ -390,6 +392,7 @@ export default {
           servico: servicoIdentificado,
           modelo: configIa?.modelo ?? null,
           duracaoMs: Date.now() - inicioIa,
+          diagnostico: resultadoIa.diagnostico,
           respostaTamanho: (resultadoIa.resposta ?? '').length,
           resposta: resultadoIa.resposta,
         }),
