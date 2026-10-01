@@ -334,9 +334,11 @@ export default {
     // com o cliente anônimo — nunca service_role, nunca escrita no banco.
     // ---------------------------------------------------------------------
     if (evento.recebida && evento.texto) {
+      const inicioIa = Date.now()
+      const configIa = lerConfigIa((nome) => Deno.env.get(nome))
       const resultadoIa = await processarMensagem({
         texto: evento.texto,
-        config: lerConfigIa((nome) => Deno.env.get(nome)),
+        config: configIa,
         carregarFontes: async () => {
           const [catalogo, slots] = await Promise.all([
             ctx.supabase.rpc('agendamento_publico_catalogo'),
@@ -357,7 +359,8 @@ export default {
           return interpretarRespostaIa(resposta.status, await resposta.text())
         },
       })
-      // Somente metadados: nenhum texto de mensagem é registrado aqui.
+      // Log técnico: metadados + resposta GERADA pelo provedor (saída do
+      // bot, só dados oficiais). O texto recebido do cliente NUNCA é logado.
       console.log(
         '[whatsapp-ia]',
         JSON.stringify({
@@ -365,7 +368,10 @@ export default {
           motivo:
             resultadoIa.intencao.tipo === 'bloqueada' ? resultadoIa.intencao.motivo : null,
           estado: resultadoIa.estado,
+          modelo: configIa?.modelo ?? null,
+          duracaoMs: Date.now() - inicioIa,
           respostaTamanho: (resultadoIa.resposta ?? '').length,
+          resposta: resultadoIa.resposta,
         }),
       )
       // Sem envio nesta etapa: resposta gerada fica aqui (pendência documentada).
