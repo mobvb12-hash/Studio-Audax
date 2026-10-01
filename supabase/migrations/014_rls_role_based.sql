@@ -58,6 +58,13 @@ as $$
 $$;
 
 -- Função para obter o ID do profissional logado (se for profissional)
+-- Vínculo usuário autenticado → profissional: a coluna `user_id` não existia
+-- em nenhuma fonte do esquema (002, 004 e schema.sql); sem ela a função abaixo
+-- falharia com 42703. Criada aqui como anulável e idempotente — nenhum dado
+-- existente é alterado e o app não escreve nesta coluna hoje.
+alter table public.profissionais
+  add column if not exists user_id uuid;
+
 create or replace function public.current_profissional_id()
 returns text
 language sql
