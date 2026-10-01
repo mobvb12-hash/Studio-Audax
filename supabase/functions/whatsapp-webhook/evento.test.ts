@@ -6,6 +6,7 @@ import {
   mascararRemetente,
   montarCorpoConfiguracao,
   normalizarNomeEvento,
+  variantesConfiguracao,
 } from './evento'
 
 const APIKEY_FICTICIA = 'chave-ficticia-nunca-logar'
@@ -80,6 +81,16 @@ describe('interpretarEventoWebhook', () => {
     expect(evento.reconhecido).toBe(true)
     expect(evento.recebida).toBe(true)
     expect(evento.texto).toBe('Teste recebimento Studio Audax')
+  })
+
+  it('aceita `data` como array de mensagens (formato de certas versões)', () => {
+    const base = payloadRecebido()
+    const { body, ...resto } = base
+    const evento = interpretarEventoWebhook({ ...resto, data: [body] })
+    expect(evento.reconhecido).toBe(true)
+    expect(evento.recebida).toBe(true)
+    expect(evento.texto).toBe('Teste recebimento Studio Audax')
+    expect(evento.idMensagem).toBe('3EB0ABCDEF123456')
   })
 
   it('reconhece evento que não é mensagem (ex.: connection-update) sem extrair nada', () => {
@@ -213,5 +224,29 @@ describe('montarCorpoConfiguracao', () => {
     const corpo = montarCorpoConfiguracao('https://exemplo.co/f')
     expect(corpo.events).toHaveLength(1)
     expect(corpo.events[0]).toBe('MESSAGES_UPSERT')
+  })
+})
+
+describe('variantesConfiguracao', () => {
+  const url = 'https://exemplo.supabase.co/functions/v1/whatsapp-webhook'
+
+  it('todas as variantes carregam a URL canônica do webhook', () => {
+    for (const variante of variantesConfiguracao(url)) {
+      expect(JSON.stringify(variante.corpo)).toContain(url)
+    }
+  })
+
+  it('a primeira variante é o contrato confirmado (wrapper webhook) e duplicatas são removidas', () => {
+    const variantes = variantesConfiguracao(url)
+    expect(variantes[0].descricao).toContain('webhook-wrapper')
+    expect(variantes[0].corpo).toHaveProperty('webhook')
+    const corpos = variantes.map((variante) => JSON.stringify(variante.corpo))
+    expect(new Set(corpos).size).toBe(corpos.length)
+  })
+
+  it('cobre os dois formatos de evento das versões da Evolution', () => {
+    const serializado = JSON.stringify(variantesConfiguracao(url))
+    expect(serializado).toContain('MESSAGES_UPSERT')
+    expect(serializado).toContain('messages.upsert')
   })
 })

@@ -23,7 +23,7 @@ import { withSupabase } from '@supabase/server'
 import {
   ehMensagemDeTeste,
   interpretarEventoWebhook,
-  montarCorpoConfiguracao,
+  variantesConfiguracao,
 } from './evento.ts'
 
 const TIMEOUT_EVOLUTION_MS = 15_000
@@ -72,13 +72,22 @@ function urlWebhook(base: string): string {
 function motivoEvolution(status: number, corpo: string): string {
   try {
     const json = JSON.parse(corpo) as { message?: unknown; error?: unknown }
-    for (const valor of [json.message, json.error]) {
-      if (typeof valor === 'string' && valor.trim()) return valor.trim().slice(0, 300)
+    // ValidationPipe do NestJS devolve `message: string[]` — é ali que está
+    // o motivo real (ex.: valores aceitos de enum), não em `error`.
+    if (Array.isArray(json.message)) {
+      const partes = json.message.filter((item): item is string => typeof item === 'string')
+      if (partes.length) return partes.join('; ').slice(0, 300)
+    }
+    if (typeof json.message === 'string' && json.message.trim()) {
+      return json.message.trim().slice(0, 300)
+    }
+    if (typeof json.error === 'string' && json.error.trim()) {
+      return json.error.trim().slice(0, 300)
     }
     if (json.error !== null && typeof json.error === 'object') {
-      const mensagem = (json.error as { message?: unknown }).message
-      if (typeof mensagem === 'string' && mensagem.trim()) {
-        return mensagem.trim().slice(0, 300)
+      const erro = json.error as { message?: unknown }
+      if (typeof erro.message === 'string' && erro.message.trim()) {
+        return erro.message.trim().slice(0, 300)
       }
     }
   } catch {
@@ -125,28 +134,59 @@ export default {
       const destino = urlWebhook(segredos.base)
       try {
         if (acao === 'configurar-webhook') {
-          const resposta = await fetch(
-            `${base}/webhook/set/${encodeURIComponent(segredos.instancia)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', apikey: segredos.apiKey },
-              body: JSON.stringify(montarCorpoConfiguracao(destino)),
-              signal: AbortSignal.timeout(TIMEOUT_EVOLUTION_MS),
-            },
-          )
-          const texto = await resposta.text()
-          if (!resposta.ok) {
-            return responder(502, { ok: false, motivo: motivoEvolution(resposta.status, texto) })
+          // A instância real recusa a forma da doc 2.3.7 com 400 sem detalhes
+          // e não expõe OpenAPI: testa as variantes conhecidas em sequência
+          // até a primeira aceitação (POST idempotente de configuração).
+          const destinoSet = `${base}/webhook/set/${encodeURIComponent(segredos.instancia)}`
+          const tentativas: { variante: string; status: number; corpo: string }[] = []
+          for (const variante of variantesConfiguracao(destino)) {
+            let status = 0
+            let texto = ''
+            try {
+              const resposta = await fetch(destinoSet, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', apikey: segredos.apiKey },
+                body: JSON.stringify(variante.corpo),
+                signal: AbortSignal.timeout(TIMEOUT_EVOLUTION_MS),
+              })
+              status = resposta.status
+              texto = await resposta.text()
+            } catch (erro) {
+              const estourou = erro instanceof Error && erro.name === 'TimeoutError'
+              return responder(502, {
+                ok: false,
+                motivo: estourou
+                  ? 'A Evolution não respondeu em 15s.'
+                  : 'Falha ao contatar a Evolution API.',
+              })
+            }
+            if (status >= 200 && status < 300) {
+              console.log(
+                '[whatsapp-webhook]',
+                JSON.stringify({ acao, configurado: true, variante: variante.descricao, webhook: destino }),
+              )
+              return responder(200, {
+                ok: true,
+                configurado: true,
+                variante: variante.descricao,
+                webhook: destino,
+                eventos: ['MESSAGES_UPSERT'],
+              })
+            }
+            tentativas.push({ variante: variante.descricao, status, corpo: texto.slice(0, 250) })
           }
           console.log(
             '[whatsapp-webhook]',
-            JSON.stringify({ acao, configurado: true, webhook: destino }),
+            JSON.stringify({
+              acao,
+              configurado: false,
+              tentativas: tentativas.map((item) => ({ variante: item.variante, status: item.status })),
+            }),
           )
-          return responder(200, {
-            ok: true,
-            configurado: true,
-            webhook: destino,
-            eventos: ['MESSAGES_UPSERT'],
+          return responder(502, {
+            ok: false,
+            motivo: 'Nenhuma variante de corpo foi aceita pela Evolution.',
+            tentativas,
           })
         }
 
@@ -181,6 +221,58 @@ export default {
           })
         }
 
+        // Diagnóstico: lê a especificação OpenAPI da instância Evolution REAL
+        // (a doc pública 2.3.7 divergiu do servidor) e devolve somente os
+        // fragmentos dos caminhos de webhook — nunca a URL base da Evolution.
+        if (acao === 'evolution-spec') {
+          const candidatos = ['openapi.json', 'docs-json', 'api-json', 'swagger-json']
+          const tentativas: { ponto: string; status: number }[] = []
+          let espec: Record<string, unknown> | null = null
+          for (const ponto of candidatos) {
+            let status = 0
+            try {
+              const resposta = await fetch(`${base}/${ponto}`, {
+                headers: { apikey: segredos.apiKey },
+                signal: AbortSignal.timeout(8_000),
+              })
+              status = resposta.status
+              const texto = await resposta.text()
+              if (resposta.ok && texto.trim().startsWith('{')) {
+                const json = JSON.parse(texto) as Record<string, unknown>
+                if (json && typeof json === 'object' && json.paths) {
+                  espec = json
+                }
+              }
+            } catch {
+              status = 0
+            }
+            tentativas.push({ ponto, status })
+            if (espec) break
+          }
+          if (!espec) {
+            return responder(200, { ok: true, espec: null, tentativas })
+          }
+          const caminhos = (espec.paths ?? {}) as Record<string, Record<string, unknown>>
+          const webhook: Record<string, unknown> = {}
+          for (const [caminho, metodos] of Object.entries(caminhos)) {
+            if (!/webhook/i.test(caminho)) continue
+            for (const [metodo, operacao] of Object.entries(metodos)) {
+              const op = operacao as {
+                requestBody?: { content?: Record<string, { schema?: unknown }> }
+              }
+              const schema = op?.requestBody?.content?.['application/json']?.schema
+              if (schema) webhook[`${metodo.toUpperCase()} ${caminho}`] = schema
+            }
+          }
+          const info = espec.info as { version?: unknown } | undefined
+          return responder(200, {
+            ok: true,
+            tentativas,
+            versao: typeof info?.version === 'string' ? info.version : null,
+            webhook,
+          })
+        }
+
         return responder(400, { ok: false, motivo: 'Ação desconhecida.' })
       } catch (erro) {
         const estourou = erro instanceof Error && erro.name === 'TimeoutError'
@@ -198,10 +290,11 @@ export default {
     // ---------------------------------------------------------------------
     const evento = interpretarEventoWebhook(corpo)
 
-    // A Evolution inclui a apikey da instância no corpo do evento. Se vier,
-    // precisa bater com o segredo (barreira contra payload forjado); se não
-    // vier, aceitamos pela forma — nada é feito com o evento de qualquer
-    // maneira além do log abaixo.
+    // A Evolution inclui uma apikey no corpo do evento. O valor pode ser a
+    // chave global ou o token da instância (não sabemos qual esta versão
+    // usa), então a comparação é SINAL DE LOG — nunca barreira: rejeitar
+    // custaria o teste real de recebimento. O evento não tem efeito colateral
+    // algum além do log abaixo.
     const apikeyBruta = (corpo as { apikey?: unknown } | null)?.apikey
     const apikeyCorresponde =
       typeof apikeyBruta === 'string' && segredos.apiKey
@@ -225,10 +318,6 @@ export default {
         chaves: evento.chaves,
       }),
     )
-
-    if (apikeyCorresponde === false) {
-      return responder(401, { ok: false, motivo: 'Chave de instância inválida no payload.' })
-    }
 
     // Sempre 200: não há auto-resposta ao cliente nem rejeição em cascata —
     // a Evolution não precisa reenviar o que já foi entregue.

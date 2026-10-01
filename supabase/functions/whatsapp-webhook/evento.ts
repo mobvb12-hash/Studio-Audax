@@ -50,6 +50,18 @@ function objeto(valor: unknown): Record<string, unknown> | null {
     : null
 }
 
+/** Aceita objeto direto ou array de objetos (algumas versões enviam `data` como lista). */
+function primeiroObjeto(valor: unknown): Record<string, unknown> | null {
+  if (Array.isArray(valor)) {
+    for (const item of valor) {
+      const caixa = objeto(item)
+      if (caixa) return caixa
+    }
+    return null
+  }
+  return objeto(valor)
+}
+
 /** "MESSAGES_UPSERT" / "messages_upsert" → "messages.upsert" */
 export function normalizarNomeEvento(evento: string): string {
   return evento.trim().toLowerCase().replace(/_/g, '.')
@@ -95,6 +107,85 @@ export function montarCorpoConfiguracao(urlWebhook: string): {
   }
 }
 
+/**
+ * Variantes de corpo para `POST /webhook/set/{instance}`. A doc pública
+ * 2.3.7 (forma plana) foi recusada pela instância real com um 400 AJV
+ * `instance requires property "webhook"`; o contrato vigente (Postman
+ * oficial v2.2.2 e docs Mintlify) aninha tudo em `webhook` com `byEvents`.
+ * A ordem vai do contrato confirmado para os formatos vizinhos.
+ */
+export function variantesConfiguracao(urlWebhook: string): {
+  descricao: string
+  corpo: Record<string, unknown>
+}[] {
+  const candidatos: { descricao: string; corpo: Record<string, unknown> }[] = [
+    {
+      descricao: 'webhook-wrapper+byEvents-false+base64-false+headers-vazio+MESSAGES_UPSERT',
+      corpo: {
+        webhook: {
+          enabled: true,
+          url: urlWebhook,
+          byEvents: false,
+          base64: false,
+          headers: {},
+          events: ['MESSAGES_UPSERT'],
+        },
+      },
+    },
+    {
+      descricao: 'webhook-wrapper+byEvents-false+base64-false+MESSAGES_UPSERT',
+      corpo: {
+        webhook: {
+          enabled: true,
+          url: urlWebhook,
+          byEvents: false,
+          base64: false,
+          events: ['MESSAGES_UPSERT'],
+        },
+      },
+    },
+    {
+      descricao: 'webhook-wrapper-minimo-enabled-url-events',
+      corpo: {
+        webhook: { enabled: true, url: urlWebhook, events: ['MESSAGES_UPSERT'] },
+      },
+    },
+    {
+      descricao: 'webhook-wrapper+webhookByEvents-false+MESSAGES_UPSERT',
+      corpo: {
+        webhook: {
+          enabled: true,
+          url: urlWebhook,
+          webhookByEvents: false,
+          base64: false,
+          events: ['MESSAGES_UPSERT'],
+        },
+      },
+    },
+    {
+      descricao: 'webhook-wrapper-events-minusculos',
+      corpo: {
+        webhook: {
+          enabled: true,
+          url: urlWebhook,
+          byEvents: false,
+          base64: false,
+          events: ['messages.upsert'],
+        },
+      },
+    },
+    {
+      descricao: 'webhook-wrapper-sem-events',
+      corpo: { webhook: { enabled: true, url: urlWebhook } },
+    },
+    { descricao: 'apenas-enabled-url', corpo: { enabled: true, url: urlWebhook } },
+  ]
+  return candidatos.filter(
+    (candidato, indice) =>
+      candidatos.findIndex((outro) => JSON.stringify(outro.corpo) === JSON.stringify(candidato.corpo)) === indice,
+  )
+}
+
 export function interpretarEventoWebhook(bruto: unknown): EventoInterpretado {
   const registro = objeto(bruto)
   if (!registro) return vazio('corpo-nao-objeto')
@@ -124,7 +215,7 @@ export function interpretarEventoWebhook(bruto: unknown): EventoInterpretado {
     }
   }
 
-  const caixa = objeto(registro.body) ?? objeto(registro.data)
+  const caixa = primeiroObjeto(registro.body) ?? primeiroObjeto(registro.data)
   if (!caixa) {
     return { ...vazio('sem-corpo', chaves), evento }
   }
