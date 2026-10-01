@@ -3,6 +3,7 @@
 // Nenhum dado é duplicado: tudo é calculado a partir de Clientes, Agenda
 // e Caixa que já existem no sistema.
 import { hojeISO, somarDias } from '@/modules/agenda/catalogo'
+import { dataLocal, horaLocal } from '@/lib/apresentacao'
 import type { Agendamento, StatusAgendamento } from '@/modules/agenda/types'
 import type { Lancamento } from '@/modules/caixa/types'
 import { gastosPorCliente, normalizarBusca } from '@/modules/clientes/regras'
@@ -419,8 +420,8 @@ export function montarHistorico(
     eventos.push({
       id: `interacao-${i.id}`,
       tipo: 'interacao',
-      data: i.criadoEm.slice(0, 10),
-      hora: i.criadoEm.slice(11, 16),
+      data: dataLocal(i.criadoEm),
+      hora: horaLocal(i.criadoEm),
       titulo: `${TIPOS_INTERACAO_ROTULO[i.tipo]} · ${i.texto}`,
     })
   }
@@ -430,8 +431,8 @@ export function montarHistorico(
     eventos.push({
       id: `mensagem-${m.id}`,
       tipo: 'mensagem',
-      data: m.criadoEm.slice(0, 10),
-      hora: m.criadoEm.slice(11, 16),
+      data: dataLocal(m.criadoEm),
+      hora: horaLocal(m.criadoEm),
       titulo: `WhatsApp · ${TEMPLATES_ROTULO[m.template]} · ${m.texto}`,
       statusMensagem: m.status,
     })

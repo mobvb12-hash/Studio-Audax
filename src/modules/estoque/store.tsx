@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { normalizarTexto } from '@/lib/moeda'
+import { dataLocal } from '@/lib/apresentacao'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
@@ -491,7 +492,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         estoqueAntes: antes,
         estoqueDepois: produto.estoque,
         custoUnitario: produto.custo,
-        data: new Date().toISOString().slice(0, 10),
+        data: dataLocal(new Date().toISOString()),
         origem: 'cadastro',
       })
       registrarMovimentacoes([nova])
@@ -728,7 +729,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
               produto.id,
               produto.custo,
             ),
-            data: new Date().toISOString().slice(0, 10),
+            data: dataLocal(new Date().toISOString()),
             origem: 'estorno',
             vendaId: venda.id,
           }),

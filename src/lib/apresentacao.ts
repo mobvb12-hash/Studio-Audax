@@ -21,6 +21,34 @@ export function dataCurta(iso: string): string {
   return new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR')
 }
 
+/**
+ * Data local (aaaa-mm-dd) de um timestamp ISO.
+ *
+ * `criadoEm`/`atualizadoEm` chegam como ISO UTC (`.toISOString()`), mas os
+ * períodos do sistema (`periodoMes`, `hojeISO`) são calculados em HORÁRIO
+ * LOCAL — sem esta conversão, um registro criado às 22h de dia 30 vira "dia
+ * 31" (ou dia 1 do mês seguinte) e some dos relatórios do mês correto.
+ * Strings já em formato data (`aaaa-mm-dd`) são devolvidas intactas.
+ */
+export function dataLocal(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  const ano = d.getFullYear()
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${ano}-${mes}-${dia}`
+}
+
+/** Hora local (HH:mm) de um timestamp ISO — par de `dataLocal`. */
+export function horaLocal(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(11, 16)
+  const hora = String(d.getHours()).padStart(2, '0')
+  const minuto = String(d.getMinutes()).padStart(2, '0')
+  return `${hora}:${minuto}`
+}
+
 /** Data/hora ISO completa no formato legível pt-BR (dia/mês/ano hora:minuto). */
 export function formatarISO(iso: string): string {
   const d = new Date(iso)

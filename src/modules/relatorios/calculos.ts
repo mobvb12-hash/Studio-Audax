@@ -16,6 +16,7 @@ import { statusEstoque, type StatusEstoque } from '@/modules/estoque/indicadores
 import type { Produto } from '@/modules/produtos/types'
 import { arredondar, dentroDoPeriodo } from '@/modules/comissoes/producao'
 import { normalizarTexto } from '@/lib/moeda'
+import { dataLocal } from '@/lib/apresentacao'
 import type { FechamentoComissao, Periodo } from '@/modules/comissoes/types'
 
 type Fonte = { nome: string; criadoEm: string }
@@ -363,9 +364,10 @@ export function clientesDoPeriodo(
     .sort((a, b) => b.gasto - a.gasto)
 
   const totalGasto = arredondar(linhas.reduce((t, l) => t + l.gasto, 0))
-  const novos = clientes.filter(
-    (c) => c.criadoEm.slice(0, 10) >= periodo.inicio && c.criadoEm.slice(0, 10) <= periodo.fim,
-  ).length
+  const novos = clientes.filter((c) => {
+    const dia = dataLocal(c.criadoEm)
+    return dia >= periodo.inicio && dia <= periodo.fim
+  }).length
 
   return {
     atendidos: linhas.length,
