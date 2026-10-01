@@ -21,7 +21,8 @@
 // Segredos (EVOLUTION_*, SUPABASE_URL, IA_*) vivem somente no ambiente da
 // função; a apikey que a Evolution coloca NO CORPO do evento nunca é logada
 // nem devolvida. O envio sai exclusivamente pela função existente
-// `whatsapp-enviar` (Bearer service_role) — esta função nunca fala com a
+// `whatsapp-enviar` (header `apikey` com SUPABASE_SECRET_KEYS) — esta
+// função nunca fala com a
 // Evolution para enviar.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { withSupabase } from '@supabase/server'
@@ -32,7 +33,13 @@ import {
   mascararRemetente,
   variantesConfiguracao,
 } from './evento.ts'
-import { deveEnviarResposta, interpretarEnvio, montarPedidoEnvio, normalizarNumero } from './envio.ts'
+import {
+  deveEnviarResposta,
+  interpretarEnvio,
+  lerChaveSecreta,
+  montarPedidoEnvio,
+  normalizarNumero,
+} from './envio.ts'
 import {
   type FontesOficiais,
   identificarServico,
@@ -338,8 +345,9 @@ export default {
     // ---------------------------------------------------------------------
     // FASE 3 — IA informativa + envio da resposta GERADA ao número de teste.
     // Classificação e geração são da camada ./ia.ts; o envio sai SOMENTE
-    // pela função existente ./whatsapp-enviar (modo server-to-server, Bearer
-    // service_role) — nunca direto para a Evolution, nunca com segredo no
+    // pela função existente ./whatsapp-enviar (modo server-to-server, header
+    // `apikey` = SUPABASE_SECRET_KEYS["default"]) — nunca direto para a
+    // Evolution, nunca com segredo no
     // corpo. Destinatário: remetente do evento E que esteja na lista
     // IA_NUMERO_TESTE (a IA nunca escolhe para quem enviar). Fontes:
     // exclusivamente as funções públicas SECURITY DEFINER já existentes
@@ -414,10 +422,27 @@ export default {
 
       if (autorizado && remetenteBruto && resultadoIa.resposta) {
         const inicioEnvio = Date.now()
-        const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        // Credencial server-to-server: SOMENTE SUPABASE_SECRET_KEYS["default"]
+        // (header `apikey`). Sem ela → falha segura, sem envio — e NUNCA se
+        // usa SUPABASE_SERVICE_ROLE_KEY como fallback (legacy eyJ → 401).
+        const chaveSecreta = lerChaveSecreta((nome) => Deno.env.get(nome))
         const baseSupabase = segredos.base
+        if (!chaveSecreta) {
+          console.log(
+            '[whatsapp-envio]',
+            JSON.stringify({
+              envioIniciado: false,
+              ok: false,
+              motivo: 'segredo SUPABASE_SECRET_KEYS ausente ou inválido — envio não realizado',
+              destinatario: destinoMascarado,
+              servico: servicoIdentificado,
+              estadoIa: resultadoIa.estado,
+            }),
+          )
+          return responder(200, { ok: true, recebido: evento.reconhecido })
+        }
         try {
-          const { url, init } = montarPedidoEnvio(baseSupabase, serviceRole, {
+          const { url, init } = montarPedidoEnvio(baseSupabase, chaveSecreta, {
             telefone: normalizarNumero(remetenteBruto) ?? '',
             mensagem: resultadoIa.resposta,
           })

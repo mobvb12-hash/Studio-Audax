@@ -9,8 +9,13 @@
 //   ainda assim, precisa estar na lista de teste (IA_NUMERO_TESTE) — sem
 //   secret de número configurado, NADA é enviado;
 // - O corpo do pedido tem EXATAMENTE { telefone, mensagem } — sem chave,
-//   sem token, sem service_role, sem Evolution API key (o segredo do
-//   whatsapp-enviar vive só no ambiente daquela função);
+//   sem token, sem credencial alguma no corpo (a credencial server-to-server
+//   viaja só no header `apikey`, lida do ambiente);
+// - A credencial é EXCLUSIVAMENTE SUPABASE_SECRET_KEYS["default"]
+//   (formato sb_secret_*), exigida pelo modo `secret` do whatsapp-enviar.
+//   Sem ela o envio NÃO acontece (falha segura) e NUNCA se usa
+//   SUPABASE_SERVICE_ROLE_KEY como fallback (era a causa do HTTP 401:
+//   legacy eyJ rejeitado pelo withSupabase como INVALID_JWT);
 // - Somente respostas em estado `gerada` são elegíveis; bloqueios e falhas
 //   não geram envio nesta etapa;
 // - Mensagem limitada a 4096 caracteres (mesmo teto do whatsapp-enviar).
@@ -66,23 +71,47 @@ export function deveEnviarResposta(decisao: DecisaoEnvio): boolean {
 }
 
 /**
- * Monta a chamada à função `whatsapp-enviar`: serviço server-to-server
- * (Bearer = service_role, modo `secret` daquela função). O service_role vai
- * SOMENTE no header desta chamada interna — nunca no corpo, nunca na URL e
- * nunca em log. Lança com mensagem própria (sem dados do pedido) quando a
- * configuração é inválida.
+ * Lê a credencial server-to-server SOMENTE do ambiente: JSON
+ * `SUPABASE_SECRET_KEYS` com a chave `default` (formato `sb_secret_*`).
+ * Ausente/malformado/sém `default`/prefixo errado → null (falha segura:
+ * quem chama NÃO envia). NUNCA cai para SUPABASE_SERVICE_ROLE_KEY.
+ */
+export function lerChaveSecreta(ler: (nome: string) => string | undefined): string | null {
+  const bruto = (ler('SUPABASE_SECRET_KEYS') ?? '').trim()
+  if (!bruto) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(bruto)
+  } catch {
+    return null
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const valor = (parsed as Record<string, unknown>).default
+  if (typeof valor !== 'string') return null
+  const chave = valor.trim()
+  if (!chave.startsWith('sb_secret_')) return null
+  return chave
+}
+
+/**
+ * Monta a chamada à função `whatsapp-enviar`: modo `secret` do withSupabase,
+ * que lê o header `apikey` (o `Authorization: Bearer` com credencial legada
+ * era rejeitado como INVALID_JWT). A chave vai SOMENTE neste header — nunca
+ * no corpo, nunca na URL, nunca em log. Lança com mensagem própria (sem
+ * conter a chave) quando a configuração é inválida.
  */
 export function montarPedidoEnvio(
   base: string,
-  serviceRole: string,
+  chaveSecreta: string,
   pedido: PedidoEnvio,
 ): EnvioMontado {
   const urlBase = typeof base === 'string' ? base.trim().replace(/\/+$/, '') : ''
   if (!/^https?:\/\//i.test(urlBase)) {
     throw new Error('SUPABASE_URL ausente ou inválida.')
   }
-  if (!serviceRole || !serviceRole.trim()) {
-    throw new Error('service_role ausente no ambiente da função.')
+  const chave = typeof chaveSecreta === 'string' ? chaveSecreta.trim() : ''
+  if (!chave.startsWith('sb_secret_')) {
+    throw new Error('Credencial de envio ausente ou inválida.')
   }
   const telefone = normalizarNumero(pedido.telefone)
   if (!telefone) throw new Error('Telefone do destinatário inválido.')
@@ -95,7 +124,7 @@ export function montarPedidoEnvio(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceRole}`,
+        apikey: chave,
       },
       body: JSON.stringify({ telefone, mensagem }),
     },
