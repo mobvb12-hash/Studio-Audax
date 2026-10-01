@@ -134,97 +134,129 @@ function Conteudo() {
       {/* Falha numa página não derruba o layout: a barreira por página
           reseta ao trocar de módulo (key). */}
       <ErrorBoundary key={pagina}>
-        <PaginaProtegida pagina="painel" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Painel…</div>}>
-            <DashboardLazy
-              onNovo={() => abrirNovo()}
-              onIrPara={setPagina}
-              onIrParaEstoque={() => {
-                try {
-                  sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')
-                } catch {
-                  // sessionStorage indisponível: tela abre sem o filtro
-                }
-                setPagina('estoque')
-              }}
-            />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="agenda" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Agenda…</div>}>
-            <AgendaLazy onNovo={abrirNovo} />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="fila" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Fila…</div>}>
-            <EsperaLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="caixa" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Caixa…</div>}>
-            <CaixaLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="clientes" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clientes…</div>}>
-            <ClientesLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="crm" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando CRM…</div>}>
-            <CrmLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="whatsapp" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando WhatsApp…</div>}>
-            <WhatsLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="servicos" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Serviços…</div>}>
-            <ServicosLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="profissionais" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Profissionais…</div>}>
-            <ProfissionaisLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="comissoes" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Comissões…</div>}>
-            <ComissoesLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="financeiro" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Financeiro…</div>}>
-            <FinanceiroLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="relatorios" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Relatórios…</div>}>
-            <RelatoriosLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="pdv" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando PDV…</div>}>
-            <PDVLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="estoque" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Estoque…</div>}>
-            <ProdutosLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="clube" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clube…</div>}>
-            <ClubeLazy />
-          </Suspense>
-        </PaginaProtegida>
-        <PaginaProtegida pagina="ia" papel={papel} onNegado={handleNegado}>
-          <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando IA…</div>}>
-            <IaLazy />
-          </Suspense>
-        </PaginaProtegida>
+        {pagina === 'painel' && (
+          <PaginaProtegida pagina="painel" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Painel…</div>}>
+              <DashboardLazy
+                onNovo={() => abrirNovo()}
+                onIrPara={setPagina}
+                onIrParaEstoque={() => {
+                  try {
+                    sessionStorage.setItem('studio-audax:estoque:filtro', 'baixo')
+                  } catch {
+                    // sessionStorage indisponível: tela abre sem o filtro
+                  }
+                  setPagina('estoque')
+                }}
+              />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'agenda' && (
+          <PaginaProtegida pagina="agenda" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Agenda…</div>}>
+              <AgendaLazy onNovo={abrirNovo} />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'fila' && (
+          <PaginaProtegida pagina="fila" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Fila…</div>}>
+              <EsperaLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'caixa' && (
+          <PaginaProtegida pagina="caixa" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Caixa…</div>}>
+              <CaixaLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'clientes' && (
+          <PaginaProtegida pagina="clientes" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clientes…</div>}>
+              <ClientesLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'crm' && (
+          <PaginaProtegida pagina="crm" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando CRM…</div>}>
+              <CrmLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'whatsapp' && (
+          <PaginaProtegida pagina="whatsapp" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando WhatsApp…</div>}>
+              <WhatsLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'servicos' && (
+          <PaginaProtegida pagina="servicos" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Serviços…</div>}>
+              <ServicosLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'profissionais' && (
+          <PaginaProtegida pagina="profissionais" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Profissionais…</div>}>
+              <ProfissionaisLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'comissoes' && (
+          <PaginaProtegida pagina="comissoes" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Comissões…</div>}>
+              <ComissoesLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'financeiro' && (
+          <PaginaProtegida pagina="financeiro" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Financeiro…</div>}>
+              <FinanceiroLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'relatorios' && (
+          <PaginaProtegida pagina="relatorios" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Relatórios…</div>}>
+              <RelatoriosLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'pdv' && (
+          <PaginaProtegida pagina="pdv" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando PDV…</div>}>
+              <PDVLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'estoque' && (
+          <PaginaProtegida pagina="estoque" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Estoque…</div>}>
+              <ProdutosLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'clube' && (
+          <PaginaProtegida pagina="clube" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clube…</div>}>
+              <ClubeLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'ia' && (
+          <PaginaProtegida pagina="ia" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando IA…</div>}>
+              <IaLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
         {!IMPLEMENTADAS.includes(pagina) && <ModuloFuturo pagina={pagina} />}
         {modalAberto && (
           <NovoAgendamentoModal
