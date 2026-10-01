@@ -9,3 +9,11 @@ entrypoint = "./functions/whatsapp-enviar/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/whatsapp-enviar/*.html" ]
+
+[functions.whatsapp-webhook]
+enabled = true
+# A Evolution API entrega o evento sem JWT do Supabase — a autenticação da
+# via de configuração é feita dentro da função (sessão de usuário válida).
+verify_jwt = false
+import_map = "./functions/whatsapp-webhook/deno.json"
+entrypoint = "./functions/whatsapp-webhook/index.ts"
