@@ -32,6 +32,8 @@ type ProdutosContexto = {
   porId: (id: string) => Produto | undefined
   /** Aplica novo valor de estoque — usado apenas pelo módulo Estoque (com histórico). */
   aplicarEstoque: (id: string, estoque: number) => void
+  /** Aplica custo de referência — usado apenas pelo módulo Estoque (entrada). */
+  aplicarCusto: (id: string, custo: number) => void
 }
 
 const Contexto = createContext<ProdutosContexto | null>(null)
@@ -480,9 +482,45 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
     [produtos],
   )
 
+  /**
+   * Aplica o custo de referência do produto — usado pelo módulo Estoque
+   * quando uma entrada traz custo novo (o CMV da venda usa `produto.custo`).
+   * Valor absoluto, então reenviar é idempotente; custo zero não
+   * sobrescreve (entrada registrada sem custo de compra).
+   */
+  const aplicarCusto = useCallback(
+    (id: string, custo: number) => {
+      if (!Number.isFinite(custo) || custo <= 0) return
+      const alvo = produtos.find((p) => p.id === id)
+      if (!alvo) return
+      const arredondado = Math.round(custo * 100) / 100
+      if (alvo.custo === arredondado) return
+      // monta a partir de `atual` (e não do closure): no mesmo lote de
+      // estado a entrada já aplicou o saldo, e um objeto montado do lado
+      // de fora devolveria o estoque antigo por cima
+      let enviado: Produto | null = null
+      setProdutos((atual) =>
+        atual.map((p) => {
+          if (p.id !== id || p.custo === arredondado) return p
+          enviado = {
+            ...p,
+            custo: arredondado,
+            atualizadoEm: new Date().toISOString(),
+          }
+          return enviado
+        }),
+      )
+      if (!enviado) return
+      const paraEnviar = enviado
+      alterados.current.add(id)
+      sincronizar(() => criarProduto(paraEnviar))
+    },
+    [produtos, sincronizar],
+  )
+
   const valor = useMemo(
-    () => ({ produtos, adicionar, atualizar, alternarAtivo, porId, aplicarEstoque }),
-    [produtos, adicionar, atualizar, alternarAtivo, porId, aplicarEstoque],
+    () => ({ produtos, adicionar, atualizar, alternarAtivo, porId, aplicarEstoque, aplicarCusto }),
+    [produtos, adicionar, atualizar, alternarAtivo, porId, aplicarEstoque, aplicarCusto],
   )
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>

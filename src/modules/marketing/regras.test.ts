@@ -123,4 +123,30 @@ describe('montarPublicos — públicos derivados sem cópia de dados', () => {
     expect(clientes).toEqual(clientesCopia)
     expect(agendamentos).toEqual(agsCopia)
   })
+
+  it('opt-out de marketing (smsMarketing false) sai de todos os públicos', () => {
+    const { clientes, agendamentos } = base()
+    // Ivo (inativo) e Davi (inativo + aniversariante) declinam do marketing.
+    const comOptOut = clientes.map((c) =>
+      c.id === 'c-inativo' || c.id === 'c-aniv'
+        ? { ...c, preferencias: { ...c.preferencias, smsMarketing: false } }
+        : c,
+    )
+    const publicos = montarPublicos(comOptOut, agendamentos, [], HOJE)
+    for (const p of publicos) {
+      const nomes = p.clientes.map((c) => c.nome)
+      expect(nomes).not.toContain('Ivo Rocha')
+      expect(nomes).not.toContain('Davi Ramos')
+    }
+    const porId = Object.fromEntries(publicos.map((p) => [p.id, p]))
+    expect(porId.inativos.clientes).toHaveLength(0)
+    expect(porId.aniversariantes.clientes).toHaveLength(0)
+    // quem aceita continua no público
+    expect(porId.recorrentes.clientes.map((c) => c.nome)).toEqual([
+      'Ana Souza',
+    ])
+    expect(porId.sem_retorno.clientes.map((c) => c.nome)).toEqual([
+      'Bruno Lima',
+    ])
+  })
 })

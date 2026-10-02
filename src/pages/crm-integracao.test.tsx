@@ -13,6 +13,7 @@ import { hojeISO, somarDias } from '@/modules/agenda/catalogo'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
+import { preferenciasPadrao } from '@/modules/clientes/types'
 import { ClubeProvider } from '@/modules/clube/store'
 import { CrmProvider, useCrm } from '@/modules/crm/store'
 import { MarketingProvider } from '@/modules/marketing/store'
@@ -639,5 +640,35 @@ describe('CRM — ação de reativação', () => {
     )
     expect(depois).toHaveLength(1)
     expect(screen.getByText(/2 interação\(ões\)/)).toBeTruthy()
+  })
+
+  it('opt-out de marketing (smsMarketing false) esconde o Reativar', () => {
+    env(<Crm />)
+    semear()
+    const idBruno = ctxClientes.clientes.find(
+      (c) => c.nome === 'Bruno Lima',
+    )!.id
+    // alvo de reativação com aceite padrão: botão visível
+    expect(
+      screen.getByRole('button', { name: 'Reativar Bruno Lima' }),
+    ).toBeTruthy()
+
+    act(() => {
+      ctxClientes.atualizar(idBruno, {
+        nome: 'Bruno Lima',
+        telefone: '',
+        email: '',
+        observacao: '',
+        preferencias: { ...preferenciasPadrao(), smsMarketing: false },
+      })
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Reativar Bruno Lima' }),
+    ).toBeNull()
+    expect(ctxCrm.interacoes).toHaveLength(0)
+    expect(JSON.parse(localStorage.getItem(CHAVE_WHATS) ?? '[]')).toHaveLength(
+      0,
+    )
   })
 })

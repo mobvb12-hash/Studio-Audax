@@ -32,7 +32,8 @@ export default function ItemCliente({
   aoCrm: () => void
   aoEditar: () => void
   aoAlternar: () => void
-  aoExcluir: () => void
+  /** Omitido quando o papel do usuário não pode excluir (RLS admin-only). */
+  aoExcluir?: () => void
 }) {
   const { assinaturaDoCliente } = useClube()
   const assinatura = assinaturaDoCliente(cliente.id)
@@ -132,14 +133,16 @@ export default function ItemCliente({
         >
           {cliente.ativo ? 'Inativar' : 'Reativar'}
         </button>
-        <button
-          type="button"
-          onClick={aoExcluir}
-          className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-          aria-label={`Excluir ${cliente.nome}`}
-        >
-          Excluir
-        </button>
+        {aoExcluir && (
+          <button
+            type="button"
+            onClick={aoExcluir}
+            className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
+            aria-label={`Excluir ${cliente.nome}`}
+          >
+            Excluir
+          </button>
+        )}
       </div>
     </li>
   )

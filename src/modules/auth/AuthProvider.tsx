@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ContextoAuth } from './contexto'
 import {
+  AVISO_PERFIL_INATIVO,
   AVISO_SESSAO_EXPIRADA,
   mensagemErroEntrada,
   sessaoExpirada,
@@ -60,6 +61,14 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
       } = await cliente.auth.getUser()
       if (!user) return
       const perfil = await obterPerfil(user.id)
+      // Perfil desativado não pode seguir autenticado: a RLS do banco já
+      // nega (papel vira nulo), e aqui a sessão também é encerrada com
+      // aviso — sem isto a tela ficaria aberta sem conseguir ler nada.
+      if (perfil && !perfil.ativo) {
+        await cliente.auth.signOut().catch(() => undefined)
+        setEstado({ status: 'deslogado', aviso: AVISO_PERFIL_INATIVO })
+        return
+      }
       setEstado((atual) =>
         atual.status === 'autenticado'
           ? { ...atual, perfil }

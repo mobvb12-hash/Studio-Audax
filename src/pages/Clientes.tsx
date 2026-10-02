@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { chipClasse } from '@/lib/apresentacao'
 import ClienteDetalheModal from '@/components/ClienteDetalheModal'
 import ClienteFormModal from '@/components/ClienteFormModal'
@@ -25,6 +25,8 @@ import type { Cliente } from '@/modules/clientes/types'
 import { useClube } from '@/modules/clube/store'
 import { useEsperaOpcional } from '@/modules/espera/store'
 import { useWhats } from '@/modules/whatsapp/store'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 
 const FILTROS: { id: FiltroStatusCliente; rotulo: string }[] = [
   { id: 'todos', rotulo: 'Todos' },
@@ -40,6 +42,11 @@ export default function Clientes() {
   const { renomearCliente: renomearNaEspera, pedidos } = useEsperaOpcional()
   const { interacoesDoCliente } = useCrm()
   const { mensagensDoCliente, renomearCliente: renomearNoWhats } = useWhats()
+  // Excluir cliente = admin/dono no RLS (clientes_delete). Sem sessão de auth
+  // (testes/render isolado) não há papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeExcluirCliente = auth === null || pode('clientes:excluir')
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<FiltroStatusCliente>('todos')
   const [modalAberto, setModalAberto] = useState(false)
@@ -245,7 +252,9 @@ export default function Clientes() {
               aoCrm={() => setCrmDo(cliente)}
               aoEditar={() => abrirEdicao(cliente)}
               aoAlternar={() => alternarAtivo(cliente.id)}
-              aoExcluir={() => tentarExcluir(cliente)}
+              aoExcluir={
+                podeExcluirCliente ? () => tentarExcluir(cliente) : undefined
+              }
             />
           ))}
         </ul>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import DespesaFormModal from '@/components/DespesaFormModal'
 import FechamentoCaixaModal from '@/components/FechamentoCaixaModal'
@@ -9,6 +9,8 @@ import CartaoLancamentos from '@/modules/caixa/components/CartaoLancamentos'
 import { useCaixa } from '@/modules/caixa/store'
 import type { Lancamento } from '@/modules/caixa/types'
 import { FORMAS_ROTULO } from '@/modules/caixa/types'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { useEstoque } from '@/modules/estoque/store'
 import { formatarBRL } from '@/lib/moeda'
 
@@ -23,6 +25,17 @@ export default function Caixa() {
     reabrirCaixa,
   } = useCaixa()
   const { reverterVenda } = useEstoque()
+
+  // Permissões de ação (mesmo mapa único usado no RLS). Fora do AuthProvider
+  // (testes/render isolado) não há papel a consultar — mantém o comportamento
+  // atual; em produção a página só existe dentro do AuthProvider.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const comSessao = auth !== null
+  const podeDespesa = !comSessao || pode('caixa:lancar_despesa')
+  const podeFechar = !comSessao || pode('caixa:fechar')
+  const podeReabrir = !comSessao || pode('caixa:reabrir')
+  const podeEstornarAcao = !comSessao || pode('caixa:estornar')
 
   const [data, setData] = useState(hojeISO())
   const [vendaAberta, setVendaAberta] = useState(false)
@@ -84,30 +97,36 @@ export default function Caixa() {
           >
             + Venda de produto
           </button>
-          <button
-            type="button"
-            onClick={() => setDespesaAberta(true)}
-            disabled={fechado}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-3.5 py-2 text-sm font-medium hover:bg-[#F3ECDA] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            + Despesa
-          </button>
+          {podeDespesa && (
+            <button
+              type="button"
+              onClick={() => setDespesaAberta(true)}
+              disabled={fechado}
+              className="rounded-lg border border-[#E5DCC3] bg-white px-3.5 py-2 text-sm font-medium hover:bg-[#F3ECDA] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              + Despesa
+            </button>
+          )}
           {fechado ? (
-            <button
-              type="button"
-              onClick={() => setReabrindo(true)}
-              className="rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-            >
-              Reabrir caixa
-            </button>
+            podeReabrir && (
+              <button
+                type="button"
+                onClick={() => setReabrindo(true)}
+                className="rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                Reabrir caixa
+              </button>
+            )
           ) : (
-            <button
-              type="button"
-              onClick={() => setFechamentoAberto(true)}
-              className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
-            >
-              Fechar caixa
-            </button>
+            podeFechar && (
+              <button
+                type="button"
+                onClick={() => setFechamentoAberto(true)}
+                className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+              >
+                Fechar caixa
+              </button>
+            )
           )}
         </div>
       </div>
@@ -168,7 +187,7 @@ export default function Caixa() {
             contador={`${receitas.filter((l) => !l.estornado).length} registro(s)`}
             lancamentos={receitas}
             textoVazio="Nenhum recebimento neste dia."
-            podeEstornar={!fechado}
+            podeEstornar={!fechado && podeEstornarAcao}
             aoEstornar={setEstornando}
           />
 
@@ -177,7 +196,7 @@ export default function Caixa() {
             contador={`${despesas.length} registro(s)`}
             lancamentos={despesas}
             textoVazio="Nenhuma despesa neste dia."
-            podeEstornar={!fechado}
+            podeEstornar={!fechado && podeEstornarAcao}
             aoEstornar={setEstornando}
           />
         </div>

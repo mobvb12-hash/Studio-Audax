@@ -28,6 +28,17 @@ import {
 } from '@/services/supabase/servicos'
 
 const CHAVE_STORAGE = 'studio-audax:servicos:v1'
+// Tombstone de serviço removido: a remoção precisa sobreviver ao F5 — sem
+// ele a próxima carga devolveria o registro pela lista do servidor.
+const CHAVE_REMOVIDOS = 'studio-audax:servicos:removidos:v1'
+
+function ehListaIds(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every((id) => typeof id === 'string')
+}
+
+function gravarRemovidos(ids: Set<string>): void {
+  salvarJSON(CHAVE_REMOVIDOS, Array.from(ids))
+}
 
 type ServicosContexto = {
   servicos: Servico[]
@@ -249,12 +260,28 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
     () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
   )
   const alterados = useRef<Set<string>>(new Set())
-  const removidos = useRef<Set<string>>(new Set())
+  // Tombstone carregado do storage: exclusões feitas em sessões anteriores
+  // seguem protegidas. Em instalação nova ele não vale (apagaria registro
+  // do servidor sem relação com esta máquina).
+  const removidos = useRef<Set<string>>(
+    new Set(
+      instalacaoNova
+        ? []
+        : carregarJSON<string[]>(CHAVE_REMOVIDOS, [], ehListaIds),
+    ),
+  )
   const listaLocal = useRef<Servico[]>(servicos)
 
   useEffect(() => {
     listaLocal.current = servicos
   }, [servicos])
+
+  // Instalação nova: tombstone gravado por outra instalação não vale aqui.
+  useEffect(() => {
+    if (!instalacaoNova) return
+    if (carregarJSON<unknown>(CHAVE_REMOVIDOS, null, ehListaIds) === null) return
+    gravarRemovidos(new Set())
+  }, [instalacaoNova])
 
   // Supabase é a fonte oficial, mas a lista local nunca é substituída:
   // a integração une os dois lados, reenvia as pendências locais e o
@@ -277,6 +304,24 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
               instalacaoNova,
             ),
           )
+
+          // Tombstone sincronizado com a lista oficial: id que sumiu é
+          // descartado; id que ainda aparece (remoção que não chegou a
+          // valer) é apagado de novo — idempotente — e segue protegido
+          // nesta máquina.
+          const idsOficiais = new Set(base.map((s) => s.id))
+          let tombstoneMudou = false
+          for (const id of Array.from(removidos.current)) {
+            if (idsOficiais.has(id)) {
+              void removerServico(id).catch(() =>
+                avisarFalhaSincronizacao(CHAVE_STORAGE),
+              )
+              continue
+            }
+            removidos.current.delete(id)
+            tombstoneMudou = true
+          }
+          if (tombstoneMudou) gravarRemovidos(removidos.current)
         }
       })
       .catch((erro) => {
@@ -416,6 +461,9 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       removidos.current.add(id)
       alterados.current.delete(id)
+      // Exclusão persistida: sem o tombstone o próximo F5 devolveria o
+      // registro pela lista do servidor (remoção remota pendente).
+      gravarRemovidos(removidos.current)
       setServicos((atual) => atual.filter((s) => s.id !== id))
       if (temSupabase) {
         try {

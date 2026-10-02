@@ -128,6 +128,7 @@ expect(nomes).toEqual([
       '../supabase/migrations/014_rls_role_based.sql',
       '../supabase/migrations/015_ia_agendamentos_whatsapp.sql',
       '../supabase/migrations/016_ia_contexto_whatsapp.sql',
+      '../supabase/migrations/017_rls_hardening.sql',
     ])
   })
 

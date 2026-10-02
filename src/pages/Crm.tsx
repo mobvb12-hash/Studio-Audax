@@ -82,8 +82,12 @@ export default function Crm() {
    */
   function executarReativacao(perfil: PerfilCliente) {
     const { cliente } = perfil
+    // Opt-out de marketing: sem mensagem pendente (mesmo critério da IA).
+    const aceitaMarketing = cliente.preferencias?.smsMarketing !== false
     const textoMensagem =
-      perfil.ultimoAtendimento && !mensagemReativacaoPronta(cliente.id)
+      aceitaMarketing &&
+      perfil.ultimoAtendimento &&
+      !mensagemReativacaoPronta(cliente.id)
         ? textoTemplate('reativacao', {
             nome: cliente.nome,
             ultimoAtendimento: perfil.ultimoAtendimento,
@@ -230,7 +234,9 @@ export default function Crm() {
               (i) => i.clienteId === cliente.id && i.tipo === 'reativacao',
             )
             const alvoDeReativacao =
-              perfil.segmento === 'sem_retorno' || perfil.segmento === 'inativo'
+              (perfil.segmento === 'sem_retorno' ||
+                perfil.segmento === 'inativo') &&
+              cliente.preferencias?.smsMarketing !== false
             return (
               <li
                 key={cliente.id}

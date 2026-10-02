@@ -248,8 +248,11 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
             texto={`Cancelar a assinatura de ${assinatura.cliente} (${PLANOS_ROTULO[assinatura.plano]})? O histórico e os pagamentos permanecem registrados.`}
             rotuloConfirmar="Cancelar assinatura"
             perigo
-            onConfirmar={() => {
-              cancelar(assinatura.id)
+            motivoObrigatorio
+            rotuloMotivo="Motivo do cancelamento"
+            placeholderMotivo="Ex.: não cabe no orçamento"
+            onConfirmar={(motivo) => {
+              cancelar(assinatura.id, motivo)
               setConfirmarCancelamento(false)
             }}
             onFechar={() => setConfirmarCancelamento(false)}

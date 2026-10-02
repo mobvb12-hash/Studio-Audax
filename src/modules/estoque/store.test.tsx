@@ -102,6 +102,8 @@ describe('Estoque — entrada', () => {
       })
     })
     expect(ctxProdutos.porId(p.id)?.estoque).toBe(15)
+    // custo de compra da entrada vira o custo de referência do produto
+    expect(ctxProdutos.porId(p.id)?.custo).toBe(12.5)
     expect(m.tipo).toBe('entrada')
     expect(m.estoqueAntes).toBe(10)
     expect(m.estoqueDepois).toBe(15)
@@ -110,6 +112,20 @@ describe('Estoque — entrada', () => {
     expect(m.data).toBe('2026-09-20')
     expect(m.observacao).toBe('Promoção')
     expect(m.origem).toBe('manual')
+  })
+
+  it('entrada com custo zero não sobrescreve o custo do produto', () => {
+    montar()
+    const p = criarProduto('Pomada modeladora', 10, 12)
+    act(() => {
+      ctx.entrada({
+        produtoId: p.id,
+        quantidade: 5,
+        custoUnitario: 0,
+        data: '2026-09-20',
+      })
+    })
+    expect(ctxProdutos.porId(p.id)?.custo).toBe(12)
   })
 
   it('valida quantidade, custo, data e produto', () => {

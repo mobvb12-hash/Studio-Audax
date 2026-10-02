@@ -31,7 +31,12 @@ export function montarPublicos(
   lancamentos: Lancamento[],
   hoje: string = hojeISO(),
 ): Publico[] {
-  const perfis = montarPerfis(clientes, agendamentos, lancamentos, hoje)
+  // Opt-out de marketing (smsMarketing false) sai de todos os públicos —
+  // mesmo critério da Central de IA: sem aceite, não há público de campanha.
+  const aceitam = clientes.filter(
+    (c) => c.preferencias?.smsMarketing !== false,
+  )
+  const perfis = montarPerfis(aceitam, agendamentos, lancamentos, hoje)
   const porSegmento = (id: PublicoId): Cliente[] => {
     if (id === 'inativos')
       return perfis.filter((p) => p.segmento === 'inativo').map((p) => p.cliente)
@@ -45,7 +50,7 @@ export function montarPublicos(
         .map((p) => p.cliente)
     if (id === 'novos')
       return perfis.filter((p) => p.segmento === 'novo').map((p) => p.cliente)
-    return aniversariantesDoMes(clientes, hoje)
+    return aniversariantesDoMes(aceitam, hoje)
   }
 
   return PUBLICOS_ORDEM.map((id) => ({

@@ -68,6 +68,10 @@ export default function NovoAgendamentoModal({
   const [horario, setHorario] = useState(() => horarioInicial ?? '14:00')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState('')
+  // Segunda proteção contra clique duplo: em fluxo normal a modal desmonta
+  // no mesmo evento, mas se a janela pai não fechar, o segundo clique não
+  // pode criar um segundo agendamento.
+  const salvandoRef = useRef(false)
 
   const horarios = useMemo(() => {
     const slots = slotsDoExpediente(expediente).filter((s) => !s.intervalo)
@@ -137,12 +141,17 @@ export default function NovoAgendamentoModal({
   }
 
   function salvar() {
+    if (salvandoRef.current) return
     if (cliente.trim().length < 2) {
       setErro('Informe o nome do cliente.')
       return
     }
     if (!data) {
       setErro('Escolha a data.')
+      return
+    }
+    if (data < hojeISO()) {
+      setErro('Escolha uma data a partir de hoje.')
       return
     }
     if (!horario) {
@@ -214,6 +223,7 @@ export default function NovoAgendamentoModal({
       return
     }
     let novo: Agendamento
+    salvandoRef.current = true
     try {
       novo = adicionar({
         cliente,
@@ -226,6 +236,7 @@ export default function NovoAgendamentoModal({
         duracaoMin: duracaoDo(servico),
       })
     } catch (e) {
+      salvandoRef.current = false
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.')
       return
     }

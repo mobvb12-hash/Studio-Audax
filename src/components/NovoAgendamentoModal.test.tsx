@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import NovoAgendamentoModal from './NovoAgendamentoModal'
-import { formatarDataLonga } from '@/modules/agenda/catalogo'
+import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ProfissionaisProvider, useProfissionais } from '@/modules/profissionais/store'
@@ -15,7 +15,8 @@ import {
 import type { ProvedorEnvio } from '@/modules/whatsapp/provedor'
 
 const CHAVE_AG = 'studio-audax:agendamentos:v1'
-const DIA = '2026-09-25'
+// data a partir de hoje: a modal recusa criação no passado (igual ao site)
+const DIA = hojeISO()
 
 let ctxAgenda: ReturnType<typeof useAgenda>
 let ctxClientes: ReturnType<typeof useClientes>
@@ -181,6 +182,51 @@ describe('NovoAgendamentoModal — conflito de horários', () => {
     salvar()
     expect(screen.getByText('Informe o nome do cliente.')).toBeTruthy()
     expect(onFechar).not.toHaveBeenCalled()
+  })
+
+  it('recusa data no passado (criação só de hoje em diante)', () => {
+    semear('10:00')
+    const onFechar = montar('14:00')
+    digitarCliente('Ana Souza')
+    fireEvent.change(screen.getByLabelText('Data *'), {
+      target: { value: '2020-01-01' },
+    })
+    salvar()
+    expect(screen.getByText('Escolha uma data a partir de hoje.')).toBeTruthy()
+    expect(onFechar).not.toHaveBeenCalled()
+    expect(ctxAgenda.agendamentos).toHaveLength(1)
+  })
+
+  it('clique duplo no salvar cria um único agendamento', () => {
+    // janela pai que NÃO fecha: sem a trava, o segundo clique duplicaria
+    function JanelaQueNaoFecha() {
+      return (
+        <NovoAgendamentoModal
+          dataInicial={DIA}
+          horarioInicial="14:00"
+          profissionalInicial="Cleiton Silva"
+          onFechar={() => undefined}
+        />
+      )
+    }
+    render(
+      <ClientesProvider>
+        <ProfissionaisProvider>
+          <ServicosProvider>
+            <AgendaProvider>
+              <WhatsProvider>
+                <Captura />
+                <JanelaQueNaoFecha />
+              </WhatsProvider>
+            </AgendaProvider>
+          </ServicosProvider>
+        </ProfissionaisProvider>
+      </ClientesProvider>,
+    )
+    digitarCliente('Ana Souza')
+    salvar()
+    salvar()
+    expect(ctxAgenda.agendamentos).toHaveLength(1)
   })
 })
 

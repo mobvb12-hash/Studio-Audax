@@ -27,3 +27,6 @@ export function mensagemErroEntrada(erro: unknown): string {
 }
 
 export const AVISO_SESSAO_EXPIRADA = 'Sessão expirada. Entre novamente.'
+
+export const AVISO_PERFIL_INATIVO =
+  'Perfil desativado. Fale com o administrador do painel.'

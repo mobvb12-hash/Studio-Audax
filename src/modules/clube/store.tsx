@@ -635,13 +635,18 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       const alvo = estado.assinaturas.find((a) => a.id === assinaturaId)
       if (!alvo) throw new Error('Assinatura não encontrada.')
       if (alvo.cancelada) throw new Error('Esta assinatura já foi cancelada.')
+      // cancelar exige motivo: a regra vale também fora da UI (API/store)
+      const motivoLimpo = motivo?.trim() ?? ''
+      if (motivoLimpo.length < 3) {
+        throw new Error('Informe o motivo do cancelamento (mínimo 3 letras).')
+      }
       // cancelar não apaga nada: assinatura, vencimento e histórico de
       // pagamentos permanecem, só o estado de cancelamento é acrescentado
       const cancelada: AssinaturaClube = {
         ...alvo,
         cancelada: true,
         canceladaEm: hojeISO(),
-        motivoCancelamento: motivo?.trim() || undefined,
+        motivoCancelamento: motivoLimpo,
         atualizadoEm: new Date().toISOString(),
       }
       alteradosAssinaturas.current.add(assinaturaId)

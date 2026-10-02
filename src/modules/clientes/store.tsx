@@ -31,6 +31,17 @@ import type { Cliente, NovoClienteInput } from './types'
 import { digitosDosTelefones } from './types'
 
 const CHAVE_STORAGE = CHAVE_STORAGE_CLIENTES
+// Tombstone de cliente removido: a remoção precisa sobreviver ao F5 — sem
+// ele a próxima carga devolveria o registro pela lista do servidor.
+const CHAVE_REMOVIDOS = 'studio-audax:clientes:removidos:v1'
+
+function ehListaIds(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every((id) => typeof id === 'string')
+}
+
+function gravarRemovidos(ids: Set<string>): void {
+  salvarJSON(CHAVE_REMOVIDOS, Array.from(ids))
+}
 
 type ClientesContexto = {
   clientes: Cliente[]
@@ -103,13 +114,33 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
   const [sincronizado, setSincronizado] = useState(false)
 
   const temSupabase = supabase() !== null
+  // nenhuma lista local gravada nesta máquina = só existe a base vazia
+  const [instalacaoNova] = useState(
+    () => carregarJSON<unknown>(CHAVE_STORAGE, null, Array.isArray) === null,
+  )
   const alterados = useRef<Set<string>>(new Set())
-  const removidos = useRef<Set<string>>(new Set())
+  // Tombstone carregado do storage: exclusões feitas em sessões anteriores
+  // seguem protegidas. Em instalação nova ele não vale (apagaria registro
+  // do servidor sem relação com esta máquina).
+  const removidos = useRef<Set<string>>(
+    new Set(
+      instalacaoNova
+        ? []
+        : carregarJSON<string[]>(CHAVE_REMOVIDOS, [], ehListaIds),
+    ),
+  )
   const listaLocal = useRef<Cliente[]>(clientes)
 
   useEffect(() => {
     listaLocal.current = clientes
   }, [clientes])
+
+  // Instalação nova: tombstone gravado por outra instalação não vale aqui.
+  useEffect(() => {
+    if (!instalacaoNova) return
+    if (carregarJSON<unknown>(CHAVE_REMOVIDOS, null, ehListaIds) === null) return
+    gravarRemovidos(new Set())
+  }, [instalacaoNova])
 
   // Supabase é a fonte oficial: a primeira carga roda a migração local →
   // remoto (com snapshot) e só então o localStorage volta a ser gravado.
@@ -136,6 +167,27 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
               removidos.current,
             ),
           )
+
+          // Tombstone sincronizado com a lista oficial: id que sumiu é
+          // descartado; id que ainda aparece (remoção que não chegou a
+          // valer) é apagado de novo — idempotente — e segue protegido
+          // nesta máquina. Só roda com migração limpa: leitura remota
+          // falhou = `relatorio.clientes` é só local, sem valor de base.
+          if (relatorio.ok) {
+            const idsOficiais = new Set(relatorio.clientes.map((c) => c.id))
+            let tombstoneMudou = false
+            for (const id of Array.from(removidos.current)) {
+              if (idsOficiais.has(id)) {
+                void removerCliente(id).catch(() =>
+                  avisarFalhaSincronizacao(CHAVE_STORAGE),
+                )
+                continue
+              }
+              removidos.current.delete(id)
+              tombstoneMudou = true
+            }
+            if (tombstoneMudou) gravarRemovidos(removidos.current)
+          }
         }
       })
       .catch((erro) => {
@@ -303,6 +355,9 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       removidos.current.add(id)
       alterados.current.delete(id)
+      // Exclusão persistida: sem o tombstone o próximo F5 devolveria o
+      // registro pela lista do servidor (remoção remota pendente).
+      gravarRemovidos(removidos.current)
       setClientes((atual) => atual.filter((c) => c.id !== id))
       sincronizar(() => removerCliente(id))
     },

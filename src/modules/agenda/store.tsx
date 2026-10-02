@@ -12,6 +12,7 @@ import { normalizarTexto } from '@/lib/moeda'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
+  salvarJSON,
 } from '@/lib/persistencia'
 import { supabase } from '@/lib/supabase'
 import { useCaixa } from '@/modules/caixa/store'
@@ -88,6 +89,20 @@ type AgendaContexto = {
 }
 
 const Contexto = createContext<AgendaContexto | null>(null)
+
+// Tombstones de remoção: a exclusão precisa sobreviver ao F5 — sem elas a
+// próxima carga devolveria os registros pela lista do servidor.
+const CHAVE_REMOVIDOS_AGENDAMENTOS =
+  'studio-audax:agenda:agendamentos:removidos:v1'
+const CHAVE_REMOVIDOS_BLOQUEIOS = 'studio-audax:agenda:bloqueios:removidos:v1'
+
+function ehListaIds(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every((id) => typeof id === 'string')
+}
+
+function gravarRemovidos(chave: string, ids: Set<string>): void {
+  salvarJSON(chave, Array.from(ids))
+}
 
 function gerarId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -481,9 +496,24 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
       carregarJSON<unknown>(CHAVE_BLOQUEIOS, null, Array.isArray) === null,
   )
   const alteradosAgendamentos = useRef<Set<string>>(new Set())
-  const removidosAgendamentos = useRef<Set<string>>(new Set())
+  // Tombstone carregado do storage: exclusões feitas em sessões anteriores
+  // seguem protegidas. Em instalação nova ele não vale (apagaria registro
+  // do servidor sem relação com esta máquina).
+  const removidosAgendamentos = useRef<Set<string>>(
+    new Set(
+      instalacaoNova
+        ? []
+        : carregarJSON<string[]>(CHAVE_REMOVIDOS_AGENDAMENTOS, [], ehListaIds),
+    ),
+  )
   const alteradosBloqueios = useRef<Set<string>>(new Set())
-  const removidosBloqueios = useRef<Set<string>>(new Set())
+  const removidosBloqueios = useRef<Set<string>>(
+    new Set(
+      instalacaoNova
+        ? []
+        : carregarJSON<string[]>(CHAVE_REMOVIDOS_BLOQUEIOS, [], ehListaIds),
+    ),
+  )
   const agendamentosLocais = useRef<Agendamento[]>(agendamentos)
   const bloqueiosLocais = useRef<Bloqueio[]>(bloqueios)
   const expedienteLocal = useRef<Expediente>(expediente)
@@ -498,6 +528,23 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     expedienteLocal.current = expediente
   }, [expediente])
+
+  // Instalação nova: tombstone gravado por outra instalação não vale aqui.
+  useEffect(() => {
+    if (!instalacaoNova) return
+    if (
+      carregarJSON<unknown>(CHAVE_REMOVIDOS_AGENDAMENTOS, null, ehListaIds) !==
+      null
+    ) {
+      gravarRemovidos(CHAVE_REMOVIDOS_AGENDAMENTOS, new Set())
+    }
+    if (
+      carregarJSON<unknown>(CHAVE_REMOVIDOS_BLOQUEIOS, null, ehListaIds) !==
+      null
+    ) {
+      gravarRemovidos(CHAVE_REMOVIDOS_BLOQUEIOS, new Set())
+    }
+  }, [instalacaoNova])
 
   // O Supabase é a fonte oficial da agenda, mas o estado local nunca é
   // substituído: a integração une os dois lados, reenvia as pendências e o
@@ -543,6 +590,50 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
             : base.expediente,
         )
         expedienteCarimbo.current = base.expedienteAtualizadoEm
+
+        // Tombstones sincronizados com a lista oficial: id que sumiu é
+        // descartado; id que ainda aparece (remoção que não chegou a
+        // valer) é apagado de novo — idempotente — e segue protegido
+        // nesta máquina.
+        const oficiaisAgendamentos = new Set(
+          base.agendamentos.map((ag) => ag.id),
+        )
+        let agendamentoMudou = false
+        for (const id of Array.from(removidosAgendamentos.current)) {
+          if (oficiaisAgendamentos.has(id)) {
+            void removerAgendamento(id).catch(() =>
+              avisarFalhaSincronizacao(CHAVE_AGENDAMENTOS),
+            )
+            continue
+          }
+          removidosAgendamentos.current.delete(id)
+          agendamentoMudou = true
+        }
+        if (agendamentoMudou) {
+          gravarRemovidos(
+            CHAVE_REMOVIDOS_AGENDAMENTOS,
+            removidosAgendamentos.current,
+          )
+        }
+
+        const oficiaisBloqueios = new Set(base.bloqueios.map((b) => b.id))
+        let bloqueioMudou = false
+        for (const id of Array.from(removidosBloqueios.current)) {
+          if (oficiaisBloqueios.has(id)) {
+            void removerBloqueioRemoto(id).catch(() =>
+              avisarFalhaSincronizacao(CHAVE_BLOQUEIOS),
+            )
+            continue
+          }
+          removidosBloqueios.current.delete(id)
+          bloqueioMudou = true
+        }
+        if (bloqueioMudou) {
+          gravarRemovidos(
+            CHAVE_REMOVIDOS_BLOQUEIOS,
+            removidosBloqueios.current,
+          )
+        }
       })
       .catch((erro) => {
         // leitura remota indisponível: mantém a agenda local intacta e não
@@ -698,6 +789,9 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
       }
       removidosAgendamentos.current.add(id)
       alteradosAgendamentos.current.delete(id)
+      // Exclusão persistida: sem o tombstone o próximo F5 devolveria o
+      // registro pela lista do servidor (remoção remota pendente).
+      gravarRemovidos(CHAVE_REMOVIDOS_AGENDAMENTOS, removidosAgendamentos.current)
       setAgendamentos((atual) => atual.filter((ag) => ag.id !== id))
       sincronizar(CHAVE_AGENDAMENTOS, () => removerAgendamento(id))
     },
@@ -847,6 +941,9 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       removidosBloqueios.current.add(id)
       alteradosBloqueios.current.delete(id)
+      // Exclusão persistida: sem o tombstone o próximo F5 devolveria o
+      // registro pela lista do servidor (remoção remota pendente).
+      gravarRemovidos(CHAVE_REMOVIDOS_BLOQUEIOS, removidosBloqueios.current)
       setBloqueios((atual) => atual.filter((b) => b.id !== id))
       sincronizar(CHAVE_BLOQUEIOS, () => removerBloqueioRemoto(id))
     },

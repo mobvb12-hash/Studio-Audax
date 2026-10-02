@@ -146,6 +146,21 @@ describe('Audax Club — assinaturas', () => {
     expect(() => ctxClube.cancelar(ass.id)).toThrow('já foi cancelada')
     expect(() => ctxClube.cancelar('nao-existe')).toThrow('não encontrada')
   })
+
+  it('cancelar exige motivo com pelo menos 3 letras', () => {
+    montar()
+    const ass = criarAssinatura()
+    expect(() => ctxClube.cancelar(ass.id)).toThrow(/motivo/i)
+    expect(() => ctxClube.cancelar(ass.id, '  ')).toThrow(/motivo/i)
+    expect(() => ctxClube.cancelar(ass.id, 'ab')).toThrow(/motivo/i)
+    expect(ctxClube.assinaturas[0].cancelada).toBe(false)
+
+    act(() => ctxClube.cancelar(ass.id, 'não cabe no orçamento'))
+    expect(ctxClube.assinaturas[0].cancelada).toBe(true)
+    expect(ctxClube.assinaturas[0].motivoCancelamento).toBe(
+      'não cabe no orçamento',
+    )
+  })
 })
 
 describe('Audax Club — planos do clube', () => {
@@ -245,7 +260,7 @@ describe('Audax Club — edição de assinatura', () => {
     // nada mudou no vínculo original
     expect(ctxClube.assinaturas[0].clienteId).toBe('cli-1')
 
-    act(() => ctxClube.cancelar(ass.id))
+    act(() => ctxClube.cancelar(ass.id, 'encerramento do teste'))
     expect(() => ctxClube.atualizar(ass.id, { valorMensal: 10 })).toThrow(
       'cancelada',
     )
@@ -345,7 +360,7 @@ describe('Audax Club — pagamentos e renovação', () => {
   it('assinatura cancelada não recebe pagamento', () => {
     montar()
     const ass = criarAssinatura()
-    act(() => ctxClube.cancelar(ass.id))
+    act(() => ctxClube.cancelar(ass.id, 'cancelada no teste'))
     expect(() =>
       ctxClube.registrarPagamento({
         assinaturaId: ass.id,
@@ -485,7 +500,7 @@ describe('Audax Club — consultas e persistência', () => {
     const ass = criarAssinatura()
     expect(ctxClube.assinaturaDoCliente('cli-1')?.id).toBe(ass.id)
     expect(ctxClube.assinaturaDoCliente('cli-2')).toBeUndefined()
-    act(() => ctxClube.cancelar(ass.id))
+    act(() => ctxClube.cancelar(ass.id, 'cancelada no teste'))
     expect(ctxClube.assinaturaDoCliente('cli-1')).toBeUndefined()
   })
 

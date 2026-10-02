@@ -195,13 +195,32 @@ describe('Audax Club — página', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar pagamento' }))
 
-    // cancelar a partir do histórico
+    // cancelar a partir do histórico — exige motivo
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar assinatura' }))
     const texto = screen.getByText(/Cancelar a assinatura de/)
+    const modalConfirmacao = texto.parentElement as HTMLElement
     fireEvent.click(
-      within(texto.parentElement as HTMLElement).getByRole('button', {
+      within(modalConfirmacao).getByRole('button', {
         name: 'Cancelar assinatura',
       }),
+    )
+    // sem motivo não cancela
+    expect(
+      within(modalConfirmacao).getByText('Informe o motivo (mínimo 3 letras).'),
+    ).toBeTruthy()
+    expect(ctxClube.assinaturas[0].cancelada).toBe(false)
+
+    fireEvent.change(
+      within(modalConfirmacao).getByLabelText(/Motivo do cancelamento/),
+      { target: { value: 'não cabe no orçamento' } },
+    )
+    fireEvent.click(
+      within(modalConfirmacao).getByRole('button', {
+        name: 'Cancelar assinatura',
+      }),
+    )
+    expect(ctxClube.assinaturas[0].motivoCancelamento).toBe(
+      'não cabe no orçamento',
     )
 
     expect(screen.getAllByText('Cancelada').length).toBeGreaterThan(0)

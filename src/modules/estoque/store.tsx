@@ -334,7 +334,7 @@ function fundir(
 let promessaIntegracao: Promise<MovimentacaoEstoque[]> | null = null
 
 export function EstoqueProvider({ children }: { children: ReactNode }) {
-  const { porId, aplicarEstoque, produtos } = useProdutos()
+  const { porId, aplicarEstoque, aplicarCusto, produtos } = useProdutos()
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>(() =>
     carregar(),
   )
@@ -528,10 +528,13 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
         observacao: input.observacao?.trim() || undefined,
       })
       aplicarSaldo(pendencias.current, produto.id, depois, aplicarEstoque)
+      // entrada com custo de compra informado vira o custo de referência
+      // do produto (CMV da venda usa produto.custo); zero não sobrescreve
+      if (input.custoUnitario > 0) aplicarCusto(produto.id, input.custoUnitario)
       registrarMovimentacoes([nova])
       return nova
     },
-    [porId, aplicarEstoque, registrarMovimentacoes],
+    [porId, aplicarEstoque, aplicarCusto, registrarMovimentacoes],
   )
 
   const ajuste = useCallback(

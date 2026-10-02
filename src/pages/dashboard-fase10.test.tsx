@@ -8,17 +8,20 @@ import { ClientesProvider } from '@/modules/clientes/store'
 import { ClubeProvider } from '@/modules/clube/store'
 import { ComissoesProvider } from '@/modules/comissoes/store'
 import { ProdutosProvider } from '@/modules/produtos/store'
-import { ProfissionaisProvider } from '@/modules/profissionais/store'
+import { ProfissionaisProvider, useProfissionais } from '@/modules/profissionais/store'
 import { ServicosProvider } from '@/modules/servicos/store'
 import type { PaginaId } from '@/layouts/AppLayout'
 import Dashboard from './Dashboard'
 
 let ctxAgenda: ReturnType<typeof useAgenda>
+let ctxProfissionais: ReturnType<typeof useProfissionais>
 
 function Captura() {
   const agenda = useAgenda()
+  const profissionais = useProfissionais()
   useEffect(() => {
     ctxAgenda = agenda
+    ctxProfissionais = profissionais
   })
   return null
 }
@@ -63,6 +66,7 @@ function agendar(horario: string, profissional: string) {
 beforeEach(() => {
   localStorage.clear()
   ctxAgenda = undefined as unknown as ReturnType<typeof useAgenda>
+  ctxProfissionais = undefined as unknown as ReturnType<typeof useProfissionais>
 })
 
 describe('Dashboard — acessos rápidos para os módulos', () => {
@@ -118,5 +122,38 @@ describe('Dashboard — horários disponíveis (dados reais)', () => {
     montar()
     expect(screen.getByText(/0 horário\(s\) · 0 vaga\(s\)/)).toBeTruthy()
     expect(screen.getByText('Sem vagas no expediente de hoje.')).toBeTruthy()
+  })
+})
+
+describe('Dashboard — conta apenas profissionais ativos', () => {
+  function contadorResumo(): string {
+    const titulo = screen.getByRole('heading', {
+      name: 'Resumo de profissionais',
+    })
+    return titulo.nextElementSibling?.textContent ?? ''
+  }
+
+  it('profissional inativo não gera vagas nem entra no resumo', async () => {
+    montar()
+    const italo = ctxProfissionais.profissionais.find(
+      (p) => p.nome === 'Ítalo Santos',
+    )!
+    await act(() => ctxProfissionais.alternarAtivo(italo.id))
+
+    expect(screen.getByText(/22 horário\(s\) · 22 vaga\(s\)/)).toBeTruthy()
+    expect(contadorResumo()).toBe('1')
+    expect(screen.queryByText('Ítalo Santos')).toBeNull()
+    expect(screen.getByText('Cleiton Silva')).toBeTruthy()
+  })
+
+  it('todos inativos mostra aviso de nenhum ativo', async () => {
+    montar()
+    for (const p of [...ctxProfissionais.profissionais]) {
+      if (p.ativo) await act(() => ctxProfissionais.alternarAtivo(p.id))
+    }
+
+    expect(screen.getByText(/0 horário\(s\) · 0 vaga\(s\)/)).toBeTruthy()
+    expect(contadorResumo()).toBe('0')
+    expect(screen.getByText('Nenhum profissional ativo.')).toBeTruthy()
   })
 })

@@ -1,5 +1,6 @@
 // Painel — layout igual ao print, agora ligado à agenda real (localStorage).
 // Financeiro/estoque/profissionais ligados aos seus módulos; Audax Club real.
+import { useMemo } from 'react'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { duracaoBase, horariosDisponiveis } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
@@ -74,13 +75,19 @@ export default function Dashboard({
   const totalHoje = agendaHoje.length
   const fila = comPosicao(pedidos).filter((i) => i.posicao !== null)
 
+  // Capacidade e resumo consideram apenas quem está ativo (inativo não atende)
+  const profissionaisAtivos = useMemo(
+    () => profissionais.filter((p) => p.ativo),
+    [profissionais],
+  )
+
   // Alerta real de horários livres hoje (expediente − agendamentos − bloqueios)
   const disponibilidade = horariosDisponiveis(
     hojeISO(),
     expediente,
     bloqueios,
     agendaHoje,
-    profissionais.map((p) => p.nome),
+    profissionaisAtivos.map((p) => p.nome),
     duracaoBase,
   )
 
@@ -398,13 +405,19 @@ export default function Dashboard({
           </Cartao>
           <Cartao
             titulo="Resumo de profissionais"
-            contador={String(profissionais.length)}
+            contador={String(profissionaisAtivos.length)}
           >
-            {profissionais.length === 0 ? (
-              <CaixaVazia texto="Nenhum profissional cadastrado." />
+            {profissionaisAtivos.length === 0 ? (
+              <CaixaVazia
+                texto={
+                  profissionais.length === 0
+                    ? 'Nenhum profissional cadastrado.'
+                    : 'Nenhum profissional ativo.'
+                }
+              />
             ) : (
               <ul className="divide-y divide-[#EFE7D3]">
-                {profissionais.map((prof) => {
+                {profissionaisAtivos.map((prof) => {
                   const hoje = agendaHoje.filter(
                     (ag) =>
                       ag.profissional === prof.nome &&
