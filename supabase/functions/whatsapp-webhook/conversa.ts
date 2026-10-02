@@ -136,12 +136,20 @@ const PADRAO_TEMPO =
 const PADRAO_INTENCAO_AGENDA =
   /(horario|vaga|cort|barb|sobrancelh|platinad|luzes|atendimento|marcar|agendar|reservar|quero|queria|gostaria|preciso|prefiro|pode|consegue|\btem\b|da para)/
 const PADRAO_INFORMATIVA =
-  /\b(quanto|quanto[s]?|custa|custo|preco|valores?|endereco|onde|funcionamento|telefone|contato|instagram|site|cardapio|abre|fecha|aberto|horario de)\b/
+  /\b(quanto|quanto[s]?|custa|custo|precos?|valores?|endereco|onde|funcionamento|telefone|contato|instagram|site|cardapio|abre|fecha|aberto|horario de (?:funcionamento|abertura|atendimento)|cartao|pix|pagamento|dinheiro)\b/
 /** Pergunta de disponibilidade sem data explícita ("tem vaga?", "tem horário?"). */
 const PADRAO_VAGA =
   /\bvagas?\b|\btem(?:emos|)?\b[^.?!]{0,40}\bhorarios?\b|\b(quero|queria|gostaria|preciso|prefiro)\b[^.?!]{0,40}\b(horarios?|vagas?)\b|\bhorarios?\b[^.?!]{0,20}\b(livres?|disponiveis?|tem|temos)\b/
 /** Menção a período do dia ("quero à tarde", "prefiro de manhã"). */
 const PADRAO_PERIODO = /\b(manha|tarde|noite|almoco|cedo|fim do dia)\b/
+/**
+ * Cliente escolhendo PESSOA ("quero com o Cleiton"): intenção de agenda +
+ * "com <algo>". Alvos não-pessoas (preço/cartão/endereço) já caem em
+ * PADRAO_INFORMATIVA antes; a lista negativa cobre os casos remanescentes
+ * ("quero falar com você", "com alguém").
+ */
+const PADRAO_COM_ALGUEM =
+  /\b(quero|queria|gostaria|preciso|prefiro|pode|marcar|agendar)\b[^.?!]{0,40}\bcom\s+(?:o|a|os|as|meu|minha|meus|minhas|ele|ela)?\s*(?!(?:voce|voces|alguem|atendimento|suporte|ajuda)\b)[a-zá-ú]{3,}\b/
 /** Intenção de serviço em linguagem natural ("quero cortar o cabelo"). */
 const PADRAO_SERVICO_AGENDA = /\b(cort\w*|barba|cabelo|degrad\w*|sobrancelha\w*|platinad\w*|luzes)\b/
 
@@ -161,7 +169,9 @@ export function detectarAcao(texto: string): AcaoConversa | null {
   // Disponibilidade/periodo/servico com intencao de agenda — nunca porca
   // de pergunta informativa classica (preco, endereco, funcionamento).
   if (!PADRAO_INFORMATIVA.test(t) && PADRAO_INTENCAO_AGENDA.test(t)) {
-    if (PADRAO_VAGA.test(t) || PADRAO_PERIODO.test(t)) return 'criar'
+    if (PADRAO_VAGA.test(t) || PADRAO_PERIODO.test(t) || PADRAO_COM_ALGUEM.test(t)) {
+      return 'criar'
+    }
   }
   if (!PADRAO_INFORMATIVA.test(t) && PADRAO_SERVICO_AGENDA.test(t)) return 'criar'
   return null
@@ -441,6 +451,16 @@ export function extrairHorarios(texto: string): {
     if (h <= 23 && mer[2] !== 'manha' && h < 12) h += 12
     aceitos.push({ pos, fim, h, m: 0 })
   }
+  // "10 e meia" → 10:30. Precisa vencer "às 10" que casaria o mesmo "10".
+  const RE_MEIA = /(\d{1,2})\s+e\s+meia\b/g
+  let em: RegExpExecArray | null
+  while ((em = RE_MEIA.exec(t)) !== null) {
+    const pos = em.index
+    const fim = pos + em[0].length
+    if (aceitos.some((a) => pos < a.fim && fim > a.pos)) continue
+    const h = Number(em[1])
+    if (h <= 23) aceitos.push({ pos, fim, h, m: 30 })
+  }
   tentar(/\bas\s+(\d{1,2})\b/g, false)
 
   const validos: string[] = []
@@ -472,17 +492,15 @@ const ROTULO_PERIODO: Record<Periodo, string> = {
 
 /**
  * Período citado. "mais tarde à noite" contém as duas palavras — noite
- * precisa vir primeiro. Nunca converte período em horário específico.
+ * precisa vir primeiro. "fim do dia"/"mais tarde" são o TRECHO FINAL do
+ * expediente (≥18h) → noite, nunca tarde. Nunca converte período em
+ * horário específico.
  */
 export function extrairPeriodo(texto: string): Periodo | null {
   const t = normalizar(texto)
   if (!t) return null
-  if (/\bnoite\b/.test(t)) return 'noite'
-  if (
-    /\btarde\b|\bdepois (?:do|de) almoco\b|\bdepois do almoço\b|\bapos (?:o )?almoco\b|\bfim do dia\b|\bfinal do dia\b/.test(
-      t,
-    )
-  ) {
+  if (/\bnoite\b|\bmais tarde\b|\bfim do dia\b|\bfinal do dia\b/.test(t)) return 'noite'
+  if (/\btarde\b|\bdepois (?:do|de) almoco\b|\bdepois do almoço\b|\bapos (?:o )?almoco\b/.test(t)) {
     return 'tarde'
   }
   if (/\bmanha\b|\bcedo\b|\bprimeira hora\b/.test(t)) return 'manha'
@@ -623,6 +641,9 @@ const NAO_E_PROFISSIONAL = [
   'hoje',
   'amanha',
   'todos',
+  // pronomes de pessoa: "tem vaga com ele?" usa o profissional JÁ escolhido
+  'ele',
+  'ela',
   'comigo',
   'voces',
   'o',
@@ -1358,7 +1379,13 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
     !ehRespostaDeCampo(texto, hoje, fontes.servicos)
 
   if (capturandoNome) {
-    r.cliente = texto.trim().replace(/\s+/g, ' ').slice(0, 80)
+    // Pontuação final ("Silva.") é do texto, não do nome.
+    const nome = texto
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/[.!?,;:]+$/, '')
+      .slice(0, 80)
+    r.cliente = nome || texto.trim().slice(0, 80)
     r.esperandoNome = false
   } else {
     const tCampo = normalizar(texto)
