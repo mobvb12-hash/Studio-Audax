@@ -19,6 +19,9 @@ export type IntencaoIa =
   | { tipo: 'bloqueada'; motivo: 'acao' | 'interna' }
   | { tipo: 'informativa' }
 
+/** Turno do histórico recente da conversa (contexto em memória da FASE 5). */
+export type Turno = { papel: 'cliente' | 'ia'; texto: string }
+
 export type ConfigIa = { url: string; apiKey: string; modelo: string }
 
 export type FonteServico = {
@@ -205,12 +208,20 @@ export function lerConfigIa(ler: (nome: string) => string | undefined): ConfigIa
 /**
  * Requisição ao provedor no padrão OpenAI-compatible `POST {base}/chat/completions`.
  * A chave viaja SOMENTE no header Authorization — nunca na URL nem no corpo.
+ * `historico` (opcional, FASE 5) entra entre o system e a pergunta atual,
+ * limitado aos 6 turnos mais recentes; sem ele o corpo é exatamente o
+ * [system, user] das etapas anteriores.
  */
 export function montarRequisicaoIa(
   config: ConfigIa,
   contexto: string,
   textoUsuario: string,
+  historico: Turno[] = [],
 ): RequisicaoIa {
+  const turnos = historico.slice(-6).map((turno) => ({
+    role: turno.papel === 'cliente' ? 'user' : 'assistant',
+    content: turno.texto,
+  }))
   return {
     url: `${config.url.replace(/\/+$/, '')}/chat/completions`,
     init: {
@@ -224,6 +235,7 @@ export function montarRequisicaoIa(
         temperature: 0.2,
         messages: [
           { role: 'system', content: montarPromptSistema(contexto) },
+          ...turnos,
           { role: 'user', content: textoUsuario },
         ],
       }),
@@ -344,6 +356,8 @@ export type EntradaProcessamento = {
   carregarFontes?: () => Promise<FontesOficiais>
   /** Envia a requisição ao provedor (rede fica no index; testes injetam falso) */
   gerar?: (requisicao: RequisicaoIa) => Promise<ResultadoResposta>
+  /** FASE 5 — turnos recentes (contexto em memória); opcional */
+  historico?: Turno[]
 }
 
 /**
@@ -382,6 +396,7 @@ export async function processarMensagem(
     entrada.config,
     montarContextoOficial(fontes),
     entrada.texto,
+    entrada.historico ?? [],
   )
   const inicioChamada = Date.now()
   try {

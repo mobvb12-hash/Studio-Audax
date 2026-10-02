@@ -126,6 +126,7 @@ expect(nomes).toEqual([
       '../supabase/migrations/012_agendamento_publico.sql',
       '../supabase/migrations/013_caixa_servicos_profissional.sql',
       '../supabase/migrations/014_rls_role_based.sql',
+      '../supabase/migrations/015_ia_agendamentos_whatsapp.sql',
     ])
   })
 

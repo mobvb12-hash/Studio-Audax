@@ -43,14 +43,47 @@ import {
 } from './envio.ts'
 import {
   type FontesOficiais,
+  classificarIntencao,
   identificarServico,
   interpretarRespostaIa,
   lerConfigIa,
   mapearFontes,
   processarMensagem,
+  type ResultadoProcessamento,
 } from './ia.ts'
+import {
+  detectarAcao,
+  ehPerguntaInformativa,
+  mapearPacoteSlots,
+  processarConversa,
+  type SaidaConversa,
+} from './conversa.ts'
+import { comTurnos, criarMemoria, criarRecentes } from './memoria.ts'
+import {
+  interpretarAgendamentos,
+  interpretarRpc,
+  montarRpcSecreto,
+  motivoSeguro,
+  type ResultadoRpc,
+  type RpcAutorizada,
+} from './acoes.ts'
 
 const TIMEOUT_EVOLUTION_MS = 15_000
+
+// FASE 5 — contexto conversacional e deduplicação vivem SOMENTE na memória
+// do processo da função (TTL e tetos em ./memoria.ts): nada é persistido.
+const memoriaConversa = criarMemoria({ agora: () => Date.now() })
+const eventosRecentes = criarRecentes({ agora: () => Date.now() })
+
+/** Data de hoje no fuso do Studio (America/Recife) — YYYY-MM-DD. */
+function dataLocalRecife(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Recife',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
 
 function responder(status: number, corpo: unknown): Response {
   return Response.json(corpo, { status })
@@ -344,59 +377,256 @@ export default {
     )
 
     // ---------------------------------------------------------------------
-    // FASE 3 — IA informativa + envio da resposta GERADA ao número de teste.
-    // Classificação e geração são da camada ./ia.ts; o envio sai SOMENTE
-    // pela função existente ./whatsapp-enviar (modo server-to-server, header
-    // `apikey` = SUPABASE_SECRET_KEYS["default"]) — nunca direto para a
-    // Evolution, nunca com segredo no
-    // corpo. Destinatário: remetente do evento E que esteja na lista
-    // IA_NUMERO_TESTE (a IA nunca escolhe para quem enviar). Fontes:
-    // exclusivamente as funções públicas SECURITY DEFINER já existentes
-    // (catálogo + expediente) lidas com o cliente anônimo — nunca escrita.
+    // FASE 3/5 — roteamento da mensagem recebida:
+    //   1. interna → recusa fixa (fluxo intacto, sem envio);
+    //   2. ação detectada (ou rascunho pendente) → conversa DETERMINÍSTICA
+    //      de ./conversa.ts (criar/cancelar/remarcar com confirmação);
+    //   3. demais → informativa com Gemini + histórico recente (intacta).
+    // O envio continua SOMENTE pelo gate de destinatário + ./whatsapp-enviar.
     // ---------------------------------------------------------------------
     if (evento.recebida && evento.texto) {
       const inicioIa = Date.now()
+      const texto = evento.texto
+      const remetenteBruto = extrairRemetente(corpo)
+
+      // Dedup: a Evolution reentrega eventos; a segunda cópia não roda
+      // Gemini, não muda estado e não executa ação. Id ausente → processa.
+      if (evento.idMensagem && !eventosRecentes.registrar(evento.idMensagem)) {
+        console.log(
+          '[whatsapp-ia]',
+          JSON.stringify({ evento: 'duplicado', idMensagem: evento.idMensagem }),
+        )
+        return responder(200, { ok: true, recebido: evento.reconhecido })
+      }
+
       const configIa = lerConfigIa((nome) => Deno.env.get(nome))
+      const numeroTeste = (Deno.env.get('IA_NUMERO_TESTE') ?? '').trim()
+      const remetente = normalizarNumero(remetenteBruto)
+      const chaveSecreta = lerChaveSecreta((nome) => Deno.env.get(nome))
+      const contexto = remetente ? memoriaConversa.ler(remetente) : null
+
+      const intencaoBase = classificarIntencao(texto)
+      const interna =
+        intencaoBase.tipo === 'bloqueada' && intencaoBase.motivo === 'interna'
+      const acaoDetectada = detectarAcao(texto)
+      const irParaConversa =
+        !interna &&
+        (acaoDetectada !== null ||
+          (contexto?.rascunho != null && !ehPerguntaInformativa(texto)))
+
       let fontesCarregadas: FontesOficiais | null = null
-      const resultadoIa = await processarMensagem({
-        texto: evento.texto,
-        config: configIa,
-        carregarFontes: async () => {
-          const [catalogo, slots] = await Promise.all([
-            ctx.supabase.rpc('agendamento_publico_catalogo'),
-            ctx.supabase.rpc('agendamento_publico_slots', {
-              p_data: new Date().toISOString().slice(0, 10),
-            }),
-          ])
-          if (catalogo.error || slots.error) {
-            throw new Error('fontes oficiais indisponíveis')
+      let saidaConversa: SaidaConversa | null = null
+      let resultadoIa: ResultadoProcessamento
+
+      if (irParaConversa) {
+        // Escrita 100% determinística (sem Gemini). O MESMO gate do envio
+        // decide se a ação pode executar: fora da lista de teste, apenas a
+        // pergunta/confirmação é montada — nenhum RPC de escrita roda.
+        const podeExecutar = deveEnviarResposta({
+          estado: 'gerada',
+          resposta: 'conversa',
+          remetente: remetenteBruto,
+          numeroTeste,
+        })
+
+        // RPC com credencial server-to-server (padrão de ./envio.ts):
+        // segredo SOMENTE nos headers; corpo só parâmetros tipados.
+        const chamadaSecreta = async (
+          nome: RpcAutorizada,
+          params: Record<string, string>,
+        ): Promise<ResultadoRpc> => {
+          try {
+            if (!chaveSecreta) {
+              return { ok: false, motivo: 'Credencial de acesso ausente.' }
+            }
+            const { url, init } = montarRpcSecreto(
+              segredos.base,
+              chaveSecreta,
+              nome,
+              params,
+            )
+            const resposta = await fetch(url, {
+              ...init,
+              signal: AbortSignal.timeout(15_000),
+            })
+            return interpretarRpc(resposta.status, await resposta.text())
+          } catch (erro) {
+            const estourou = erro instanceof Error && erro.name === 'TimeoutError'
+            return {
+              ok: false,
+              motivo: estourou
+                ? 'A consulta não respondeu em 15s.'
+                : motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+            }
           }
-          const fontes = mapearFontes(catalogo.data, slots.data)
-          fontesCarregadas = fontes
-          return fontes
-        },
-        gerar: async (requisicao) => {
-          const resposta = await fetch(requisicao.url, {
-            ...requisicao.init,
-            signal: AbortSignal.timeout(20_000),
-          })
-          return interpretarRespostaIa(resposta.status, await resposta.text())
-        },
-      })
-      const servicoIdentificado = fontesCarregadas
-        ? identificarServico(evento.texto, fontesCarregadas)
-        : null
-      // Log técnico: metadados + serviço identificado + diagnóstico seguro
-      // da chamada ao provedor (HTTP status, tipo de erro, mensagem de erro
-      // SANITIZADA, duração) + resposta GERADA (saída do bot, só dados
-      // oficiais). O texto recebido do cliente NUNCA é logado e nenhum
-      // secret (IA_API_KEY / Bearer / EVOLUTION / service_role) entra aqui.
+        }
+
+        saidaConversa = await processarConversa({
+          texto,
+          telefone: remetente,
+          contexto,
+          podeExecutar,
+          deps: {
+            agora: () => Date.now(),
+            hoje: () => dataLocalRecife(),
+            carregarCatalogo: async () => {
+              const { data, error } = await ctx.supabase.rpc(
+                'agendamento_publico_catalogo',
+              )
+              if (error) throw new Error('catálogo indisponível')
+              return mapearFontes(data, null)
+            },
+            carregarSlots: async (data) => {
+              const { data: pacote, error } = await ctx.supabase.rpc(
+                'agendamento_publico_slots',
+                { p_data: data },
+              )
+              if (error) throw new Error('agenda indisponível')
+              return mapearPacoteSlots(pacote)
+            },
+            listarAgendamentos: chaveSecreta
+              ? async (telefone) => {
+                  const resultado = await chamadaSecreta(
+                    'ia_agendamentos_do_telefone',
+                    { p_telefone: telefone },
+                  )
+                  if (!resultado.ok) throw new Error(resultado.motivo)
+                  return interpretarAgendamentos(resultado.dados)
+                }
+              : undefined,
+            clientePorTelefone: chaveSecreta
+              ? async (telefone) => {
+                  const resultado = await chamadaSecreta(
+                    'ia_cliente_por_telefone',
+                    { p_telefone: telefone },
+                  )
+                  if (!resultado.ok) return null
+                  const nome = (resultado.dados as { nome?: unknown } | null)?.nome
+                  return typeof nome === 'string' && nome.trim() ? nome.trim() : null
+                }
+              : undefined,
+            // Criação pela função PÚBLICA existente (anon): o servidor
+            // revalida expediente/almoço/bloqueio/conflito — nunca escrita
+            // direta nossa.
+            criar: async (p) => {
+              try {
+                const { data, error } = await ctx.supabase.rpc(
+                  'agendamento_publico_criar',
+                  {
+                    p_cliente: p.cliente,
+                    p_telefone: p.telefone,
+                    p_servico: p.servico,
+                    p_profissional: p.profissional,
+                    p_data: p.data,
+                    p_horario: p.horario,
+                    p_observacao: '',
+                  },
+                )
+                if (error) return { ok: false, motivo: motivoSeguro(error.message) }
+                return { ok: true, id: String((data as { id?: unknown } | null)?.id ?? '') }
+              } catch (erro) {
+                return {
+                  ok: false,
+                  motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+                }
+              }
+            },
+            cancelar: chaveSecreta
+              ? async (id, telefone) => {
+                  const resultado = await chamadaSecreta('ia_agendamento_cancelar', {
+                    p_id: id,
+                    p_telefone: telefone,
+                  })
+                  return resultado.ok
+                    ? { ok: true }
+                    : { ok: false, motivo: resultado.motivo }
+                }
+              : undefined,
+            remarcar: chaveSecreta
+              ? async (id, telefone, data, horario, profissional) => {
+                  const resultado = await chamadaSecreta('ia_agendamento_remarcar', {
+                    p_id: id,
+                    p_telefone: telefone,
+                    p_data: data,
+                    p_horario: horario,
+                    p_profissional: profissional,
+                  })
+                  return resultado.ok
+                    ? { ok: true }
+                    : { ok: false, motivo: resultado.motivo }
+                }
+              : undefined,
+          },
+        })
+        if (remetente) {
+          memoriaConversa.salvar(remetente, saidaConversa.contexto)
+        }
+        resultadoIa = {
+          intencao: intencaoBase,
+          estado: 'gerada',
+          resposta: saidaConversa.resposta,
+          diagnostico: null,
+        }
+      } else {
+        // Interna/informativa — mesmo fluxo da FASE 3, agora com o
+        // histórico recente (turnos) do contexto em memória.
+        resultadoIa = await processarMensagem({
+          texto,
+          config: configIa,
+          historico: contexto?.historico ?? [],
+          carregarFontes: async () => {
+            const [catalogo, slots] = await Promise.all([
+              ctx.supabase.rpc('agendamento_publico_catalogo'),
+              ctx.supabase.rpc('agendamento_publico_slots', {
+                p_data: new Date().toISOString().slice(0, 10),
+              }),
+            ])
+            if (catalogo.error || slots.error) {
+              throw new Error('fontes oficiais indisponíveis')
+            }
+            const fontes = mapearFontes(catalogo.data, slots.data)
+            fontesCarregadas = fontes
+            return fontes
+          },
+          gerar: async (requisicao) => {
+            const resposta = await fetch(requisicao.url, {
+              ...requisicao.init,
+              signal: AbortSignal.timeout(20_000),
+            })
+            return interpretarRespostaIa(resposta.status, await resposta.text())
+          },
+        })
+        if (remetente) {
+          memoriaConversa.salvar(
+            remetente,
+            comTurnos(contexto, texto, resultadoIa.resposta, Date.now()),
+          )
+        }
+      }
+
+      const servicoIdentificado = saidaConversa
+        ? saidaConversa.servico
+        : fontesCarregadas
+          ? identificarServico(texto, fontesCarregadas)
+          : null
+      // Log técnico: fluxo + metadados + serviço + diagnóstico seguro +
+      // resposta gerada. O texto recebido do cliente NUNCA é logado, nenhum
+      // secret entra aqui, e telefone/identificador de ação vão apenas como
+      // resultado já saneado (motivoSeguro) — nunca o número completo.
       console.log(
         '[whatsapp-ia]',
         JSON.stringify({
           intencao: resultadoIa.intencao.tipo,
           motivo:
             resultadoIa.intencao.tipo === 'bloqueada' ? resultadoIa.intencao.motivo : null,
+          fluxo: irParaConversa
+            ? 'conversa'
+            : interna
+              ? 'interna'
+              : 'informativa',
+          acao: saidaConversa?.acao ?? null,
+          executada: saidaConversa?.executada ?? false,
+          acaoMotivo: saidaConversa?.motivo ?? null,
           estado: resultadoIa.estado,
           servico: servicoIdentificado,
           modelo: configIa?.modelo ?? null,
@@ -409,8 +639,6 @@ export default {
 
       // Envio: somente resposta GERADA + destinatário autorizado. O texto
       // da IA vira SOMENTE o campo `mensagem` do whatsapp-enviar.
-      const numeroTeste = (Deno.env.get('IA_NUMERO_TESTE') ?? '').trim()
-      const remetenteBruto = extrairRemetente(corpo)
       const autorizado = deveEnviarResposta({
         estado: resultadoIa.estado,
         resposta: resultadoIa.resposta,
@@ -426,7 +654,6 @@ export default {
         // Credencial server-to-server: SOMENTE SUPABASE_SECRET_KEYS["default"]
         // (header `apikey`). Sem ela → falha segura, sem envio — e NUNCA se
         // usa SUPABASE_SERVICE_ROLE_KEY como fallback (legacy eyJ → 401).
-        const chaveSecreta = lerChaveSecreta((nome) => Deno.env.get(nome))
         const baseSupabase = segredos.base
         if (!chaveSecreta) {
           console.log(
