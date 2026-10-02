@@ -16,6 +16,10 @@ export const RPCS_AUTORIZADAS = [
   'ia_agendamentos_do_telefone',
   'ia_agendamento_cancelar',
   'ia_agendamento_remarcar',
+  'ia_contexto_ler',
+  'ia_contexto_salvar',
+  'ia_contexto_fechar',
+  'ia_mensagem_registrar',
 ] as const
 
 export type RpcAutorizada = (typeof RPCS_AUTORIZADAS)[number]
@@ -38,6 +42,28 @@ function validarParametros(
   const telefone = params.p_telefone
   if (typeof telefone === 'string' && !RE_TELEFONE.test(telefone)) {
     return 'Telefone inválido.'
+  }
+  if (
+    nome === 'ia_contexto_ler' ||
+    nome === 'ia_contexto_salvar' ||
+    nome === 'ia_contexto_fechar'
+  ) {
+    const chave = params.p_remetente
+    if (typeof chave !== 'string' || !RE_TELEFONE.test(chave)) {
+      return 'Telefone inválido.'
+    }
+  }
+  if (nome === 'ia_contexto_salvar') {
+    const contexto = params.p_contexto
+    if (typeof contexto !== 'string' || contexto.length === 0 || contexto.length > 100000) {
+      return 'Contexto inválido.'
+    }
+  }
+  if (nome === 'ia_mensagem_registrar') {
+    const id = params.p_id
+    if (typeof id !== 'string' || id.trim().length < 1 || id.length > 200) {
+      return 'Identificador inválido.'
+    }
   }
   if (nome === 'ia_agendamento_remarcar') {
     if (typeof params.p_data === 'string' && !RE_DATA.test(params.p_data)) {

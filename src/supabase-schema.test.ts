@@ -127,14 +127,21 @@ expect(nomes).toEqual([
       '../supabase/migrations/013_caixa_servicos_profissional.sql',
       '../supabase/migrations/014_rls_role_based.sql',
       '../supabase/migrations/015_ia_agendamentos_whatsapp.sql',
+      '../supabase/migrations/016_ia_contexto_whatsapp.sql',
     ])
   })
 
   it('nenhum script apaga dado, derruba tabela ou remove coluna', () => {
+    // Exceção da 016: a limpeza de TTL das tabelas EFÊMERAS da IA do
+    // WhatsApp (contexto 30 min / dedup 15 min) apaga somente linhas
+    // próprias — sem isso as tabelas cresceriam sem fim. Qualquer outro
+    // delete/drop/truncate continua proibido em qualquer script.
+    const limpezaTtl =
+      /\bdelete\s+from\s+(?:public\.)?(?:ia_contexto_whatsapp|ia_mensagens_whatsapp)\b/i
     const destrutivo = /\b(drop\s+table|drop\s+column|truncate|delete\s+from)\b/i
     for (const [caminho, texto] of Object.entries(scripts)) {
-      const achados = comandos(texto).filter((comando) =>
-        destrutivo.test(comando),
+      const achados = comandos(texto).filter(
+        (comando) => destrutivo.test(comando) && !limpezaTtl.test(comando),
       )
       expect(achados, `${caminho} não pode apagar dado`).toEqual([])
     }

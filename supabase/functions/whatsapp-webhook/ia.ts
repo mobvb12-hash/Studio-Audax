@@ -15,6 +15,11 @@
 //   (agendamento_publico_catalogo / agendamento_publico_slots) lidas com o
 //   cliente anônimo — nunca service_role, nunca leitura administrativa.
 
+// FASE 6 — contexto persistido: o roteador precisa do tipo do contexto e
+// das duas detecções puras da conversa; import só de valores puros (sem
+// ciclo de runtime — conversa.ts importa deste arquivo apenas tipos).
+import { detectarAcao, ehPerguntaInformativa, type ContextoConversa } from './conversa.ts'
+
 export type IntencaoIa =
   | { tipo: 'bloqueada'; motivo: 'acao' | 'interna' }
   | { tipo: 'informativa' }
@@ -99,6 +104,26 @@ export function classificarIntencao(texto: string): IntencaoIa {
     return { tipo: 'bloqueada', motivo: 'acao' }
   }
   return { tipo: 'informativa' }
+}
+
+/**
+ * FASE 5/6 — critério ÚNICO (usado pelo index) de a mensagem ir para a
+ * conversa determinística de ./conversa.ts: ação detectada OU rascunho
+ * pendente no contexto persistido e mensagem que não é pergunta informativa
+ * clássica. `interna` (senhas/credenciais) nunca vai para a conversa.
+ *
+ * Com o contexto agora vindo do banco, é esta função que garante que a
+ * segunda mensagem de um fluxo ("2" após "Quero agendar…") CONTINUA na
+ * conversa em vez de cair no fluxo informativo.
+ */
+export function deveIrParaConversa(
+  texto: string,
+  contexto: ContextoConversa | null,
+): boolean {
+  const intencao = classificarIntencao(texto)
+  if (intencao.tipo === 'bloqueada' && intencao.motivo === 'interna') return false
+  if (detectarAcao(texto) !== null) return true
+  return contexto?.rascunho != null && !ehPerguntaInformativa(texto)
 }
 
 /** Respostas fixas desta etapa — deterministicas, sem provedor de IA. */

@@ -16,8 +16,14 @@
 //   - não responde qualquer cliente: a FASE 3 envia a resposta GERADA da IA
 //     SOMENTE ao número de teste autorizado (secret IA_NUMERO_TESTE) — sem
 //     secret de número configurado, nada sai;
-//   - não persiste nada (nenhuma escrita em banco, nenhuma tabela nova);
-//   - não guarda dados pessoais: o log carrega só texto mascarado e tamanho.
+//   - não guarda credenciais: nenhum secret/token vai para banco ou log;
+//   - não guarda dados pessoais além do padrão do projeto: o contexto da
+//     conversa (telefone em dígitos como chave + JSONB com rascunho e
+//     histórico) é PERSISTENTE via RPCs service_role da migration 016 com
+//     TTL de 30 minutos — antes vivia em Map na memória do isolate, que NÃO
+//     sobrevive entre invocações e perdia o contexto entre mensagens;
+//   - logs continuam mascarados: telefone/ids só em forma mascarada, o
+//     texto recebido do cliente nunca é logado.
 // Segredos (EVOLUTION_*, SUPABASE_URL, IA_*) vivem somente no ambiente da
 // função; a apikey que a Evolution coloca NO CORPO do evento nunca é logada
 // nem devolvida. O envio sai exclusivamente pela função existente
@@ -44,6 +50,7 @@ import {
 import {
   type FontesOficiais,
   classificarIntencao,
+  deveIrParaConversa,
   identificarServico,
   interpretarRespostaIa,
   lerConfigIa,
@@ -52,13 +59,12 @@ import {
   type ResultadoProcessamento,
 } from './ia.ts'
 import {
-  detectarAcao,
-  ehPerguntaInformativa,
   mapearPacoteSlots,
   processarConversa,
+  type ContextoConversa,
   type SaidaConversa,
 } from './conversa.ts'
-import { comTurnos, criarMemoria, criarRecentes } from './memoria.ts'
+import { comTurnos, criarArmazenamentoRpc, criarMemoria, criarRecentes } from './memoria.ts'
 import {
   interpretarAgendamentos,
   interpretarRpc,
@@ -70,10 +76,11 @@ import {
 
 const TIMEOUT_EVOLUTION_MS = 15_000
 
-// FASE 5 — contexto conversacional e deduplicação vivem SOMENTE na memória
-// do processo da função (TTL e tetos em ./memoria.ts): nada é persistido.
-const memoriaConversa = criarMemoria({ agora: () => Date.now() })
-const eventosRecentes = criarRecentes({ agora: () => Date.now() })
+// FASE 5/6 — contexto conversacional e deduplicação são PERSISTENTES nas
+// tabelas/RPCs da migration 016 (banco é a fonte de verdade). Nenhum Map em
+// memória no nível do módulo: cada invocação pode rodar em outro isolate, e
+// as instâncias abaixo são construídas por requisição sem estado entre
+// chamadas.
 
 /** Data de hoje no fuso do Studio (America/Recife) — YYYY-MM-DD. */
 function dataLocalRecife(): string {
@@ -388,10 +395,67 @@ export default {
       const inicioIa = Date.now()
       const texto = evento.texto
       const remetenteBruto = extrairRemetente(corpo)
+      const chaveSecreta = lerChaveSecreta((nome) => Deno.env.get(nome))
 
-      // Dedup: a Evolution reentrega eventos; a segunda cópia não roda
-      // Gemini, não muda estado e não executa ação. Id ausente → processa.
-      if (evento.idMensagem && !eventosRecentes.registrar(evento.idMensagem)) {
+      // RPC com credencial server-to-server (padrão de ./envio.ts):
+      // segredo SOMENTE nos headers; corpo só parâmetros tipados. Usado pela
+      // dedup, pelo contexto e pelas dependências da conversa.
+      const chamarRpc = async (
+        nome: RpcAutorizada,
+        params: Record<string, string>,
+      ): Promise<ResultadoRpc> => {
+        try {
+          if (!chaveSecreta) {
+            return { ok: false, motivo: 'Credencial de acesso ausente.' }
+          }
+          const { url, init } = montarRpcSecreto(
+            segredos.base,
+            chaveSecreta,
+            nome,
+            params,
+          )
+          const resposta = await fetch(url, {
+            ...init,
+            signal: AbortSignal.timeout(15_000),
+          })
+          return interpretarRpc(resposta.status, await resposta.text())
+        } catch (erro) {
+          const estourou = erro instanceof Error && erro.name === 'TimeoutError'
+          return {
+            ok: false,
+            motivo: estourou
+              ? 'A consulta não respondeu em 15s.'
+              : motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+          }
+        }
+      }
+
+      const armazenamento = criarArmazenamentoRpc({ chamar: chamarRpc })
+      const memoriaConversa = criarMemoria(armazenamento, { agora: () => Date.now() })
+      const eventosRecentes = criarRecentes(armazenamento)
+
+      // Dedup PERSISTENTE (RPC atômica): a Evolution reentrega eventos e a
+      // 2ª cópia não roda Gemini, não muda estado e não executa ação —
+      // mesmo que ela chegue em OUTRA execução/isolate. Id ausente →
+      // processa. Falha do armazenamento → fail-open com log: mensagem
+      // legítima nunca é bloqueada por indisponibilidade pontual.
+      let mensagemNova = true
+      if (evento.idMensagem) {
+        try {
+          mensagemNova = await eventosRecentes.registrar(evento.idMensagem)
+        } catch (erro) {
+          mensagemNova = true
+          console.log(
+            '[whatsapp-ia]',
+            JSON.stringify({
+              evento: 'dedup-indisponivel',
+              idMensagem: evento.idMensagem,
+              motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+            }),
+          )
+        }
+      }
+      if (!mensagemNova) {
         console.log(
           '[whatsapp-ia]',
           JSON.stringify({ evento: 'duplicado', idMensagem: evento.idMensagem }),
@@ -402,17 +466,29 @@ export default {
       const configIa = lerConfigIa((nome) => Deno.env.get(nome))
       const numeroTeste = (Deno.env.get('IA_NUMERO_TESTE') ?? '').trim()
       const remetente = normalizarNumero(remetenteBruto)
-      const chaveSecreta = lerChaveSecreta((nome) => Deno.env.get(nome))
-      const contexto = remetente ? memoriaConversa.ler(remetente) : null
+
+      // Contexto PERSISTENTE: lido do banco a cada invocação — é o que
+      // permite a segunda mensagem ("2") continuar o fluxo aberto pela
+      // primeira, independentemente do isolate que processar cada uma.
+      let contexto: ContextoConversa | null = null
+      if (remetente) {
+        try {
+          contexto = await memoriaConversa.ler(remetente)
+        } catch (erro) {
+          console.log(
+            '[whatsapp-ia]',
+            JSON.stringify({
+              evento: 'contexto-ler-falhou',
+              motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+            }),
+          )
+        }
+      }
 
       const intencaoBase = classificarIntencao(texto)
       const interna =
         intencaoBase.tipo === 'bloqueada' && intencaoBase.motivo === 'interna'
-      const acaoDetectada = detectarAcao(texto)
-      const irParaConversa =
-        !interna &&
-        (acaoDetectada !== null ||
-          (contexto?.rascunho != null && !ehPerguntaInformativa(texto)))
+      const irParaConversa = deveIrParaConversa(texto, contexto)
 
       let fontesCarregadas: FontesOficiais | null = null
       let saidaConversa: SaidaConversa | null = null
@@ -428,38 +504,6 @@ export default {
           remetente: remetenteBruto,
           numeroTeste,
         })
-
-        // RPC com credencial server-to-server (padrão de ./envio.ts):
-        // segredo SOMENTE nos headers; corpo só parâmetros tipados.
-        const chamadaSecreta = async (
-          nome: RpcAutorizada,
-          params: Record<string, string>,
-        ): Promise<ResultadoRpc> => {
-          try {
-            if (!chaveSecreta) {
-              return { ok: false, motivo: 'Credencial de acesso ausente.' }
-            }
-            const { url, init } = montarRpcSecreto(
-              segredos.base,
-              chaveSecreta,
-              nome,
-              params,
-            )
-            const resposta = await fetch(url, {
-              ...init,
-              signal: AbortSignal.timeout(15_000),
-            })
-            return interpretarRpc(resposta.status, await resposta.text())
-          } catch (erro) {
-            const estourou = erro instanceof Error && erro.name === 'TimeoutError'
-            return {
-              ok: false,
-              motivo: estourou
-                ? 'A consulta não respondeu em 15s.'
-                : motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
-            }
-          }
-        }
 
         saidaConversa = await processarConversa({
           texto,
@@ -486,7 +530,7 @@ export default {
             },
             listarAgendamentos: chaveSecreta
               ? async (telefone) => {
-                  const resultado = await chamadaSecreta(
+                  const resultado = await chamarRpc(
                     'ia_agendamentos_do_telefone',
                     { p_telefone: telefone },
                   )
@@ -496,7 +540,7 @@ export default {
               : undefined,
             clientePorTelefone: chaveSecreta
               ? async (telefone) => {
-                  const resultado = await chamadaSecreta(
+                  const resultado = await chamarRpc(
                     'ia_cliente_por_telefone',
                     { p_telefone: telefone },
                   )
@@ -533,7 +577,7 @@ export default {
             },
             cancelar: chaveSecreta
               ? async (id, telefone) => {
-                  const resultado = await chamadaSecreta('ia_agendamento_cancelar', {
+                  const resultado = await chamarRpc('ia_agendamento_cancelar', {
                     p_id: id,
                     p_telefone: telefone,
                   })
@@ -544,7 +588,7 @@ export default {
               : undefined,
             remarcar: chaveSecreta
               ? async (id, telefone, data, horario, profissional) => {
-                  const resultado = await chamadaSecreta('ia_agendamento_remarcar', {
+                  const resultado = await chamarRpc('ia_agendamento_remarcar', {
                     p_id: id,
                     p_telefone: telefone,
                     p_data: data,
@@ -559,7 +603,18 @@ export default {
           },
         })
         if (remetente) {
-          memoriaConversa.salvar(remetente, saidaConversa.contexto)
+          try {
+            await memoriaConversa.salvar(remetente, saidaConversa.contexto)
+          } catch (erro) {
+            // a resposta já está pronta: a falha de gravação é só registrada
+            console.log(
+              '[whatsapp-ia]',
+              JSON.stringify({
+                evento: 'contexto-salvar-falhou',
+                motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+              }),
+            )
+          }
         }
         resultadoIa = {
           intencao: intencaoBase,
@@ -569,7 +624,7 @@ export default {
         }
       } else {
         // Interna/informativa — mesmo fluxo da FASE 3, agora com o
-        // histórico recente (turnos) do contexto em memória.
+        // histórico recente (turnos) do contexto persistido no banco.
         resultadoIa = await processarMensagem({
           texto,
           config: configIa,
@@ -597,10 +652,20 @@ export default {
           },
         })
         if (remetente) {
-          memoriaConversa.salvar(
-            remetente,
-            comTurnos(contexto, texto, resultadoIa.resposta, Date.now()),
-          )
+          try {
+            await memoriaConversa.salvar(
+              remetente,
+              comTurnos(contexto, texto, resultadoIa.resposta, Date.now()),
+            )
+          } catch (erro) {
+            console.log(
+              '[whatsapp-ia]',
+              JSON.stringify({
+                evento: 'contexto-salvar-falhou',
+                motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+              }),
+            )
+          }
         }
       }
 

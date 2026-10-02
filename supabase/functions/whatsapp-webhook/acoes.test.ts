@@ -134,6 +134,83 @@ describe('montarRpcSecreto — credencial somente nos headers', () => {
   })
 })
 
+describe('RPCs da persistência (migration 016) na lista branca', () => {
+  it('monta as quatro RPCs novas com p_remetente/p_id/p_contexto', () => {
+    expect(RPCS_AUTORIZADAS).toContain('ia_contexto_ler')
+    expect(RPCS_AUTORIZADAS).toContain('ia_contexto_salvar')
+    expect(RPCS_AUTORIZADAS).toContain('ia_contexto_fechar')
+    expect(RPCS_AUTORIZADAS).toContain('ia_mensagem_registrar')
+
+    expect(
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_ler', { p_remetente: '5581997373593' }).url,
+    ).toContain('/rpc/ia_contexto_ler')
+    expect(
+      montarRpcSecreto(BASE, CHAVE, 'ia_mensagem_registrar', { p_id: 'wamid.ABC123' }).url,
+    ).toContain('/rpc/ia_mensagem_registrar')
+    expect(
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_salvar', {
+        p_remetente: '5581997373593',
+        p_contexto: '{"atualizadoEm":1,"historico":[],"rascunho":null}',
+      }).url,
+    ).toContain('/rpc/ia_contexto_salvar')
+    expect(
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_fechar', {
+        p_remetente: '5581997373593',
+      }).url,
+    ).toContain('/rpc/ia_contexto_fechar')
+  })
+
+  it('valida p_remetente dos contextos (ausente ou fora do formato)', () => {
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_ler', { p_remetente: '123' }),
+    ).toThrow(/Telefone/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_ler', { p_remetente: 'abc' } as never),
+    ).toThrow(/Telefone/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_salvar', {
+        p_remetente: 'sem-digitos',
+        p_contexto: '{}',
+      }),
+    ).toThrow(/Telefone/)
+  })
+
+  it('valida p_contexto de ia_contexto_salvar (ausente, vazio ou gigante)', () => {
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_salvar', {
+        p_remetente: '5581997373593',
+      } as never),
+    ).toThrow(/Contexto/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_salvar', {
+        p_remetente: '5581997373593',
+        p_contexto: '',
+      }),
+    ).toThrow(/Contexto/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_contexto_salvar', {
+        p_remetente: '5581997373593',
+        p_contexto: 'x'.repeat(100001),
+      }),
+    ).toThrow(/Contexto/)
+  })
+
+  it('valida p_id de ia_mensagem_registrar (ausente, vazio ou > 200)', () => {
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_mensagem_registrar', {} as never),
+    ).toThrow(/Identificador/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_mensagem_registrar', { p_id: '   ' }),
+    ).toThrow(/Identificador/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_mensagem_registrar', { p_id: 'x'.repeat(201) }),
+    ).toThrow(/Identificador/)
+    expect(() =>
+      montarRpcSecreto(BASE, CHAVE, 'ia_mensagem_registrar', { p_id: 'wamid.ok' }),
+    ).not.toThrow()
+  })
+})
+
 describe('motivoSeguro — sanitização antes de log/resposta', () => {
   it('remove credenciais conhecidas', () => {
     expect(motivoSeguro('falha com Bearer abc.def-123 ao chamar')).toContain('Bearer [oculto]')
