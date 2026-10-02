@@ -17,6 +17,7 @@ type ServicoRow = {
   duracao_min: number
   categoria: string
   ativo: boolean
+  complementos?: unknown
   criado_em: string
   atualizado_em: string
 }
@@ -29,6 +30,9 @@ function paraServico(row: ServicoRow): Servico {
     duracaoMin: row.duracao_min,
     categoria: row.categoria,
     ativo: row.ativo,
+    complementos: Array.isArray(row.complementos)
+      ? row.complementos.map(String)
+      : [],
     criadoEm: row.criado_em,
     atualizadoEm: row.atualizado_em,
   }
@@ -71,6 +75,7 @@ export async function criarServico(
       preco: input.preco,
       duracao_min: input.duracaoMin,
       categoria: input.categoria ?? '',
+      complementos: input.complementos ?? [],
     })
     .select()
     .maybeSingle()
@@ -92,6 +97,7 @@ export async function atualizarServico(
       preco: input.preco,
       duracao_min: input.duracaoMin,
       categoria: input.categoria ?? '',
+      complementos: input.complementos ?? [],
       atualizado_em: new Date().toISOString(),
     })
     .eq('id', id)
@@ -142,6 +148,7 @@ export async function importarServicos(lista: Servico[]): Promise<number> {
       duracao_min: s.duracaoMin,
       categoria: s.categoria,
       ativo: s.ativo,
+      complementos: s.complementos ?? [],
       criado_em: s.criadoEm,
       atualizado_em: s.atualizadoEm,
     })),

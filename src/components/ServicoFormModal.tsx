@@ -17,7 +17,7 @@ export default function ServicoFormModal({
   onFechar,
   aoRenomear,
 }: Props) {
-  const { adicionar, atualizar } = useServicos()
+  const { adicionar, atualizar, servicos } = useServicos()
   const [nome, setNome] = useState(() => servico?.nome ?? '')
   const [preco, setPreco] = useState(() =>
     servico ? String(servico.preco).replace('.', ',') : '',
@@ -26,9 +26,16 @@ export default function ServicoFormModal({
     servico ? String(servico.duracaoMin) : '',
   )
   const [categoria, setCategoria] = useState(() => servico?.categoria ?? '')
+  const [complementos, setComplementos] = useState<string[]>(
+    () => servico?.complementos ?? [],
+  )
   const [erro, setErro] = useState('')
 
   const editando = Boolean(servico)
+  // Candidatos a complemento: outros serviços ativos (nunca ele mesmo).
+  const candidatos = servicos.filter(
+    (s) => s.ativo && s.id !== servico?.id,
+  )
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
@@ -37,6 +44,14 @@ export default function ServicoFormModal({
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [onFechar])
+
+  function alternarComplemento(id: string) {
+    setComplementos((atual) =>
+      atual.includes(id)
+        ? atual.filter((item) => item !== id)
+        : [...atual, id],
+    )
+  }
 
   async function salvar() {
     if (nome.trim().length < 2) {
@@ -62,6 +77,9 @@ export default function ServicoFormModal({
       preco: precoNum,
       duracaoMin: duracaoNum,
       categoria,
+      complementos: complementos.filter((id) =>
+        candidatos.some((s) => s.id === id),
+      ),
     }
     try {
       if (servico) {
@@ -164,6 +182,40 @@ export default function ServicoFormModal({
             </datalist>
           </div>
         </div>
+
+        {candidatos.length > 0 && (
+          <div className="mt-4">
+            <p className={rotulo}>Sugerir como complemento</p>
+            <p className="mb-2 text-xs text-[#8A8171]">
+              Ao agendar este serviço, o cliente poderá somar os itens
+              marcados — com preço e duração do próprio catálogo.
+            </p>
+            <div className="flex max-h-44 flex-col gap-2 overflow-y-auto rounded-lg border border-[#E5DCC3] bg-white p-2">
+              {candidatos.map((s) => {
+                const marcado = complementos.includes(s.id)
+                return (
+                  <label
+                    key={s.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm ${
+                      marcado ? 'bg-[#FAF6EB]' : 'hover:bg-[#F3ECDA]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={() => alternarComplemento(s.id)}
+                      className="h-4 w-4 accent-[#8A6A14]"
+                    />
+                    <span className="flex-1 text-[#1C1A15]">{s.nome}</span>
+                    <span className="text-xs text-[#8A8171]">
+                      {s.duracaoMin} min
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {erro && (
           <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">

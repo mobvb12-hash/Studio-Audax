@@ -70,6 +70,9 @@ function migrar(bruto: Partial<Servico>): Servico | null {
     duracaoMin: typeof bruto.duracaoMin === 'number' ? bruto.duracaoMin : 30,
     categoria: typeof bruto.categoria === 'string' ? bruto.categoria : '',
     ativo: typeof bruto.ativo === 'boolean' ? bruto.ativo : true,
+    complementos: Array.isArray(bruto.complementos)
+      ? bruto.complementos.map(String)
+      : [],
     criadoEm,
     atualizadoEm: bruto.atualizadoEm ?? criadoEm,
   }
@@ -114,6 +117,7 @@ function assinatura(s: Servico): string {
     s.duracaoMin,
     s.categoria,
     s.ativo,
+    s.complementos ?? [],
   ])
 }
 
@@ -368,6 +372,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
         duracaoMin: input.duracaoMin,
         categoria,
         ativo: true,
+        complementos: input.complementos ?? [],
         criadoEm: agora,
         atualizadoEm: agora,
       }
@@ -411,6 +416,7 @@ export function ServicosProvider({ children }: { children: ReactNode }) {
                   preco: input.preco,
                   duracaoMin: input.duracaoMin,
                   categoria,
+                  complementos: input.complementos ?? [],
                   atualizadoEm: new Date().toISOString(),
                 }
               : s,

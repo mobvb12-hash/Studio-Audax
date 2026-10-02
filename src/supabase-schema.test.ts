@@ -129,6 +129,9 @@ expect(nomes).toEqual([
       '../supabase/migrations/015_ia_agendamentos_whatsapp.sql',
       '../supabase/migrations/016_ia_contexto_whatsapp.sql',
       '../supabase/migrations/017_rls_hardening.sql',
+      '../supabase/migrations/018_painel_cliente.sql',
+      '../supabase/migrations/019_painel_agendamento.sql',
+      '../supabase/migrations/020_painel_clube.sql',
     ])
   })
 
@@ -463,6 +466,165 @@ describe('Supabase — Audax Club (a 009 espelha o que o app grava)', () => {
     const lancamento = linhas.find((linha) => linha.trim().startsWith('caixa_lancamento_id'))
     expect(lancamento, 'caixa_lancamento_id não declarado').toBeTruthy()
     expect(lancamento).not.toMatch(/references/i)
+  })
+})
+
+describe('Supabase — painel do cliente (018)', () => {
+  const texto = sql('../supabase/migrations/018_painel_cliente.sql')
+
+  it('identidade é o vínculo autenticado — telefone nunca vira identidade única', () => {
+    expect(texto).toMatch(/add column if not exists auth_user_id uuid/)
+    expect(texto).toMatch(
+      /create unique index if not exists idx_clientes_auth_user/,
+    )
+    expect(texto).toMatch(/add column if not exists cliente_id text/)
+    // dois cadastros podem ter o mesmo telefone: nenhuma unique em telefone
+    expect(texto).not.toMatch(/unique[^;\n]*\(.*telefone/i)
+    // FK preserva histórico quando algo é apagado
+    expect(texto).toMatch(/on delete set null/)
+  })
+
+  it('posse: SELECT por RLS própria e escrita só por RPC com sessão', () => {
+    for (const tabela of [
+      'clientes',
+      'agendamentos',
+      'clube_assinaturas',
+      'clube_pagamentos',
+    ]) {
+      expect(texto, tabela).toMatch(
+        new RegExp(`\\w+_select_proprio on public\\.${tabela}`),
+      )
+    }
+    // nenhuma policy de escrita para o cliente — escrita é só via RPC
+    expect(texto).not.toMatch(/_insert_proprio|_update_proprio|_delete_proprio/)
+    // toda RPC do painel recusa sessão ausente e é revogada do anon
+    expect(texto).toMatch(/if v_uid is null then/)
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_cliente_vincular\(text, text, text\)\s+from public, anon/,
+    )
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_cliente_atualizar\(text, text, text, text\)\s+from public, anon/,
+    )
+  })
+
+  it('vínculo devolve só estados — nunca dados de outro cadastro', () => {
+    expect(texto).toMatch(
+      /json_build_object\('estado', 'ambiguo'\)/,
+    )
+    expect(texto).toMatch(
+      /json_build_object\('estado', 'precisa_dados'\)/,
+    )
+    expect(texto).toMatch(
+      /json_build_object\('estado', 'nao_confirmado'\)/,
+    )
+    // histórico só entra quando o par nome+telefone é único entre cadastros
+    expect(texto).toMatch(/and not exists \(\s*select 1 from public\.clientes c2/)
+  })
+
+  it('escalação em perfis fechada: escrita com sessão exige admin', () => {
+    expect(texto).toMatch(
+      /create or replace function public\.perfis_guardar_papel/,
+    )
+    expect(texto).toMatch(
+      /if public\.current_user_is_admin\(\) is not true then/,
+    )
+    expect(texto).toMatch(/perfis: somente admin cria ou altera perfis/)
+    // o ramo que deixava papel não-privilegiado inserir a própria linha saiu
+    expect(texto).not.toMatch(/papel in \('dono'/)
+  })
+})
+
+describe('Supabase — agendamento pelo painel (019)', () => {
+  const texto = sql('../supabase/migrations/019_painel_agendamento.sql')
+
+  it('complemento é coluna nova com default (linha existente continua válida)', () => {
+    expect(texto).toMatch(
+      /add column if not exists complementos text\[\] not null default '\{\}'/,
+    )
+    // config aponta para serviços — nenhuma cópia de preço/duração na coluna
+    expect(texto).toMatch(/complementos text\[\]/)
+    expect(texto).not.toMatch(/complementos.*numeric/i)
+  })
+
+  it('criação envolve a RPC oficial da 012 e o vínculo com a sessão', () => {
+    expect(texto).toMatch(/select public\.agendamento_publico_criar\(/)
+    // duração somada + cliente_id aplicados na MESMA linha da Agenda
+    expect(texto).toMatch(/set duracao_min = v_dur/)
+    expect(texto).toMatch(/cliente_id = v_cad\.id/)
+    // complemento fora da configuração do serviço base é recusado
+    expect(texto).toMatch(
+      /Complemento indisponível para este serviço\./,
+    )
+    // nunca escreve nome/telefone do cliente: vêm do cadastro vinculado
+    expect(texto).toMatch(/select \* into v_cad from public\.clientes where auth_user_id/)
+    expect(texto).not.toMatch(/p_cliente text/)
+  })
+
+  it('RPC só para sessão autenticada (anon/public fora)', () => {
+    expect(texto).toMatch(/if v_uid is null then/)
+    expect(texto).toMatch(/security definer/)
+    expect(texto).toMatch(/set search_path = public/)
+    expect(texto).toMatch(
+      /grant execute on function public\.painel_agendamento_criar\(\s*text, text, date, text, text, text\[\]\s*\) to authenticated/,
+    )
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_agendamento_criar\(\s*text, text, date, text, text, text\[\]\s*\) from public, anon/,
+    )
+  })
+
+  it('cancelar/remarcar envolvem as RPCs oficiais da 015 com posse antes', () => {
+    // nada de lógica comercial nova: só wrap das funções já validadas
+    expect(texto).toMatch(
+      /perform public\.ia_agendamento_cancelar\(p_id, v_fone\)/,
+    )
+    expect(texto).toMatch(/perform public\.ia_agendamento_remarcar\(/)
+    // posse por cliente_id da sessão; mensagem única nunca vaza linha alheia
+    expect(texto).toMatch(/and cliente_id = v_cad\.id/)
+    expect(texto).toMatch(/Agendamento não encontrado\./)
+    // remarcação mantém o profissional da linha (cliente só muda data/horário)
+    expect(texto).toMatch(/p_id, v_fone, p_data, p_horario, v_ag\.profissional/)
+    // EXECUTE só da sessão autenticada
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_agendamento_cancelar\(text\)\s+from public, anon/,
+    )
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_agendamento_remarsar\(text, date, text\)\s+from public, anon/,
+    )
+  })
+})
+
+describe('Supabase — clube do painel (020)', () => {
+  const texto = sql('../supabase/migrations/020_painel_clube.sql')
+
+  it('é só RPC de leitura: não cria tabela nem mexe em policy do Club', () => {
+    expect(texto).not.toMatch(/create table/)
+    expect(texto).not.toMatch(/create policy/)
+    expect(texto).not.toMatch(/alter table/)
+    expect(texto).not.toMatch(/drop policy/)
+  })
+
+  it('posse: só a assinatura e os pagamentos do PRÓPRIO cliente', () => {
+    expect(texto).toMatch(/a\.cliente_id = v_cli/)
+    expect(texto).toMatch(/p\.cliente_id = v_cli/)
+    // sem cadastro vinculado devolve null — nunca dado de terceiro
+    expect(texto).toMatch(/return null;/)
+    // histórico limitado aos últimos 5 pagamentos próprios
+    expect(texto).toMatch(/limit 5/)
+  })
+
+  it('security definer + grants só da sessão autenticada', () => {
+    expect(texto).toMatch(/if v_uid is null then/)
+    expect(texto).toMatch(/security definer/)
+    expect(texto).toMatch(/set search_path = public/)
+    expect(texto).toMatch(
+      /grant execute on function public\.painel_clube_minha\(\) to authenticated/,
+    )
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_clube_minha\(\) from public/,
+    )
+    expect(texto).toMatch(
+      /revoke execute on function public\.painel_clube_minha\(\) from anon/,
+    )
   })
 })
 
