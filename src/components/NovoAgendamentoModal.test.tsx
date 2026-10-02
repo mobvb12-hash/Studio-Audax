@@ -2,10 +2,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import NovoAgendamentoModal from './NovoAgendamentoModal'
+import { formatarDataLonga } from '@/modules/agenda/catalogo'
 import { AgendaProvider, useAgenda } from '@/modules/agenda/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
-import { ProfissionaisProvider } from '@/modules/profissionais/store'
-import { ServicosProvider } from '@/modules/servicos/store'
+import { ProfissionaisProvider, useProfissionais } from '@/modules/profissionais/store'
+import { ServicosProvider, useServicos } from '@/modules/servicos/store'
 import {
   ERRO_SEM_INTEGRACAO,
   WhatsProvider,
@@ -19,15 +20,21 @@ const DIA = '2026-09-25'
 let ctxAgenda: ReturnType<typeof useAgenda>
 let ctxClientes: ReturnType<typeof useClientes>
 let ctxWhats: ReturnType<typeof useWhats>
+let ctxServicos: ReturnType<typeof useServicos>
+let ctxProfissionais: ReturnType<typeof useProfissionais>
 
 function Captura() {
   const agenda = useAgenda()
   const clientes = useClientes()
   const whats = useWhats()
+  const servicos = useServicos()
+  const profissionais = useProfissionais()
   useEffect(() => {
     ctxAgenda = agenda
     ctxClientes = clientes
     ctxWhats = whats
+    ctxServicos = servicos
+    ctxProfissionais = profissionais
   })
   return null
 }
@@ -132,6 +139,8 @@ beforeEach(() => {
   ctxAgenda = undefined as unknown as ReturnType<typeof useAgenda>
   ctxClientes = undefined as unknown as ReturnType<typeof useClientes>
   ctxWhats = undefined as unknown as ReturnType<typeof useWhats>
+  ctxServicos = undefined as unknown as ReturnType<typeof useServicos>
+  ctxProfissionais = undefined as unknown as ReturnType<typeof useProfissionais>
 })
 
 describe('NovoAgendamentoModal — conflito de horários', () => {
@@ -329,5 +338,152 @@ describe('NovoAgendamentoModal — confirmação automática de WhatsApp', () =>
     const [mensagem] = ctxWhats.mensagens
     expect(mensagem.status).toBe('falhou')
     expect(mensagem.motivoFalha).toBe(ERRO_SEM_INTEGRACAO)
+  })
+
+  it('mensagem completa: cliente, serviço, profissional, data longa e horário, sem endereço', async () => {
+    const enviar = vi.fn().mockResolvedValue({ ok: true })
+    montar()
+    configurarProvedor(enviar)
+    criarCliente('Ana Souza', '81 98888-7777')
+
+    digitarCliente('Ana Souza')
+    salvar()
+    await aguardarEnvio()
+
+    expect(ctxWhats.mensagens).toHaveLength(1)
+    const servicoPadrao = ctxServicos.servicos.filter((s) => s.ativo)[0].nome
+    const [mensagem] = ctxWhats.mensagens
+    expect(mensagem.texto).toBe(
+      `Olá, Ana Souza! Confirmação do seu agendamento: ${servicoPadrao} com Cleiton Silva em ${formatarDataLonga(DIA)} às 10:30. Até lá — Studio Audax.`,
+    )
+    // Sem fonte oficial de endereço, a confirmação não inventa um
+    expect(mensagem.texto).not.toMatch(/endere[çc]o|Rua |Avenida /i)
+  })
+
+  it('serviço inexistente no cadastro: não salva e não cria/envia confirmação', async () => {
+    const enviar = vi.fn().mockResolvedValue({ ok: true })
+    const onFechar = montar()
+    configurarProvedor(enviar)
+    criarCliente('Ana Souza', '81 98888-7777')
+    const servicoSelecionado = ctxServicos.servicos[0]
+
+    await act(async () => {
+      await ctxServicos.remover(servicoSelecionado.id)
+    })
+    digitarCliente('Ana Souza')
+    salvar()
+    await aguardarEnvio()
+
+    expect(
+      screen.getByText('Cadastre um serviço no módulo Serviços antes de agendar.'),
+    ).toBeTruthy()
+    expect(onFechar).not.toHaveBeenCalled()
+    expect(ctxAgenda.agendamentos).toHaveLength(0)
+    expect(ctxWhats.mensagens).toHaveLength(0)
+    expect(enviar).not.toHaveBeenCalled()
+  })
+
+  it('profissional inexistente no cadastro: não salva e não cria/envia confirmação', async () => {
+    const enviar = vi.fn().mockResolvedValue({ ok: true })
+    const onFechar = montar()
+    configurarProvedor(enviar)
+    criarCliente('Ana Souza', '81 98888-7777')
+    const profSelecionado = ctxProfissionais.profissionais.find(
+      (p) => p.nome === 'Cleiton Silva',
+    )
+
+    await act(async () => {
+      await ctxProfissionais.remover(profSelecionado!.id)
+    })
+    digitarCliente('Ana Souza')
+    salvar()
+    await aguardarEnvio()
+
+    expect(
+      screen.getByText(
+        'Cadastre um profissional no módulo Profissionais antes de agendar.',
+      ),
+    ).toBeTruthy()
+    expect(onFechar).not.toHaveBeenCalled()
+    expect(ctxAgenda.agendamentos).toHaveLength(0)
+    expect(ctxWhats.mensagens).toHaveLength(0)
+    expect(enviar).not.toHaveBeenCalled()
+  })
+
+  /** Cria o agendamento de partida (1 confirmação enviada) para as mutações. */
+  async function agendarUmaVez() {
+    const enviar = vi.fn().mockResolvedValue({ ok: true })
+    montar()
+    configurarProvedor(enviar)
+    criarCliente('Ana Souza', '81 98888-7777')
+    digitarCliente('Ana Souza')
+    salvar()
+    await aguardarEnvio()
+    expect(ctxWhats.mensagens).toHaveLength(1)
+    expect(enviar).toHaveBeenCalledTimes(1)
+    return enviar
+  }
+
+  it('cancelar o agendamento não cria nem envia nova confirmação', async () => {
+    const enviar = await agendarUmaVez()
+    const ag = ctxAgenda.agendamentos[0]
+
+    act(() => {
+      ctxAgenda.mudarStatus(ag.id, 'cancelado')
+    })
+
+    expect(ctxAgenda.agendamentos[0].status).toBe('cancelado')
+    expect(ctxWhats.mensagens).toHaveLength(1)
+    expect(enviar).toHaveBeenCalledTimes(1)
+  })
+
+  it('editar o agendamento não cria nem envia nova confirmação', async () => {
+    const enviar = await agendarUmaVez()
+    const ag = ctxAgenda.agendamentos[0]
+
+    act(() => {
+      ctxAgenda.editar(ag.id, {
+        cliente: ag.cliente,
+        telefone: ag.telefone,
+        servico: ag.servico,
+        observacao: 'Observação atualizada pelo cliente',
+      })
+    })
+
+    expect(ctxAgenda.agendamentos[0].observacao).toBe(
+      'Observação atualizada pelo cliente',
+    )
+    expect(ctxWhats.mensagens).toHaveLength(1)
+    expect(enviar).toHaveBeenCalledTimes(1)
+  })
+
+  it('remarcar o agendamento não cria nem envia nova confirmação', async () => {
+    const enviar = await agendarUmaVez()
+    const ag = ctxAgenda.agendamentos[0]
+
+    act(() => {
+      ctxAgenda.remarcar(ag.id, {
+        data: ag.data,
+        horario: '15:00',
+        profissional: ag.profissional,
+      })
+    })
+
+    expect(ctxAgenda.agendamentos[0].horario).toBe('15:00')
+    expect(ctxWhats.mensagens).toHaveLength(1)
+    expect(enviar).toHaveBeenCalledTimes(1)
+  })
+
+  it('mudar o status (concluído) não cria nem envia nova confirmação', async () => {
+    const enviar = await agendarUmaVez()
+    const ag = ctxAgenda.agendamentos[0]
+
+    act(() => {
+      ctxAgenda.mudarStatus(ag.id, 'concluido')
+    })
+
+    expect(ctxAgenda.agendamentos[0].status).toBe('concluido')
+    expect(ctxWhats.mensagens).toHaveLength(1)
+    expect(enviar).toHaveBeenCalledTimes(1)
   })
 })
