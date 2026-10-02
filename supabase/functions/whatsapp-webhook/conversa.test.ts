@@ -7,9 +7,11 @@ import {
   extrairDatas,
   extrairHorarios,
   extrairNumero,
+  extrairPeriodo,
   extrairProfissional,
   extrairServico,
   formatarDataBR,
+  horarioNoPeriodo,
   horariosLivres,
   horaLegivel,
   mapearPacoteSlots,
@@ -813,5 +815,207 @@ describe('processarConversa — cenários completos', () => {
     const { saida } = await rodar('agendar Corte Degradê 32/13')
     expect(saida.resposta).toContain('Não entendi essa data')
     expect(saida.contexto.rascunho?.data).toBeNull()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* §15 · BUG 1 (período do dia) e BUG 2 (nome do cliente)               */
+/* ------------------------------------------------------------------ */
+
+describe('§15 A–E · BUG 1: período do dia filtra a grade real', () => {
+  const slotsSoManha: PacoteSlots = {
+    expediente: { inicio: '08:00', fim: '12:00', almocoInicio: null, almocoFim: null },
+    bloqueios: [],
+    ocupacoes: [],
+  }
+
+  it('A · "de tarde" lista SÓ horários da tarde (filtro antes do limite 6)', async () => {
+    const { saida } = await rodar('agendar Corte Degradê amanhã de tarde')
+    expect(saida.contexto.rascunho?.periodo).toBe('tarde')
+    expect(saida.resposta).toContain('1. 13h')
+    expect(saida.resposta).not.toMatch(/\b(8h|9h|10h|11h)\b/)
+    const linhas = saida.resposta.match(/^\d+\. /gm) ?? []
+    expect(linhas.length).toBe(6)
+  })
+
+  it('A · "de manhã" também filtra (nunca aparece 14h/15h de tarde)', async () => {
+    const { saida } = await rodar('agendar Corte Degradê amanhã de manhã')
+    expect(saida.contexto.rascunho?.periodo).toBe('manha')
+    expect(saida.resposta).toContain('1. 8h')
+    expect(saida.resposta).not.toMatch(/\b(13h|14h|15h|16h|17h|18h|19h)\b/)
+  })
+
+  it('B · período sem vaga: avisa e oferece períodos REAIS (sem inventar hora)', async () => {
+    const { saida } = await rodar('agendar Corte Degradê amanhã de noite', {
+      slots: slotsSoManha,
+    })
+    expect(saida.contexto.rascunho?.periodo).toBe('noite')
+    expect(saida.resposta).toContain('Não encontrei horários de noite')
+    expect(saida.resposta).toContain('Nesse dia tenho horários de manhã')
+    expect(saida.resposta).not.toMatch(/\b\d{1,2}h\b/)
+    expect(saida.contexto.rascunho?.opcoes).toEqual([])
+    expect(saida.contexto.rascunho?.etapa).toBe('coletando')
+    expect(saida.executada).toBe(false)
+  })
+
+  it('C · período no meio do fluxo revalida a lista já mostrada', async () => {
+    const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
+    expect(t1.saida.resposta).toContain('horários livres')
+    const t2 = await rodar('de tarde', { contexto: t1.saida.contexto, cliente: null })
+    expect(t2.saida.contexto.rascunho?.periodo).toBe('tarde')
+    expect(t2.saida.resposta).toContain('1. 13h')
+    expect(t2.saida.resposta).not.toMatch(/\b(8h|9h|10h|11h)\b/)
+  })
+
+  it('D · meridiem: "3 da tarde" → 15h, "9 da noite" → 21h, "8 da manhã" → 8h', () => {
+    expect(extrairHorarios('às 3 da tarde').horarios).toEqual(['15:00'])
+    expect(extrairHorarios('9 da noite').horarios).toEqual(['21:00'])
+    expect(extrairHorarios('8 da manhã').horarios).toEqual(['08:00'])
+    expect(extrairHorarios('15h30').horarios).toEqual(['15:30'])
+    expect(extrairHorarios('às 15').horarios).toEqual(['15:00'])
+  })
+
+  it('E · horário explícito incompatível limpa o período (e vice-versa)', async () => {
+    const { saida } = await rodar('agendar Corte Degradê amanhã de manhã às 15:00')
+    expect(saida.contexto.rascunho?.horario).toBe('15:00')
+    expect(saida.contexto.rascunho?.periodo).toBeNull()
+    expect(saida.resposta).toContain('Com qual profissional')
+  })
+
+  it('E · período incompatível com horário já escolhido limpa o horário', async () => {
+    const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
+    const t2 = await rodar('1', { contexto: t1.saida.contexto, cliente: null })
+    expect(t2.saida.contexto.rascunho?.horario).not.toBeNull()
+    const t3 = await rodar('à noite', { contexto: t2.saida.contexto, cliente: null })
+    expect(t3.saida.contexto.rascunho?.periodo).toBe('noite')
+    expect(t3.saida.contexto.rascunho?.horario).toBeNull()
+    expect(t3.saida.resposta).toContain('horários livres')
+    expect(t3.saida.resposta).not.toMatch(/\b(8h|9h|10h|11h|13h|14h|15h|16h|17h)\b/)
+  })
+
+  it('unidade: extrairPeriodo e horarioNoPeriodo', () => {
+    expect(extrairPeriodo('depois do almoço')).toBe('tarde')
+    expect(extrairPeriodo('mais tarde à noite')).toBe('noite')
+    expect(extrairPeriodo('bem cedo')).toBe('manha')
+    expect(extrairPeriodo('sobre o cabelo')).toBeNull()
+    expect(horarioNoPeriodo('11:59', 'manha')).toBe(true)
+    expect(horarioNoPeriodo('12:00', 'manha')).toBe(false)
+    expect(horarioNoPeriodo('17:59', 'tarde')).toBe(true)
+    expect(horarioNoPeriodo('18:00', 'tarde')).toBe(false)
+    expect(horarioNoPeriodo('18:00', 'noite')).toBe(true)
+    expect(horarioNoPeriodo('23:30', 'noite')).toBe(true)
+  })
+})
+
+describe('§15 F–K · BUG 2: nome do cliente tem prioridade na coleta', () => {
+  /** Leva o fluxo até a pergunta "me diga seu nome". */
+  async function atePerguntaDeNome() {
+    const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
+    const t2 = await rodar('1', { contexto: t1.saida.contexto, cliente: null })
+    expect(t2.saida.resposta).toContain('me diga seu nome')
+    return t2
+  }
+
+  it.each([
+    ['Cleiton Pedro da Silva'],
+    ['João Ítalo da Silva'],
+    ['Maria Cleiton Santos'],
+    ['Pedro Barba da Silva'],
+    ['Ana de Barba'],
+    ['Cleiton'],
+  ])('F–H · "%s" vira NOME, não colide com profissional/serviço', async (nome) => {
+    const t2 = await atePerguntaDeNome()
+    const t3 = await rodar(nome, { contexto: t2.saida.contexto, cliente: null })
+    expect(t3.saida.contexto.rascunho?.cliente).toBe(nome)
+    expect(t3.saida.resposta).toContain('Confirma o agendamento')
+    const t4 = await rodar('sim', { contexto: t3.saida.contexto, cliente: null })
+    expect(t4.chamadas.criar[0].cliente).toBe(nome)
+  })
+
+  it('F · espaços duplicados são normalizados, acentos preservados', async () => {
+    const t2 = await atePerguntaDeNome()
+    const t3 = await rodar('Maria  Conceição  da  Silva', {
+      contexto: t2.saida.contexto,
+      cliente: null,
+    })
+    expect(t3.saida.contexto.rascunho?.cliente).toBe('Maria Conceição da Silva')
+  })
+
+  it('I · "10h com o Cleiton" no meio da coleta do nome é CAMPO, não nome', async () => {
+    const t2 = await atePerguntaDeNome()
+    const t3 = await rodar('10h com o Cleiton', {
+      contexto: t2.saida.contexto,
+      cliente: null,
+    })
+    expect(t3.saida.contexto.rascunho?.cliente).toBeNull()
+    expect(t3.saida.contexto.rascunho?.horario).toBe('10:00')
+    expect(t3.saida.contexto.rascunho?.profissional).toBe('Cleiton')
+    expect(t3.saida.resposta).toContain('me diga seu nome')
+  })
+
+  it('J · data no meio da coleta do nome atualiza a data e mantém a pergunta', async () => {
+    const t2 = await atePerguntaDeNome()
+    const t3 = await rodar('sábado', { contexto: t2.saida.contexto, cliente: null })
+    expect(t3.saida.contexto.rascunho?.cliente).toBeNull()
+    expect(t3.saida.contexto.rascunho?.data).toBe(SABADO)
+    expect(t3.saida.resposta).toContain('me diga seu nome')
+  })
+
+  it('K · "quero outro horário" limpa a escolha e volta para a lista', async () => {
+    const t2 = await atePerguntaDeNome()
+    expect(t2.saida.contexto.rascunho?.horario).not.toBeNull()
+    const t3 = await rodar('quero outro horário', {
+      contexto: t2.saida.contexto,
+      cliente: null,
+    })
+    expect(t3.saida.contexto.rascunho?.cliente).toBeNull()
+    expect(t3.saida.contexto.rascunho?.horario).toBeNull()
+    expect(t3.saida.resposta).toContain('horários livres')
+  })
+
+  it('K · "quero outro profissional" limpa o profissional escolhido', async () => {
+    const t2 = await atePerguntaDeNome()
+    const anterior = t2.saida.contexto.rascunho?.profissional
+    expect(anterior).toBeTruthy()
+    const t3 = await rodar('quero outro profissional', {
+      contexto: t2.saida.contexto,
+      cliente: null,
+    })
+    expect(t3.saida.contexto.rascunho?.cliente).toBeNull()
+    expect(t3.saida.contexto.rascunho?.profissional).toBeNull()
+  })
+
+  it('negação/afirmação sozinha não vira nome', async () => {
+    const t2 = await atePerguntaDeNome()
+    const t3 = await rodar('não', { contexto: t2.saida.contexto, cliente: null })
+    expect(t3.saida.contexto.rascunho?.cliente).toBeNull()
+    expect(t3.saida.resposta).toContain('me diga seu nome')
+  })
+})
+
+describe('§15 L–O · linguagem natural e hora solta', () => {
+  it('L · "quero cabelo e barba" resolve para o serviço combinado', async () => {
+    const { saida } = await rodar('quero cabelo e barba')
+    expect(saida.contexto.rascunho?.servico).toBe('Corte + Barba')
+    expect(saida.resposta).toContain('Para qual dia')
+  })
+
+  it('L · "quero cortar" continua ambíguo (regressão)', async () => {
+    const { saida } = await rodar('quero cortar')
+    expect(saida.resposta).toContain('mais de um serviço parecido')
+  })
+
+  it('O · hora solta "10" no meio da lista vira 10:00', async () => {
+    const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
+    const t2 = await rodar('10', { contexto: t1.saida.contexto, cliente: null })
+    expect(t2.saida.contexto.rascunho?.horario).toBe('10:00')
+    expect(t2.saida.resposta).toContain('me diga seu nome')
+  })
+
+  it('O · número dentro da lista continua sendo índice (regressão)', async () => {
+    const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
+    const t2 = await rodar('3', { contexto: t1.saida.contexto, cliente: null })
+    expect(t2.saida.contexto.rascunho?.horario).toBe('09:00')
+    expect(t2.saida.resposta).toContain('me diga seu nome')
   })
 })

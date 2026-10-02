@@ -26,6 +26,9 @@ import type { FonteServico, FontesOficiais, Turno } from './ia.ts'
 
 export type AcaoConversa = 'criar' | 'cancelar' | 'remarcar'
 
+/** Preferência de período do dia — FILTRA a grade real, nunca inventa hora. */
+export type Periodo = 'manha' | 'tarde' | 'noite'
+
 export type OpcaoSlot = { horario: string; profissional: string }
 
 export type ResumoAgendamento = {
@@ -44,6 +47,8 @@ export type Rascunho = {
   profissional: string | null
   data: string | null
   horario: string | null
+  /** período preferido (manhã/tarde/noite) — filtro da grade real */
+  periodo: Periodo | null
   cliente: string | null
   /** agendamento existente alvo (cancelar/remarcar) */
   alvo: ResumoAgendamento | null
@@ -129,9 +134,16 @@ const PADRAO_CRIAR = /(marcar|marca[rs]?|agendar|agende|reservar|reserva)/
 const PADRAO_TEMPO =
   /(hoje|amanha|\b(segunda|terca|quarta|quinta|sexta)(-feira)?\b|\bsabado\b|\bdomingo\b|\d{1,2}\/\d{1,2}|\d{1,2}:\d{2}|\d{1,2}h\b|\d{1,2}\s+horas?\b|de (janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro))/
 const PADRAO_INTENCAO_AGENDA =
-  /(horario|vaga|cort|barb|sobrancelh|platinad|luzes|atendimento|marcar|agendar|reservar|quero|gostaria|preciso|pode|consegue|\btem\b|da para)/
+  /(horario|vaga|cort|barb|sobrancelh|platinad|luzes|atendimento|marcar|agendar|reservar|quero|queria|gostaria|preciso|prefiro|pode|consegue|\btem\b|da para)/
 const PADRAO_INFORMATIVA =
   /\b(quanto|quanto[s]?|custa|custo|preco|valores?|endereco|onde|funcionamento|telefone|contato|instagram|site|cardapio|abre|fecha|aberto|horario de)\b/
+/** Pergunta de disponibilidade sem data explícita ("tem vaga?", "tem horário?"). */
+const PADRAO_VAGA =
+  /\bvagas?\b|\btem(?:emos|)?\b[^.?!]{0,40}\bhorarios?\b|\b(quero|queria|gostaria|preciso|prefiro)\b[^.?!]{0,40}\b(horarios?|vagas?)\b|\bhorarios?\b[^.?!]{0,20}\b(livres?|disponiveis?|tem|temos)\b/
+/** Menção a período do dia ("quero à tarde", "prefiro de manhã"). */
+const PADRAO_PERIODO = /\b(manha|tarde|noite|almoco|cedo|fim do dia)\b/
+/** Intenção de serviço em linguagem natural ("quero cortar o cabelo"). */
+const PADRAO_SERVICO_AGENDA = /\b(cort\w*|barba|cabelo|degrad\w*|sobrancelha\w*|platinad\w*|luzes)\b/
 
 /**
  * AÇÃO detectada no texto. É SUPERSET de PADRAO_ACAO de ./ia.ts (todo
@@ -146,6 +158,12 @@ export function detectarAcao(texto: string): AcaoConversa | null {
   if (PADRAO_REMARCAR.test(t)) return 'remarcar'
   if (PADRAO_CRIAR.test(t)) return 'criar'
   if (PADRAO_TEMPO.test(t) && PADRAO_INTENCAO_AGENDA.test(t)) return 'criar'
+  // Disponibilidade/periodo/servico com intencao de agenda — nunca porca
+  // de pergunta informativa classica (preco, endereco, funcionamento).
+  if (!PADRAO_INFORMATIVA.test(t) && PADRAO_INTENCAO_AGENDA.test(t)) {
+    if (PADRAO_VAGA.test(t) || PADRAO_PERIODO.test(t)) return 'criar'
+  }
+  if (!PADRAO_INFORMATIVA.test(t) && PADRAO_SERVICO_AGENDA.test(t)) return 'criar'
   return null
 }
 
@@ -411,6 +429,18 @@ export function extrairHorarios(texto: string): {
   tentar(/(\d{1,2}):(\d{2})\b/g, true)
   tentar(/(\d{1,2})h(\d{2})?\b/g, true)
   tentar(/(\d{1,2})\s+horas?\b/g, false)
+  // "3 da tarde" → 15:00; "9 da noite" → 21:00. Precisa vir ANTES de
+  // "às 3", senão "às 3 da tarde" casaria como 03:00.
+  const RE_MERIDIEM = /(?<![:\d])(\d{1,2})\s*(?:da|de|das)\s*(manha|tarde|noite)\b/g
+  let mer: RegExpExecArray | null
+  while ((mer = RE_MERIDIEM.exec(t)) !== null) {
+    const pos = mer.index
+    const fim = pos + mer[0].length
+    if (aceitos.some((a) => pos < a.fim && fim > a.pos)) continue
+    let h = Number(mer[1])
+    if (h <= 23 && mer[2] !== 'manha' && h < 12) h += 12
+    aceitos.push({ pos, fim, h, m: 0 })
+  }
   tentar(/\bas\s+(\d{1,2})\b/g, false)
 
   const validos: string[] = []
@@ -426,6 +456,88 @@ export function extrairHorarios(texto: string): {
     if (!validos.includes(horario)) validos.push(horario)
   }
   return { horarios: validos, invalido: ruins > 0 && validos.length === 0 }
+}
+
+/* ------------------------------------------------------------------ */
+/* Extração de período do dia                                          */
+/* ------------------------------------------------------------------ */
+
+export const PERIODOS: Periodo[] = ['manha', 'tarde', 'noite']
+
+const ROTULO_PERIODO: Record<Periodo, string> = {
+  manha: 'manhã',
+  tarde: 'tarde',
+  noite: 'noite',
+}
+
+/**
+ * Período citado. "mais tarde à noite" contém as duas palavras — noite
+ * precisa vir primeiro. Nunca converte período em horário específico.
+ */
+export function extrairPeriodo(texto: string): Periodo | null {
+  const t = normalizar(texto)
+  if (!t) return null
+  if (/\bnoite\b/.test(t)) return 'noite'
+  if (
+    /\btarde\b|\bdepois (?:do|de) almoco\b|\bdepois do almoço\b|\bapos (?:o )?almoco\b|\bfim do dia\b|\bfinal do dia\b/.test(
+      t,
+    )
+  ) {
+    return 'tarde'
+  }
+  if (/\bmanha\b|\bcedo\b|\bprimeira hora\b/.test(t)) return 'manha'
+  return null
+}
+
+/** O horário de início pertence ao período? (manhã <12 ≤ tarde <18 ≤ noite) */
+export function horarioNoPeriodo(horario: string, periodo: Periodo): boolean {
+  const bruto = (horario ?? '').split(':')[0]
+  if (!bruto || !/^\d{1,2}$/.test(bruto)) return false
+  const h = Number(bruto)
+  if (periodo === 'manha') return h < 12
+  if (periodo === 'tarde') return h >= 12 && h < 18
+  return h >= 18
+}
+
+/** Grade real filtrada pelo período — ANTES de qualquer limite de lista. */
+function filtrarPeriodo(
+  grade: DisponibilidadeSlot[],
+  periodo: Periodo | null | undefined,
+): DisponibilidadeSlot[] {
+  return periodo ? grade.filter((s) => horarioNoPeriodo(s.horario, periodo)) : grade
+}
+
+/**
+ * A resposta pertence a OUTRO campo, não ao nome. Quando a máquina está
+ * pedindo o nome, só estes sinais inequívocos impedem a captura — nomes
+ * que contenham "Cleiton", "Ítalo", "Barba" ou qualquer palavra de
+ * catálogo continuam sendo NOME DO CLIENTE (a entidade inteira manda,
+ * não a subpalavra).
+ */
+function ehRespostaDeCampo(
+  texto: string,
+  hoje: string,
+  servicos: FonteServico[],
+): boolean {
+  if (extrairHorarios(texto).horarios.length) return true
+  const datas = extrairDatas(texto, hoje)
+  if (datas.datas.length || datas.invalida) return true
+  if (extrairPeriodo(texto)) return true
+  const t = normalizar(texto)
+    .replace(/[!.,;:?]+$/, '')
+    .trim()
+  if (/^\d{1,2}[.)]?$/.test(t)) return true
+  if (/\bcom\s+(?:o|a|os|as|meu|minha|meus|minhas)?\s*[a-z]{3,}\b/.test(t)) return true
+  if (
+    /\b(quero|queria|prefiro|melhor|gostaria|preciso|marcar|marque|agendar|agende|trocar|troque|troca|troco|outro|outra|outros|outras|desisto|cancelar|remarcar|fazer|cortar|corto)\b/.test(
+      t,
+    )
+  ) {
+    return true
+  }
+  if (ehAfirmacao(t) || ehNegacao(t)) return true
+  if (nomesAtivos(servicos).some((nome) => normalizar(nome) === t)) return true
+  return false
 }
 
 /* ------------------------------------------------------------------ */
@@ -451,13 +563,13 @@ export function extrairServico(
   if (!alvo) return { servico: null, ambiguos: [] }
   const nomes = nomesAtivos(servicos)
 
-  const exatos = nomes.filter((nome) => alvo.includes(normalizar(nome)))
-  if (exatos.length) {
-    exatos.sort((a, b) => b.length - a.length)
-    return { servico: exatos[0], ambiguos: [] }
-  }
-
   const tokens = alvo.split(/[^a-z0-9]+/).filter(Boolean)
+  // Sinônimos do cliente → palavra oficial ("cabelo" ~ "corte"): ajudam a
+  // resolver combinações reais ("cabelo e barba" → "Corte + Barba").
+  const SINONIMOS: Record<string, string[]> = { cabelo: ['corte'] }
+  const tokensExpandidos = [
+    ...new Set(tokens.flatMap((tk) => [tk, ...(SINONIMOS[tk] ?? [])])),
+  ]
   const pontuados: { nome: string; score: number }[] = []
   for (const nome of nomes) {
     const palavras = normalizar(nome)
@@ -465,12 +577,31 @@ export function extrairServico(
       .filter((w) => w.length >= 4)
     if (!palavras.length) continue
     const score = palavras.filter(
-      (w) => tokens.some((tk) => tk.length >= 4 && tk.slice(0, 4) === w.slice(0, 4)),
+      (w) =>
+        tokensExpandidos.some(
+          (tk) => tk.length >= 4 && tk.slice(0, 4) === w.slice(0, 4),
+        ),
     ).length
     if (score > 0) pontuados.push({ nome, score })
   }
-  if (!pontuados.length) return { servico: null, ambiguos: [] }
+  // Evidência COMBINADA de 2+ palavras de um mesmo serviço vence o match
+  // de substring isolado ("cabelo e barba" tem "barba" solto no texto —
+  // sem isso viraria só "Barba" em vez de "Corte + Barba").
+  if (pontuados.length) {
+    const maxCombinado = Math.max(...pontuados.map((p) => p.score))
+    const topoCombinado = pontuados.filter((p) => p.score === maxCombinado)
+    if (maxCombinado >= 2 && topoCombinado.length === 1) {
+      return { servico: topoCombinado[0].nome, ambiguos: [] }
+    }
+  }
 
+  const exatos = nomes.filter((nome) => alvo.includes(normalizar(nome)))
+  if (exatos.length) {
+    exatos.sort((a, b) => b.length - a.length)
+    return { servico: exatos[0], ambiguos: [] }
+  }
+
+  if (!pontuados.length) return { servico: null, ambiguos: [] }
   const max = Math.max(...pontuados.map((p) => p.score))
   const topo = pontuados.filter((p) => p.score === max)
   if (topo.length === 1) return { servico: topo[0].nome, ambiguos: [] }
@@ -792,6 +923,62 @@ function semHorariosMsg(dataIso: string, servico: string): string {
   return `Não encontrei horários livres em ${formatarDataBR(dataIso)} para ${servico}. Outro dia?`
 }
 
+/**
+ * Período sem vaga: nunca inventa horário — informa o período pedido e
+ * oferece os períodos que REALMENTE têm slots neste dia (da grade real).
+ */
+function periodoSemHorariosMsg(
+  dataIso: string | null,
+  periodo: Periodo,
+  outros: Periodo[],
+  servico: string,
+): string {
+  const dia = dataIso ? ` em ${formatarDataBR(dataIso)}` : ''
+  const para = servico ? ` para ${servico}` : ''
+  const base = `Não encontrei horários de ${ROTULO_PERIODO[periodo]}${dia}${para}.`
+  if (!outros.length) {
+    return `${base} Esse dia está sem vagas em qualquer período — prefere outro dia?`
+  }
+  const rotulos = outros.map((p) => ROTULO_PERIODO[p])
+  const lista = rotulos.length > 1
+    ? `${rotulos.slice(0, -1).join(', ')} e ${rotulos.at(-1)}`
+    : rotulos[0]
+  return `${base} Nesse dia tenho horários de ${lista}. Quer ver de ${rotulos.join(
+    ', ',
+  )}, outro profissional ou outro dia?`
+}
+
+/**
+ * Período pedido sem slots na grade real: responde com os períodos que
+ * EXISTEM neste dia (nada inventado) e limpa as opções antigas. null =
+ * período tem vaga (ou não há período pedido) — segue o fluxo normal.
+ */
+function passoPeriodoVazio(
+  rascunhoAtual: Rascunho,
+  grade: DisponibilidadeSlot[],
+  servico?: string,
+): Passo | null {
+  const periodo = rascunhoAtual.periodo
+  if (!periodo || !grade.length) return null
+  if (filtrarPeriodo(grade, periodo).length) return null
+  const outros = PERIODOS.filter(
+    (p) => p !== periodo && grade.some((s) => horarioNoPeriodo(s.horario, p)),
+  )
+  rascunhoAtual.opcoes = []
+  rascunhoAtual.etapa = 'coletando'
+  return {
+    resposta: periodoSemHorariosMsg(
+      rascunhoAtual.data,
+      periodo,
+      outros,
+      servico ?? rascunhoAtual.servico ?? '',
+    ),
+    rascunho: rascunhoAtual,
+    executada: false,
+    motivo: null,
+  }
+}
+
 function ocupadoMsg(dataIso: string, opcoes: OpcaoSlot[]): string {
   const linhas = opcoes.map(
     (o, i) => `${i + 1}. ${horaLegivel(o.horario)} com ${o.profissional}`,
@@ -882,6 +1069,7 @@ export function novoRascunho(acao: AcaoConversa): Rascunho {
     profissional: null,
     data: null,
     horario: null,
+    periodo: null,
     cliente: null,
     alvo: null,
     candidatos: [],
@@ -1157,85 +1345,123 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
   }
   const r = rascunho
 
-  const foco = segmentoNovo(texto)
-  const datas = extrairDatas(foco, hoje)
-  const datasBrutas = datas.datas.length ? datas : extrairDatas(texto, hoje)
-  const horariosExtraidos = extrairHorarios(foco)
-  const horarios =
-    horariosExtraidos.horarios.length
-      ? horariosExtraidos
-      : extrairHorarios(texto)
+  /* Nome do cliente tem PRIORIDADE no estado de coleta do nome: nenhum
+     parser de campo pode "roubar" a resposta. Só sai da captura quando o
+     texto traz sinal inequívoco de OUTRO campo (horário, data, período,
+     "com <profissional>", número de lista, verbo de mudança, afirmação/
+     negação ou serviço exato do catálogo). */
+  const capturandoNome =
+    acao === 'criar' &&
+    r.etapa === 'coletando' &&
+    r.esperandoNome &&
+    texto.trim().length >= 2 &&
+    !ehRespostaDeCampo(texto, hoje, fontes.servicos)
 
-  const servicoExtraido = extrairServico(texto, fontes.servicos)
-  const profissionalExtraido = extrairProfissional(texto, profissionaisAtivos)
-
-  let achouCampo = false
-
-  if (servicoExtraido.ambiguos.length && !r.servico) {
-    r.listaServicos = servicoExtraido.ambiguos
+  if (capturandoNome) {
+    r.cliente = texto.trim().replace(/\s+/g, ' ').slice(0, 80)
     r.esperandoNome = false
-    r.etapa = 'coletando'
-    return fechar(ambiguosMsg(servicoExtraido.ambiguos), { rascunhoFinal: r })
-  }
-  if (servicoExtraido.servico) {
-    if (acao !== 'cancelar' || !r.alvo) {
-      r.servico = servicoExtraido.servico
-      achouCampo = true
+  } else {
+    const tCampo = normalizar(texto)
+    // Pedido explícito de troca limpa o campo antes da extração — depois
+    // disso o avanço revalida tudo na grade real.
+    if (/\b(outro|outra|outros|outras|trocar|troque|troca|troco)\b[^.!?,]{0,30}\b(horario|horas|hora)\b/.test(tCampo)) {
+      r.horario = null
     }
-  }
-
-  if (profissionalExtraido.desconhecido && !profissionalExtraido.profissional) {
-    r.esperandoNome = false
-    r.etapa = 'coletando'
-    return fechar(
-      profissionalDesconhecidoMsg(profissionalExtraido.desconhecido, profissionaisAtivos),
-      { rascunhoFinal: r },
-    )
-  }
-  if (profissionalExtraido.profissional && acao !== 'cancelar') {
-    r.profissional = profissionalExtraido.profissional
-    achouCampo = true
-  }
-
-  if (datasBrutas.invalida) {
-    r.etapa = 'coletando'
-    return fechar(MSG.dataInvalida, { rascunhoFinal: r })
-  }
-  if (datasBrutas.datas.length) {
-    r.data = datasBrutas.datas[0]
-    achouCampo = true
-  }
-
-  if (horarios.invalido) {
-    r.etapa = 'coletando'
-    return fechar(MSG.horaInvalida, { rascunhoFinal: r })
-  }
-  if (horarios.horarios.length) {
-    r.horario = horarios.horarios[0]
-    const daLista = r.opcoes.find((o) => o.horario === r.horario)
-    if (!r.profissional && daLista) r.profissional = daLista.profissional
-    achouCampo = true
-  }
-
-  if (r.etapa === 'coletando') {
-    const n = extrairNumero(texto)
-    if (n !== null && !r.horario && r.opcoes.length && n <= r.opcoes.length) {
-      const escolhida = r.opcoes[n - 1]
-      r.horario = escolhida.horario
-      r.profissional = escolhida.profissional
-      achouCampo = true
-    } else if (n !== null && !r.profissional && r.listaProfissionais.length && n <= r.listaProfissionais.length) {
-      r.profissional = r.listaProfissionais[n - 1]
-      r.listaProfissionais = []
-      achouCampo = true
-    } else if (n !== null && !r.servico && r.listaServicos.length && n <= r.listaServicos.length) {
-      r.servico = r.listaServicos[n - 1]
-      r.listaServicos = []
-      achouCampo = true
+    if (/\b(outro|outra|outros|outras|trocar|troque|troca|troco)\b[^.!?,]{0,30}\b(profissional|barbeiro)\b/.test(tCampo)) {
+      r.profissional = null
     }
-    if (acao === 'criar' && !achouCampo && r.esperandoNome && texto.trim().length >= 2) {
-      r.cliente = texto.trim().slice(0, 80)
+
+    const foco = segmentoNovo(texto)
+    const datas = extrairDatas(foco, hoje)
+    const datasBrutas = datas.datas.length ? datas : extrairDatas(texto, hoje)
+    const horariosExtraidos = extrairHorarios(foco)
+    const horarios =
+      horariosExtraidos.horarios.length
+        ? horariosExtraidos
+        : extrairHorarios(texto)
+    const periodoExtraido = extrairPeriodo(foco) ?? extrairPeriodo(texto)
+
+    const servicoExtraido = extrairServico(texto, fontes.servicos)
+    const profissionalExtraido = extrairProfissional(texto, profissionaisAtivos)
+
+    if (servicoExtraido.servico) {
+      if (acao !== 'cancelar' || !r.alvo) {
+        r.servico = servicoExtraido.servico
+      }
+    }
+
+    if (profissionalExtraido.profissional && acao !== 'cancelar') {
+      r.profissional = profissionalExtraido.profissional
+    }
+
+    if (periodoExtraido) {
+      r.periodo = periodoExtraido
+      // período novo invalida horário que fique fora dele
+      if (r.horario && !horarioNoPeriodo(r.horario, periodoExtraido)) {
+        r.horario = null
+      }
+    }
+
+    if (datasBrutas.invalida) {
+      r.etapa = 'coletando'
+      return fechar(MSG.dataInvalida, { rascunhoFinal: r })
+    }
+    if (datasBrutas.datas.length) {
+      r.data = datasBrutas.datas[0]
+    }
+
+    if (horarios.invalido) {
+      r.etapa = 'coletando'
+      return fechar(MSG.horaInvalida, { rascunhoFinal: r })
+    }
+    if (horarios.horarios.length) {
+      r.horario = horarios.horarios[0]
+      // horário explícito vence a preferência de período conflitante
+      if (r.periodo && !horarioNoPeriodo(r.horario, r.periodo)) {
+        r.periodo = null
+      }
+      const daLista = r.opcoes.find((o) => o.horario === r.horario)
+      if (!r.profissional && daLista) r.profissional = daLista.profissional
+    }
+
+    // Serviço ambíguo/perfil desconhecido perguntam — mas já com os
+    // outros campos (data, período, horário) extraídos desta mensagem.
+    if (servicoExtraido.ambiguos.length && !r.servico) {
+      r.listaServicos = servicoExtraido.ambiguos
       r.esperandoNome = false
+      r.etapa = 'coletando'
+      return fechar(ambiguosMsg(servicoExtraido.ambiguos), { rascunhoFinal: r })
+    }
+    if (profissionalExtraido.desconhecido && !profissionalExtraido.profissional) {
+      r.esperandoNome = false
+      r.etapa = 'coletando'
+      return fechar(
+        profissionalDesconhecidoMsg(profissionalExtraido.desconhecido, profissionaisAtivos),
+        { rascunhoFinal: r },
+      )
+    }
+
+    if (r.etapa === 'coletando') {
+      const n = extrairNumero(texto)
+      if (n !== null && !r.horario && r.opcoes.length && n <= r.opcoes.length) {
+        const escolhida = r.opcoes[n - 1]
+        r.horario = escolhida.horario
+        r.profissional = escolhida.profissional
+      } else if (n !== null && !r.profissional && r.listaProfissionais.length && n <= r.listaProfissionais.length) {
+        r.profissional = r.listaProfissionais[n - 1]
+        r.listaProfissionais = []
+      } else if (n !== null && !r.servico && r.listaServicos.length && n <= r.listaServicos.length) {
+        r.servico = r.listaServicos[n - 1]
+        r.listaServicos = []
+      } else if (n !== null && !r.horario && n <= 23) {
+        // número solto fora das opções = hora cheia ("10" → 10:00)
+        r.horario = `${duas(n)}:00`
+        if (r.periodo && !horarioNoPeriodo(r.horario, r.periodo)) {
+          r.periodo = null
+        }
+        const horaDaLista = r.opcoes.find((o) => o.horario === r.horario)
+        if (!r.profissional && horaDaLista) r.profissional = horaDaLista.profissional
+      }
     }
   }
 
@@ -1273,8 +1499,13 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
         },
         duracaoDo,
       )
+      // FILTRO NA ORDEM CERTA: grade real → profissional → PERÍODO →
+      // disponibilidade → ordena → limite 6. Nunca limitar antes.
+      const gradeFiltrada = filtrarPeriodo(grade, rascunhoAtual.periodo)
       if (!rascunhoAtual.horario) {
-        const opcoes = paraOpcoes(grade, { limite: 6 })
+        const vazio = passoPeriodoVazio(rascunhoAtual, grade)
+        if (vazio) return vazio
+        const opcoes = paraOpcoes(gradeFiltrada, { limite: 6 })
         if (!opcoes.length) {
           const dataAntiga = rascunhoAtual.data
           rascunhoAtual.data = null
@@ -1301,8 +1532,10 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
         : livres.length > 0
       if (!atende) {
         const dataAntiga = rascunhoAtual.data
-        const opcoes = paraOpcoes(grade, { limite: 6 })
         rascunhoAtual.horario = null
+        const vazio = passoPeriodoVazio(rascunhoAtual, grade)
+        if (vazio) return vazio
+        const opcoes = paraOpcoes(gradeFiltrada, { limite: 6 })
         if (!opcoes.length) {
           rascunhoAtual.data = null
           return {
@@ -1448,8 +1681,13 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
       },
       duracaoDo,
     )
+    // mesmo filtro de período do criar: grade → profissional → período →
+    // disponibilidade → ordena → limite 6
+    const gradeRem = filtrarPeriodo(grade, rascunhoAtual.periodo)
     if (!rascunhoAtual.horario) {
-      const opcoes = paraOpcoes(grade, {
+      const vazio = passoPeriodoVazio(rascunhoAtual, grade, alvo.servico)
+      if (vazio) return vazio
+      const opcoes = paraOpcoes(gradeRem, {
         limite: 6,
         preferir: rascunhoAtual.profissional ?? alvo.profissional,
       })
@@ -1478,11 +1716,13 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
       : livres.length > 0
     if (!atende) {
       const dataAntiga = rascunhoAtual.data
-      const opcoes = paraOpcoes(grade, {
+      rascunhoAtual.horario = null
+      const vazio = passoPeriodoVazio(rascunhoAtual, grade, alvo.servico)
+      if (vazio) return vazio
+      const opcoes = paraOpcoes(gradeRem, {
         limite: 6,
         preferir: rascunhoAtual.profissional ?? alvo.profissional,
       })
-      rascunhoAtual.horario = null
       if (!opcoes.length) {
         rascunhoAtual.data = null
         return {

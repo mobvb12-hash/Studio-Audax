@@ -218,6 +218,22 @@ describe('deveIrParaConversa — critério único de roteamento', () => {
     expect(deveIrParaConversa('quero agendar', null)).toBe(true)
   })
 
+  it('M · disponibilidade/periodo/servico natural vão para a conversa (§15)', () => {
+    expect(deveIrParaConversa('tem vaga?', null)).toBe(true)
+    expect(deveIrParaConversa('tem vaga de manhã?', null)).toBe(true)
+    expect(deveIrParaConversa('ainda tem horário amanhã?', null)).toBe(true)
+    expect(deveIrParaConversa('prefiro de tarde', null)).toBe(true)
+    expect(deveIrParaConversa('quero cortar o cabelo', null)).toBe(true)
+    expect(deveIrParaConversa('quero cabelo e barba', null)).toBe(true)
+  })
+
+  it('N · perguntas informativas NUNCA vão para a conversa (§15)', () => {
+    expect(deveIrParaConversa('Quanto custa o corte?', null)).toBe(false)
+    expect(deveIrParaConversa('Qual o horário de funcionamento?', null)).toBe(false)
+    expect(deveIrParaConversa('Vocês têm endereço?', null)).toBe(false)
+    expect(deveIrParaConversa('Qual o preço da barba?', null)).toBe(false)
+  })
+
   it('sem contexto, "2" NÃO vai para a conversa (bug original)', () => {
     expect(deveIrParaConversa('2', null)).toBe(false)
   })
