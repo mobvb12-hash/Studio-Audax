@@ -58,20 +58,31 @@ export type PartePote = {
   producaoReferencia: number
   /** Participação em % (4 casas) */
   participacao: number
-  /** Valor a receber, já com o centavo de resto */
+  /** PARCELA DO POTE: quanto daquele dinheiro a produção dele gerou */
   valor: number
+  /** Comissão sobre a PRÓPRIA parcela (40% no Studio Audax) */
+  comissao: number
 }
 
 export type RateioPote = {
+  /** 1. valor efetivamente recebido das assinaturas no período */
   receita: number
-  percentual: number
+  /** 2. o pote: a receita INTEIRA — não existe percentual de entrada */
   pote: number
+  /** Registro explícito de que 100% da receita forma o pote */
+  percentualPote: number
+  /** Fração da comissão do profissional sobre a parcela (0.40 = 40%) */
+  comissaoPercentual: number
   fichasTotal: number
   producaoTotal: number
+  /** 3. parcelas do pote */
   partes: PartePote[]
-  /** Soma das partes: tem de ser igual a `pote` (item 27) */
+  /** Soma das parcelas: tem de ser igual a `pote` (item 7) */
   somaPartes: number
-  /** Receita real dos pagamentos, sem o que foi estornado */
+  /** 4. comissão total devida = soma das comissões individuais (item 8) */
+  comissaoTotal: number
+  /** O que sobra para a empresa: pote menos comissão */
+  receitaEmpresa: number
   qtdPagamentos: number
   valorPagoTotal: number
   beneficioTotal: number
@@ -83,6 +94,11 @@ export type RateioPote = {
 }
 
 /** Centavos: o dinheiro é inteiro aqui dentro. */
+/** Arredonda para centavos inteiros: o dinheiro nunca passa por float. */
+function arredondarCentavos(valor: number): number {
+  return Math.round(valor)
+}
+
 function centavos(valor: number): number {
   return Math.round((Number(valor) || 0) * 100)
 }
@@ -120,21 +136,38 @@ export function receitaDeAssinaturas(
 }
 
 /**
- * Rateio do pote (itens 10, 19, 26 e 27).
+ * COMISSÃO PADRÃO DO STUDIO AUDAX: 40% sobre a parcela do pote do profissional.
+ * Configurável em Configurações → Clube (`clube.comissao.percentual`), porque o
+ * dono pode mudar — mas o padrão é o dele: 40%.
+ */
+export const COMISSAO_PADRAO = 0.4
+
+/**
+ * Rateio do pote — a regra real do Studio Audax (migration 030).
  *
- * `percentual` é sempre o CONFIGURADO pelo dono. Com 0, nada é distribuído e a
- * função diz por quê — é o que impede o sistema de inventar regra financeira.
+ * 1. O pote é a receita EFETIVAMENTE recebida das assinaturas do período,
+ *    INTEIRA. Não existe "percentual da receita que entra no pote".
+ * 2. O pote é dividido proporcionalmente às fichas de produção.
+ * 3. Sobre a PARCELA de cada profissional incide a comissão (0.40 = 40%).
+ * 4. O resto permanece como receita da empresa.
+ *
+ * Espelha `audax_clube_rateio` linha por linha — os dois lados são travados
+ * pelos mesmos números de exemplo.
  */
 export function calcularRateioPote(input: {
   fichas: FichaProducao[]
   pagamentos: PagamentoAssinatura[]
   periodo: Periodo
-  percentual: number
+  /** Comissão do profissional sobre a parcela: 0.40 = 40%. */
+  comissaoPercentual?: number
   /** Profissionais que participam; vazio = todos com produção */
   participantes?: string[]
+  /** Fichas já distribuídas por um fechamento anterior não entram de novo. */
+  apenasNaoRateadas?: boolean
 }): RateioPote {
-  const { fichas, pagamentos, periodo, percentual } = input
+  const { fichas, pagamentos, periodo } = input
   const participantes = (input.participantes ?? []).filter(Boolean)
+  const comissao = input.comissaoPercentual ?? COMISSAO_PADRAO
 
   const noPeriodo = (fichas ?? []).filter(
     (f) => dentroDoPeriodo(f.data, periodo) && !f.estornado,
@@ -145,12 +178,18 @@ export function calcularRateioPote(input: {
     participantes.includes(f.profissional) ||
     (f.profissionalId !== undefined && participantes.includes(f.profissionalId))
 
-  const doClub = noPeriodo.filter((f) => f.tipoBeneficio !== 'avulso' && ehParticipante(f))
+  // Só produção Club VÁLIDA: avulso não gera ficha, e ficha já distribuída por
+  // um fechamento anterior não pode ser paga de novo.
+  const doClub = noPeriodo.filter(
+    (f) =>
+      f.tipoBeneficio !== 'avulso' &&
+      ehParticipante(f) &&
+      !(input.apenasNaoRateadas === true && Boolean(f.fechamentoId)),
+  )
 
   const { receita, qtdPagamentos } = receitaDeAssinaturas(pagamentos, periodo)
-  const percentualNumerico = Number(percentual) || 0
-  const poteCentavos =
-    percentualNumerico > 0 ? Math.round((receita * percentualNumerico) / 100) * 100 : 0
+  // O pote é a receita INTEIRA — o dinheiro não passa por float.
+  const poteCentavos = centavos(receita)
 
   // Produção agregada por profissional — a ficha é de UM profissional, então
   // nunca há soma ambígua (itens 7 e 12).
@@ -203,19 +242,26 @@ export function calcularRateioPote(input: {
   )
 
   const partes: PartePote[] = brutos
-    .map((b) => ({
-      profissionalId: b.linha.profissionalId,
-      profissional: b.linha.profissional,
-      fichas: arredondarMoeda(b.linha.fichas),
-      producaoReferencia: paraReais(b.linha.referenciaCentavos),
-      participacao: Math.round(b.participacao * 10000) / 10000,
-      valor: paraReais(
-        b.parteCentavos + (comCentavo.has(b.linha.profissional) ? 1 : 0),
-      ),
-    }))
+    .map((b) => {
+      const parcelaCentavos =
+        b.parteCentavos + (comCentavo.has(b.linha.profissional) ? 1 : 0)
+      return {
+        profissionalId: b.linha.profissionalId,
+        profissional: b.linha.profissional,
+        fichas: arredondarMoeda(b.linha.fichas),
+        producaoReferencia: paraReais(b.linha.referenciaCentavos),
+        participacao: Math.round(b.participacao * 10000) / 10000,
+        valor: paraReais(parcelaCentavos),
+        // Comissão sobre a PRÓPRIA parcela, já arredondada em centavos.
+        comissao: paraReais(arredondarCentavos(parcelaCentavos * comissao)),
+      }
+    })
     .sort((a, b) => a.profissional.localeCompare(b.profissional, 'pt-BR'))
 
   const somaPartes = paraReais(partes.reduce((soma, p) => soma + centavos(p.valor), 0))
+  const comissaoTotal = paraReais(
+    partes.reduce((soma, p) => soma + centavos(p.comissao), 0),
+  )
 
   // Detalhamento por serviço (item 20)
   const porServico: RateioPote['porServico'] = {}
@@ -235,15 +281,20 @@ export function calcularRateioPote(input: {
   }
 
   return {
+    // Os QUATRO valores ficam separados: receita paga, pote, parcela e comissão.
     receita,
-    percentual: percentualNumerico,
     pote: paraReais(poteCentavos),
+    percentualPote: 100,
+    comissaoPercentual: comissao,
     fichasTotal,
     producaoTotal: paraReais(
       doClub.reduce((soma, f) => soma + centavos(f.valorTabela), 0),
     ),
     partes,
     somaPartes,
+    comissaoTotal,
+    // O que sobra do pote depois da comissão é receita da empresa.
+    receitaEmpresa: paraReais(poteCentavos - centavos(comissaoTotal)),
     qtdPagamentos,
     valorPagoTotal: arredondarMoeda(
       doClub.reduce((soma, f) => soma + f.valorPago, 0),

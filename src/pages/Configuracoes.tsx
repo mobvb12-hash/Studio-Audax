@@ -192,6 +192,14 @@ export default function Configuracoes() {
       ...atual,
       clube: { ...atual.clube, pote: { ...atual.clube.pote, [campo]: valor } },
     }))
+  const definirComissao = (
+    campo: keyof Configuracoes['clube']['comissao'],
+    valor: number,
+  ) =>
+    setDados((atual) => ({
+      ...atual,
+      clube: { ...atual.clube, comissao: { ...atual.clube.comissao, [campo]: valor } },
+    }))
   const definirDesconto = <K extends keyof Configuracoes['clube']['desconto']>(
     campo: K,
     valor: Configuracoes['clube']['desconto'][K],
@@ -460,25 +468,27 @@ export default function Configuracoes() {
             Pote do Audax Club
           </h3>
           <p className="mt-1 text-[12.5px] text-[#6B6353]">
-            Percentual da receita de assinaturas destinado aos profissionais,
-            dividido proporcionalmente pela produção de cada um. Sem percentual
-            configurado, nada é distribuído.
+            O pote é <strong>100% da receita de assinaturas recebida</strong> no
+            período, dividido proporcionalmente pela produção de cada
+            profissional. Sobre a parcela de cada um incide a comissão
+            configurada abaixo — no Studio Audax são 40%.
           </p>
 
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Campo rotulo="Percentual do pote (%)">
+            <Campo rotulo="Comissão sobre a parcela do pote (%)">
               <input
                 className={CAMPO_FORM}
                 inputMode="numeric"
-                placeholder="Ex.: 30"
-                value={
-                  dados.clube.pote.percentual === 0
-                    ? ''
-                    : String(dados.clube.pote.percentual)
-                }
+                placeholder="Ex.: 40"
+                value={String(
+                  Math.round(dados.clube.comissao.percentual * 10000) / 100,
+                )}
                 onChange={(e) => {
                   const n = Number(e.target.value.replace(',', '.'))
-                  definirPote('percentual', Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0)
+                  definirComissao(
+                    'percentual',
+                    Number.isFinite(n) ? Math.min(100, Math.max(0, n)) / 100 : 0,
+                  )
                 }}
               />
             </Campo>

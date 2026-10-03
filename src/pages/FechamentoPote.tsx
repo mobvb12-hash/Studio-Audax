@@ -78,8 +78,11 @@ export default function FechamentoPote() {
   const [confirmando, setConfirmando] = useState(false)
   const [reabrindo, setReabrindo] = useState<FechamentoPote | null>(null)
 
-  const online = Boolean(supabase())
-  const percentual = config.clube.pote.percentual
+const online = Boolean(supabase())
+  // Comissão do profissional sobre a SUA parcela do pote (40% no Studio
+  // Audax). O pote em si é sempre a receita inteira — não existe "percentual
+  // da receita que entra no pote".
+  const comissao = config.clube.comissao.percentual
   const poteAtivo = config.clube.pote.ativo
 
   // Sem Supabase, o mesmo cálculo puro roda em memória a partir dos
@@ -158,11 +161,13 @@ export default function FechamentoPote() {
         fichas,
         pagamentos: pagamentosPeriodo,
         periodo,
-        percentual,
+        comissaoPercentual: comissao,
+        // Fechamento anterior não pode ser pago de novo.
+        apenasNaoRateadas: true,
       })
     }
     return null
-  }, [calculo, online, fichas, pagamentosPeriodo, periodo, percentual])
+  }, [calculo, online, fichas, pagamentosPeriodo, periodo, comissao])
 
   async function confirmarFechamento() {
     setErro('')
@@ -269,9 +274,9 @@ export default function FechamentoPote() {
         )}
         {!poteAtivo && (
           <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
-            O pote está <strong>desligado</strong> nas Configurações (percentual
-            {` ${percentual}%`}). Calcular funciona; fechar só é liberado depois
-            que o percentual for definido.
+            O fechamento do pote está <strong>desligado</strong> nas
+            Configurações. Calcular funciona; o botão de fechar só é liberado
+            depois que for ligado.
           </p>
         )}
         {erro && (
@@ -292,22 +297,17 @@ export default function FechamentoPote() {
           <p className="mt-4 text-[12px] text-[#8A8171]">
             {dataCurta(periodo.inicio)} até {dataCurta(periodo.fim)}
           </p>
-          <div className="mt-2 overflow-x-auto border-y border-[#E5DCC3]">
+<div className="mt-2 overflow-x-auto border-y border-[#E5DCC3]">
             <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
-              <CelulaKpi rotulo="Receita de assinaturas" valor={formatarBRL(resultado.receita)} />
-              <CelulaKpi rotulo="Percentual destinado ao pote" valor={`${resultado.percentual}%`} />
-              <CelulaKpi rotulo="Pote" valor={formatarBRL(resultado.pote)} />
-              <CelulaKpi rotulo="Produção total" valor={`${resultado.fichasTotal} fichas`} />
+              <CelulaKpi rotulo="Receita recebida em assinaturas" valor={formatarBRL(resultado.receita)} />
+              <CelulaKpi rotulo="Pote (100% da receita)" valor={formatarBRL(resultado.pote)} />
+              <CelulaKpi rotulo="Total de fichas" valor={`${resultado.fichasTotal} fichas`} />
               <CelulaKpi rotulo="Valor de referência" valor={formatarBRL(resultado.producaoTotal)} />
+              <CelulaKpi rotulo="Receita da empresa" valor={formatarBRL(resultado.receitaEmpresa)} />
             </div>
           </div>
 
-          {resultado.percentual <= 0 ? (
-            <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-              Percentual do pote não configurado. Nada é distribuído até o dono
-              definir em Configurações → Clube.
-            </p>
-          ) : resultado.fichasTotal <= 0 ? (
+          {resultado.fichasTotal <= 0 ? (
             <p className="mt-4 rounded-lg border border-dashed border-[#E5DCC3] px-4 py-3 text-[13px] text-[#8A8171]">
               Nenhuma ficha de Club no período. O pote fica parado: sem produção
               não há quem divida.
@@ -317,12 +317,17 @@ export default function FechamentoPote() {
               {/* ------------------------------------------ TABELA */}
               <div className="mt-5 overflow-x-auto border border-[#E5DCC3]">
                 <table className="w-full min-w-[640px] border-collapse text-sm">
-                  <thead>
+<thead>
                     <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-left">
                       <th className="px-3 py-2 font-semibold text-[#4A4436]">Profissional</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Fichas</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Participação</th>
-                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Valor a receber</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">
+                        Parcela do Pote
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#8A6A14]">
+                        Comissão {Math.round(resultado.comissaoPercentual * 100)}%
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -343,8 +348,11 @@ export default function FechamentoPote() {
                           })}
                           %
                         </td>
-                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-[#1C1A15]">
+                        <td className="px-3 py-2 text-right tabular-nums text-[#1C1A15]">
                           {formatarBRL(p.valor)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums text-[#8A6A14]">
+                          {formatarBRL(p.comissao)}
                         </td>
                       </tr>
                     ))}
@@ -356,6 +364,9 @@ export default function FechamentoPote() {
                       <td className="px-3 py-2 text-right tabular-nums">100,00%</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {formatarBRL(resultado.somaPartes)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[#8A6A14]">
+                        {formatarBRL(resultado.comissaoTotal)}
                       </td>
                     </tr>
                   </tfoot>
@@ -388,8 +399,9 @@ export default function FechamentoPote() {
                     FECHAR PERÍODO
                   </button>
                   <p className="mt-2 text-[12px] text-[#8A8171]">
-                    Fechar grava receita, percentual, pote, produção e a parte de
-                    cada profissional como registro imutável, com auditoria.
+                    Fechar grava receita, pote, produção e a parte de cada
+                    profissional — com a comissão e a receita da empresa — como
+                    registro imutável, com auditoria.
                   </p>
                 </div>
               )}
@@ -500,7 +512,11 @@ export default function FechamentoPote() {
                     {formatarBRL(f.pote)} · {f.fichasTotal} fichas
                   </p>
                   <p className="mt-0.5 text-[12px] text-[#8A8171]">
-                    {f.percentual}% da receita · fechado em {dataCurta(f.fechadoEm.slice(0, 10))}
+                    {formatarBRL(f.receita)} de receita · comissão{' '}
+                    {Math.round((f.comissaoPercentual ?? 0) * 100)}% (
+                    {formatarBRL(f.comissaoTotal)}) · empresa{' '}
+                    {formatarBRL(f.receitaEmpresa)} · fechado em{' '}
+                    {dataCurta(f.fechadoEm.slice(0, 10))}
                     {f.fechadoPor ? ` por ${f.fechadoPor}` : ''}
                     {f.reaberto ? ' · REABERTO' : ''}
                   </p>

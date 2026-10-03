@@ -140,8 +140,11 @@ expect(nomes).toEqual([
       '../supabase/migrations/026_notificacao_agendamento_seguro.sql',
       '../supabase/migrations/027_barbearia_e_complementos_publicos.sql',
       '../supabase/migrations/028_clube_producao_e_pote.sql',
-      '../supabase/migrations/029_clube_pote_papeis.sql',
-    ])
+  '../supabase/migrations/029_clube_pote_papeis.sql',
+  '../supabase/migrations/030_pote_integral_e_comissao.sql',
+  '../supabase/migrations/031_comissao_somente_do_dono.sql',
+  '../supabase/migrations/032_permissoes_public_e_typo_calcular.sql',
+])
   })
 
   it('nenhum script apaga dado, derruba tabela ou remove coluna', () => {
@@ -1136,5 +1139,260 @@ it('o CORPO da regra é o mesmo da 028 (a 029 só guarda o papel)', () => {
     expect(texto029).toMatch(/Já existe fechamento do pote para este período\./)
     // Não aceita valor de pote vindo do chamador.
     expect(texto029).not.toMatch(/p_pote/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 030 - pote integral e comissão sobre a parcela                      */
+/* ------------------------------------------------------------------ */
+
+describe('030 · o pote é a receita inteira e a comissão é sobre a parcela', () => {
+  const texto = sql('../supabase/migrations/030_pote_integral_e_comissao.sql')
+
+  it('a receita do período não conta o mesmo lançamento duas vezes', () => {
+    // Um pagamento por lançamento do Caixa: `distinct on` pelo
+    // `caixa_lancamento_id` (ou pelo id quando não há lançamento).
+    expect(texto).toMatch(/select distinct on \(coalesce\(p\.caixa_lancamento_id, p\.id\)\)/)
+    expect(texto).toMatch(/order by coalesce\(p\.caixa_lancamento_id, p\.id\), p\.criado_em/)
+  })
+
+  it('a configuração passa a ser `comissao.percentual` e o pote perde o percentual', () => {
+    expect(texto).toMatch(/'comissao', coalesce\(/)
+    expect(texto).toMatch(/"percentual":0\.40/)
+    // Remove `pote.percentual` — ele significava "percentual da receita que
+    // entra no pote", que foi exatamente o que o dono mandou mudar.
+    expect(texto).toMatch(/coalesce\(valor -> 'pote', '\{\}'::jsonb\) - 'percentual'/)
+    // E some com ele da configuração já gravada.
+    expect(texto).toMatch(/and valor -> 'pote' \? 'percentual'/)
+  })
+
+  it('o servidor valida a comissão como fração entre 0 e 1', () => {
+    expect(texto).toMatch(/if p_valor \? 'comissao' then/)
+    expect(texto).toMatch(/v_comissao_local := \(p_valor -> 'comissao' ->> 'percentual'\)::numeric;/)
+    expect(texto).toMatch(/if v_comissao_local < 0 or v_comissao_local > 1 then/)
+  })
+
+  it('o fechamento congela pote, comissão e receita da empresa', () => {
+    for (const coluna of [
+      'add column if not exists comissao_percentual numeric(5,4)',
+      'add column if not exists comissao_total numeric(12,2)',
+      'add column if not exists receita_empresa numeric(12,2)',
+    ]) {
+      expect(texto, coluna).toContain(coluna)
+    }
+    // Os três valores entram no snapshot do fechamento.
+    expect(texto).toMatch(/receita, percentual, pote, producao_total, fichas_total,/)
+    expect(texto).toMatch(/comissao_percentual, comissao_total, receita_empresa,/)
+  })
+
+  it('a comissão incide sobre a PARCELA de cada profissional', () => {
+    // `comissao = round(parcela × comissao)`, nunca sobre o pote inteiro: o
+    // fator é `g.comissao` multiplicado pela PARCELA (`o.parte`), não pelo pote.
+    expect(texto).toMatch(
+      /round\(\s*\(case when o\.posicao <= s\.centavos then o\.parte \+ 0\.01 else o\.parte end\)\s*\*\s*g\.comissao,\s*2\s*\)\s*as comissao/,
+    )
+    // A comissão não pode ser calculada a partir de `g.pote`.
+    expect(texto).not.toMatch(/round\([^)]*g\.pote[^)]*g\.comissao/)
+    // E o total é a soma das comissões individuais.
+    expect(texto).toMatch(
+      /'comissaoTotal', coalesce\(\(select sum\(comissao\) from final\), 0\)/,
+    )
+    // O que sobra do pote é receita da empresa.
+    expect(texto).toMatch(
+      /'receitaEmpresa', g\.pote - coalesce\(\(select sum\(comissao\) from final\), 0\)/,
+    )
+  })
+
+  it('as parcelas fecham no centavo, com maior resto', () => {
+    expect(texto).toMatch(/trunc\(g\.pote \* a\.fichas \/ f\.total, 2\)/)
+    expect(texto).toMatch(/row_number\(\) over \(order by b\.resto desc, b\.nome asc\)/)
+  })
+
+  it('produção já distribuída por um fechamento anterior não entra de novo', () => {
+    expect(texto.match(/and cp\.fechamento_id is null/g)?.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('o pote é a receita inteira, sem percentual de entrada', () => {
+    expect(texto).toMatch(/'percentualPote', 100/)
+    // Nenhuma multiplicação da receita por "percentual do pote" sobreviveu.
+    expect(texto).not.toMatch(/pote \* v_percentual/)
+    expect(texto).not.toMatch(/percentual \* v_receita/)
+  })
+
+  it('a receita do pote vem da deduplicada, não de uma soma solta', () => {
+    // Guarda explícita: a receita vem de `audax_clube_receita_periodo`.
+    expect(texto).toMatch(/audax_clube_receita_periodo\(p_inicio, p_fim\)/)
+  })
+
+  it('as permissões da 029 continuam valendo (nada foi aberto)', () => {
+    expect(texto).toMatch(/grant execute on function public\.audax_clube_rateio\(date, date, numeric, text\[\]\) to service_role;/)
+    expect(texto).toMatch(
+      /grant execute on function public\.clube_pote_calcular\(date, date, numeric, text\[\]\) to authenticated, service_role;/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.clube_pote_fechar\(date, date, numeric, text\[\], text\) to authenticated, service_role;/,
+    )
+    expect(texto).not.toMatch(/to anon/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 031 - a comissão é do dono, não um argumento de quem chama          */
+/* ------------------------------------------------------------------ */
+
+describe('031 · a comissão não é parâmetro da chamada', () => {
+  const bruto = sql('../supabase/migrations/031_comissao_somente_do_dono.sql')
+  // O que importa é o CÓDIGO: o cabeçalho cita o nome do parâmetro removido
+  // para explicar a mudança, e comentário não vira porta de entrada.
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('nenhuma porta do pote aceita mais a comissão como entrada', () => {
+    // `p_comissao` não pode existir em lugar nenhum: era o vetor que
+    // permitia a qualquer gerente/recepção escolher a própria comissão.
+    expect(texto).not.toMatch(/p_comissao/)
+    expect(texto).not.toMatch(/coalesce\(\s*p_comissao/)
+
+    // A assinatura nova não tem mais o terceiro parâmetro.
+    for (const nome of ['audax_clube_rateio', 'clube_pote_calcular', 'clube_pote_fechar']) {
+      expect(
+        texto,
+        `${nome} sem p_comissao`,
+      ).toMatch(
+        new RegExp(
+          `create or replace function public\\.${nome}\\(\\s*p_inicio date,\\s*p_fim date,\\s*p_profissionais text\\[\\]`,
+        ),
+      )
+    }
+  })
+
+  it('a comissão vem da configuração do dono', () => {
+    expect(texto).toMatch(
+      /\(select nullif\(trim\(coalesce\(valor -> 'comissao' ->> 'percentual', ''\)\), ''\)::numeric\s*\n\s*from public\.configuracoes_sistema\s*\n\s*where chave = 'clube'\)/,
+    )
+    // O padrão do Studio Audax continua 40% se a configuração vier vazia.
+    expect(texto).toMatch(/0\.40/)
+  })
+
+  it('as assinaturas antigas caem antes das novas', () => {
+    // `create or replace` não renomeia parâmetro: as duas portas são derrubadas.
+    for (const [antiga, nova] of [
+      [
+        'drop function if exists public.audax_clube_rateio(date, date, numeric, text[]);',
+        'drop function if exists public.clube_pote_calcular(date, date, numeric, text[]);',
+      ],
+      [
+        'drop function if exists public.clube_pote_calcular(date, date, numeric, text[]);',
+        'drop function if exists public.clube_pote_calcular(date, date, text[]);',
+      ],
+      [
+        'drop function if exists public.clube_pote_fechar(date, date, numeric, text[], text);',
+        'drop function if exists public.clube_pote_fechar(date, date, text[], text);',
+      ],
+    ]) {
+      expect(texto, antiga).toContain(antiga)
+      expect(texto, `${antiga} -> ${nova}`).toContain(nova)
+    }
+  })
+
+  it('nenhuma permissão sobra sobre as assinaturas que caíram', () => {
+    // `grant`/`revoke` em função inexistente é erro 42883: as linhas da 030 que
+    // citavam as assinaturas antigas precisam ter saído com elas.
+    expect(texto).not.toMatch(/grant execute on function public\.\w+\([^)]*numeric/)
+    expect(texto).not.toMatch(/revoke execute on function public\.\w+\([^)]*numeric/)
+  })
+
+  it('o fechamento congela a comissão que foi distribuída, não outra leitura', () => {
+    // Uma segunda leitura da configuração poderia divergir do pagamento.
+    expect(texto).toMatch(
+      /v_comissao := coalesce\(\(v_rateio ->> 'comissaoPercentual'\)::numeric, 0\.40\);/,
+    )
+    expect(texto).not.toMatch(/v_comissao := coalesce\(\s*\n\s*p_comissao/)
+  })
+
+  it('nada abre: as assinaturas novas recebem o mesmo acesso', () => {
+    expect(texto).toMatch(
+      /grant execute on function public\.audax_clube_rateio\(date, date, text\[\]\) to service_role;/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.clube_pote_calcular\(date, date, text\[\]\) to authenticated, service_role;/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.clube_pote_fechar\(date, date, text\[\], text\) to authenticated, service_role;/,
+    )
+    // Nenhum grant para anon — os `from ... anon` são revokes.
+    expect(texto).not.toMatch(/grant\s[^;]*\bto\b[^;]*\banon\b/i)
+    // E o guard de gerente continua no corpo das duas portas que a 031
+    // recria (`clube_producao_*` não é redefinida aqui: segue a 029).
+    expect(texto.match(/if not public\.current_user_is_gerente_ou_acima\(\) then/g)?.length).toBe(2)
+  })
+
+  it('o corpo da regra é o da 030: só muda de onde vem a comissão', () => {
+    // A trava contra rateio quebrado continua intacta.
+    expect(texto).toMatch(/O rateio não fecha: soma das parcelas R\$ % difere do pote R\$ %/)
+    expect(texto).toMatch(/Já existe fechamento do pote para este período\./)
+    // E a fórmula continua sendo sobre a parcela.
+    expect(texto).toMatch(
+      /round\(\s*\(case when o\.posicao <= s\.centavos then o\.parte \+ 0\.01 else o\.parte end\)\s*\*\s*g\.comissao,\s*2\s*\)\s*as comissao/,
+    )
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 032 - o nome do parâmetro e o EXECUTE TO PUBLIC do Postgre          */
+/* ------------------------------------------------------------------ */
+
+describe('032 · revoga o PUBLIC que o PostgreLab dá por padrão', () => {
+  const bruto = sql('../supabase/migrations/032_permissoes_public_e_typo_calcular.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('o cálculo repassa o parâmetro com o nome certo', () => {
+    // O bug da 031: `p_profissional` — sem "eis" — quebrava com 42703.
+    expect(texto).toMatch(
+      /return public\.audax_clube_rateio\(p_inicio, p_fim, p_profissionais\)/,
+    )
+    expect(texto).not.toMatch(/p_profissional\)/)
+    expect(texto).not.toMatch(/p_profissional\b(?!eis)/)
+  })
+
+  it('toda porta do pote é revogada de PUBLIC antes de ser regrada', () => {
+    // Função nova nasce com EXECUTE para PUBLIC: sem o revoke, anon lê o rateio.
+    for (const assinatura of [
+      'audax_clube_rateio(date, date, text[])',
+      'clube_pote_calcular(date, date, text[])',
+      'clube_pote_fechar(date, date, text[], text)',
+    ]) {
+      expect(texto, `revoke de ${assinatura}`).toMatch(
+        new RegExp(
+          `revoke execute on function public\\.${assinatura.replace(/[()[\]]/g, '\\$&')}\\s*from public, anon, authenticated;`,
+        ),
+      )
+    }
+    expect(texto).toMatch(
+      /revoke execute on function public\.clube_pote_listar\(date, date\)\s*from public, anon;/,
+    )
+  })
+
+  it('cada porta continua regrada para quem pode usar', () => {
+    expect(texto).toMatch(
+      /grant execute on function public\.audax_clube_rateio\(date, date, text\[\]\)\s*to service_role;/,
+    )
+    // O rateio NÃO volta para authenticated: é leitura de dinheiro.
+    expect(texto).not.toMatch(
+      /grant execute on function public\.audax_clube_rateio\(date, date, text\[\]\)\s*to authenticated/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.clube_pote_calcular\(date, date, text\[\]\)\s*to authenticated, service_role;/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.clube_pote_fechar\(date, date, text\[\], text\)\s*to authenticated, service_role;/,
+    )
+    // Nenhum grant para anon em lugar nenhum.
+    expect(texto).not.toMatch(/grant\s[^;]*\bto\b[^;]*\banon\b/i)
+  })
+
+  it('a guarda de papel do corpo continua intacta', () => {
+    expect(texto).toMatch(/if not public\.current_user_is_gerente_ou_acima\(\) then/)
+    // E a comissão continua vindo da configuração, não de parâmetro.
+    expect(texto).not.toMatch(/p_comissao/)
   })
 })

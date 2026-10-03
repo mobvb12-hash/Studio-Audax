@@ -10,6 +10,7 @@
 // ============================================================================
 import { supabase } from '@/lib/supabase'
 import { hojeISO } from '@/modules/agenda/catalogo'
+import { COMISSAO_PADRAO } from '@/modules/clube/pote'
 import type { FichaProducao, Periodo, RateioPote } from '@/modules/clube/pote'
 
 export type RespostaBeneficio = {
@@ -41,8 +42,13 @@ export type FechamentoPote = {
   periodoInicio: string
   periodoFim: string
   receita: number
+  /** Snapshot: sempre 100 (o pote é a receita inteira). */
   percentual: number
+  /** Snapshot: comissão congelada no fechamento (0.4 = 40%). */
+  comissaoPercentual: number
   pote: number
+  comissaoTotal: number
+  receitaEmpresa: number
   producaoTotal: number
   fichasTotal: number
   partes: RateioPote['partes']
@@ -56,7 +62,7 @@ export type CalculoPote = RateioPote & {
   motivo?: string | null
   periodoInicio: string
   periodoFim: string
-  percentualConfigurado?: number | null
+  comissaoConfigurada?: number | null
   poteAtivo?: boolean
   participantesConfigurados?: string[]
   jaFechado?: boolean
@@ -67,7 +73,7 @@ export type ListagemPote = {
   fichas: FichaProducao[]
   config: {
     ativo?: boolean
-    percentual?: number
+    comissao?: number
     participantes?: string[]
   }
 }
@@ -176,10 +182,15 @@ export async function estornarFicha(id: string, motivo: string): Promise<void> {
   if (error) throw erro(error, 'Não foi possível estornar a ficha.')
 }
 
-/** Dry run: o que a tela mostra antes de fechar (item 18). */
+/**
+ * Dry run: o que a tela mostra antes de fechar (item 18).
+ *
+ * A comissão NÃO é enviada: ela é lida pelo servidor de
+ * `clube.comissao.percentual` (migration 031). Mandar a comissão pela chamada
+ * permitiria trocar a regra financeira oficial por um argumento.
+ */
 export async function calcularPote(p: {
   periodo: Periodo
-  percentual?: number
   participantes?: string[]
 }): Promise<CalculoPote> {
   const db = supabase()
@@ -187,7 +198,6 @@ export async function calcularPote(p: {
   const { data, error } = await db.rpc('clube_pote_calcular', {
     p_inicio: p.periodo.inicio,
     p_fim: p.periodo.fim,
-    p_percentual: p.percentual ?? null,
     p_profissionais: p.participantes ?? [],
   })
   if (error) throw erro(error, 'Não foi possível calcular o fechamento.')
@@ -197,7 +207,6 @@ export async function calcularPote(p: {
 /** Fecha o período: snapshot imutável + auditoria (item 21). */
 export async function fecharPote(p: {
   periodo: Periodo
-  percentual?: number
   participantes?: string[]
   responsavel?: string
 }): Promise<{ id: string; fechadoEm: string }> {
@@ -206,7 +215,6 @@ export async function fecharPote(p: {
   const { data, error } = await db.rpc('clube_pote_fechar', {
     p_inicio: p.periodo.inicio,
     p_fim: p.periodo.fim,
-    p_percentual: p.percentual ?? null,
     p_profissionais: p.participantes ?? [],
     p_responsavel: p.responsavel ?? '',
   })
@@ -279,13 +287,18 @@ function normalizaCalculo(bruto: Record<string, unknown>): CalculoPote {
     producaoReferencia: Number(p.producaoReferencia ?? 0),
     participacao: Number(p.participacao ?? 0),
     valor: Number(p.valor ?? 0),
+    comissao: Number(p.comissao ?? 0),
   }))
   return {
     ok: Boolean(bruto.ok),
     motivo: (bruto.motivo as string) ?? null,
     receita: Number(bruto.receita ?? 0),
-    percentual: Number(bruto.percentual ?? 0),
+
     pote: Number(bruto.pote ?? 0),
+    percentualPote: Number(bruto.percentualPote ?? 100),
+    comissaoPercentual: Number(bruto.comissaoPercentual ?? COMISSAO_PADRAO),
+    comissaoTotal: Number(bruto.comissaoTotal ?? 0),
+    receitaEmpresa: Number(bruto.receitaEmpresa ?? 0),
     fichasTotal: Number(bruto.fichasTotal ?? 0),
     producaoTotal: 0,
     partes,
@@ -299,7 +312,7 @@ function normalizaCalculo(bruto: Record<string, unknown>): CalculoPote {
     porServico: {},
     periodoInicio: String(bruto.periodoInicio ?? ''),
     periodoFim: String(bruto.periodoFim ?? ''),
-    percentualConfigurado: (bruto.percentualConfigurado as number) ?? null,
+    comissaoConfigurada: (bruto.comissaoConfigurada as number) ?? null,
     poteAtivo: Boolean(bruto.poteAtivo),
     participantesConfigurados: (bruto.participantesConfigurados as string[]) ?? [],
     jaFechado: Boolean(bruto.jaFechado),

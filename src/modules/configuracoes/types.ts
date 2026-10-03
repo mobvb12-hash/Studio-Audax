@@ -1,3 +1,5 @@
+import { COMISSAO_PADRAO } from '@/modules/clube/pote'
+
 // Configurações do sistema — tipos e validação.
 //
 // Fonte ÚNICA (migration 022, tabela `configuracoes_sistema`): links oficiais,
@@ -44,7 +46,8 @@ export type ConfigNotificacoes = {
  *   é coberta, então sobrancelha, químicos e produtos ficam de fora por padrão.
  * desconto: fração (0.10 = 10%). \categorias\ diz QUAIS categorias contam
  *   como procedimento químico; lista vazia = nenhum desconto químico ainda.
- * pote: percentual da receita de assinaturas destinada aos profissionais.
+ * pote: o pote e sempre 100% da receita de assinaturas recebida no periodo.
+ * comissao: comissao do profissional sobre a sua parcela do pote (0.40 = 40%).
  *   \tivo\ liga o botão de fechamento; \participantes\ vazio = todos.
  */
 export type ConfigClube = {
@@ -58,8 +61,15 @@ export type ConfigClube = {
   }
   pote: {
     ativo: boolean
-    percentual: number
     participantes: string[]
+  }
+  /**
+   * Comissão do profissional sobre a PRÓPRIA parcela do pote.
+   * Fração (0.40 = 40%) — o padrão do Studio Audax. O pote NÃO tem
+   * percentual: ele é sempre 100% da receita de assinaturas recebida.
+   */
+  comissao: {
+    percentual: number
   }
 }
 export type ConfigIa = {
@@ -98,7 +108,8 @@ export const CONFIG_PADRAO: Configuracoes = {
     beneficios: {},
     coberturas: { cabelo: [], barba: [], cabelo_barba: [] },
     desconto: { quimicos: 0, produtos: 0, categorias: [] },
-    pote: { ativo: false, percentual: 0, participantes: [] },
+    pote: { ativo: false, participantes: [] },
+    comissao: { percentual: COMISSAO_PADRAO },
   },
 ia: { maxSugestoes: 2, botoesInterativos: false, nomeAtendente: 'Audax' },
   barbearia: { endereco: '', telefone: '', instagram: '', mapa: '' },
@@ -177,6 +188,7 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
   const coberturas = objeto(clube.coberturas)
   const desconto = objeto(clube.desconto)
   const pote = objeto(clube.pote)
+  const comissao = objeto(clube.comissao)
   const ia = objeto(raiz.ia)
   const barbearia = objeto(raiz.barbearia)
   // Todo link passa pelo mesmo filtro de esquema — inclusive `avaliacao.link`,
@@ -219,8 +231,15 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       },
       pote: {
         ativo: booleano(pote.ativo, CONFIG_PADRAO.clube.pote.ativo),
-        percentual: inteiro(pote.percentual, CONFIG_PADRAO.clube.pote.percentual, 0, 100),
         participantes: listaDeTexto(pote.participantes, 40),
+      },
+      comissao: {
+        // Fração: 0.40 = 40% de comissão sobre a parcela do pote.
+        // Aceita 0.40 ou 40; o servidor valida de novo.
+        percentual: fracaoComPadrao(
+          comissao.percentual ?? comissao.fracao,
+          CONFIG_PADRAO.clube.comissao.percentual,
+        ),
       },
     },
     ia: {
@@ -244,6 +263,19 @@ function fracao(valor: unknown): number {
   const n = typeof valor === 'number' ? valor : Number(valor)
   if (!Number.isFinite(n) || n < 0 || n > 1) return 0
   return Math.round(n * 10000) / 10000
+}
+
+/**
+ * Comissão do pote: aceita a fração canônica (0.40) e também a forma em
+ * porcentagem que o dono digita na tela (40 → 0.40). Valores acima de 1 são
+ * normalizados; fora de 0..100 cai no padrão — a tela nunca salva lixo.
+ */
+function fracaoComPadrao(valor: unknown, padrao: number): number {
+  const n = typeof valor === 'number' ? valor : Number(valor)
+  if (!Number.isFinite(n) || n < 0) return padrao
+  const fracaoConvertida = n > 1 ? n / 100 : n
+  if (fracaoConvertida > 1) return padrao
+  return Math.round(fracaoConvertida * 10000) / 10000
 }
 
 /** Lista de texto, sem entradas vazias. */
