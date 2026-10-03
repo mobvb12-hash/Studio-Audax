@@ -466,16 +466,20 @@ function normalizarDestaques(
 /**
  * A vitrine: onde a pessoa começa a agendar.
  *
- * A ordem das seções é a de uma vitrine de verdade — photos da casa, o que a
- * casa recomenda, o Club, a lista completa, quem faz o serviço e onde a casa
- * fica:
+ * A ordem é a de uma vitrine de verdade — photos da casa, o que a casa
+ * recomenda, a lista completa, o Club, quem faz o serviço e onde a casa fica:
  *
  *   1. Galeria da casa          (só se o dono cadastrou foto)
  *   2. Destaques da casa        (carrossel; só se o dono escolheu destaques)
- *   3. Audax Club               (planos e benefícios oficiais)
- *   4. Todos os serviços       (sanfona, agrupada pela categoria da casa)
+ *   3. Todos os serviços       (sanfona, agrupada pela categoria da casa)
+ *   4. Audax Club               (linha fechada; os planos abrem num toque)
  *   5. Nossa equipe             (quem trabalha aqui)
  *   6. Onde fica a casa         (endereço, WhatsApp, Instagram, mapa)
+ *
+ * SERVIÇOS ANTES DO CLUB, e isso é deliberado. Com os cards de plano abertos, o
+ * Club ocupava mais do que a tela inteira e empurrava a lista de serviços para
+ * fora da primeira dobra: a pessoa saía da página sem ver serviço nenhum. O
+ * trabalho de agendar vem primeiro; o Club vem logo abaixo, agora fechado.
  *
  * Duas colunas no desktop (a sexta vira a lateral que gruda enquanto a pessoa
  * rola) e uma coluna no celular, que é onde isso é usado.
@@ -523,10 +527,6 @@ function EtapaServicos({
             </section>
           )}
 
-          <div className="mb-7">
-            <SecaoAudaxClub barbearia={catalogo.barbearia} />
-          </div>
-
           <section className="mb-7">
             <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
               Todos os serviços
@@ -537,6 +537,10 @@ function EtapaServicos({
               aoEscolher={aoEscolherServico}
             />
           </section>
+
+          <div className="mb-7">
+            <SecaoAudaxClub barbearia={catalogo.barbearia} />
+          </div>
 
           <EquipeVitrine profissionais={catalogo.profissionais ?? []} />
         </div>

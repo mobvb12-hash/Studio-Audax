@@ -9,6 +9,7 @@ import {
 } from '@/services/supabase/agendaPublica'
 import type { SlotLivre } from '@/modules/agenda/regras'
 import { carregarBeneficiosClube } from '@/services/supabase/painel'
+import { formatarBRL } from '@/lib/moeda'
 
 /**
  * O fluxo do agendamento público, passo a passo.
@@ -186,6 +187,28 @@ describe('vitrine (primeira tela)', () => {
     expect(grupos[2].textContent).toContain('Tratamento')
   })
 
+  it('a linha fechada diz quantos serviços tem e a partir de quanto sai', async () => {
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const linhas = screen.getAllByRole('group').map((g) => g.textContent ?? '')
+    // "Cabelo" tem só o Corte; "Tratamento" tem as Luzes. O preço é formatado
+    // pela MESMA função da tela — nada de "R$ 30,00" escrito no teste.
+    expect(linhas[0]).toContain(`1 serviço · a partir de ${formatarBRL(30)}`)
+    expect(linhas[2]).toContain(`1 serviço · a partir de ${formatarBRL(90)}`)
+  })
+
+  it('abre e fecha a sanfona', async () => {
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const grupos = screen.getAllByRole('group')
+    fireEvent.click(grupos[2].querySelector('summary') as HTMLElement)
+    expect(grupos[2].getAttribute('open')).not.toBeNull()
+  })
+
   it('serviço sem categoria vai para "Outros" em vez de sumir', async () => {
     catalogo.mockResolvedValue({
       ...CATALOGO,
@@ -197,16 +220,6 @@ describe('vitrine (primeira tela)', () => {
 
     expect(screen.getByText('Outros')).toBeTruthy()
     expect(screen.getByRole('button', { name: /^Pezinho - R\$/ })).toBeTruthy()
-  })
-
-  it('abre e fecha a sanfona', async () => {
-    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
-    render(<AgendarPublico />)
-    await screen.findByText('Agende seu horário')
-
-    const grupos = screen.getAllByRole('group')
-    fireEvent.click(grupos[2].querySelector('summary') as HTMLElement)
-    expect(grupos[2].getAttribute('open')).not.toBeNull()
   })
 
   it('mostra a equipe, com a foto que a casa cadastrou', async () => {
@@ -271,19 +284,70 @@ describe('vitrine (primeira tela)', () => {
 })
 
 describe('Audax Club na vitrine', () => {
-  it('mostra os benefícios oficiais e leva ao WhatsApp da casa', async () => {
-    beneficios.mockResolvedValue({
-      coberturas: { cabelo: ['Cabelo'] },
-      desconto: { quimicos: 0.1, produtos: 0.1 },
-      rotulos: { cabelo: 'Audax Corte' },
-      textos: { cabelo: ['Corte ilimitado durante a vigência'] },
-    })
+  const COM_PLANOS = {
+    coberturas: { cabelo: ['Cabelo'] },
+    desconto: { quimicos: 0.1, produtos: 0.1 },
+    rotulos: { cabelo: 'Audax Corte' },
+    textos: { cabelo: ['Corte ilimitado durante a vigência'] },
+  }
+
+  it('vem FECHADO em uma linha, para não empurrar os serviços para fora', async () => {
+    /*
+     * Regressão do que a tela mostrou: com três cards de plano abertos, o Club
+     * ocupava mais do que a dobra e a lista de serviços sumia. A linha fechada
+     * diz só quantos planos existem.
+     */
+    beneficios.mockResolvedValue(COM_PLANOS)
     catalogo.mockResolvedValue({
       ...CATALOGO,
       barbearia: { ...CATALOGO.barbearia, telefone: '(81) 98963-4433' },
     })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
+
+    const linha = await screen.findByText('Audax Club')
+    const bloco = linha.closest('details') as HTMLDetailsElement
+    expect(bloco).not.toBeNull()
+    expect(bloco.getAttribute('open')).toBeNull()
+    expect(bloco.textContent).toContain('3 planos de assinatura')
+    // Os planos só existem depois de abrir.
+    fireEvent.click(bloco.querySelector('summary') as HTMLElement)
+    expect(bloco.getAttribute('open')).not.toBeNull()
+    expect(await screen.findByText('Audax Corte')).toBeTruthy()
+  })
+
+  it('os serviços vêm ANTES do Club na tela', async () => {
+    /*
+     * O trabalho da página é agendar. Com o Club antes, quem chegava pelo link
+     * via celular não via serviço nenhum sem rolar muito.
+     */
+    beneficios.mockResolvedValue(COM_PLANOS)
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      barbearia: { ...CATALOGO.barbearia, telefone: '(81) 98963-4433' },
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const servicos = screen.getByText('Todos os serviços')
+    const clube = await screen.findByText('Audax Club')
+    // `compareDocumentPosition` bit 4 = o Club vem DEPOIS na árvore.
+    expect(
+      servicos.compareDocumentPosition(clube) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('mostra os benefícios oficiais e leva ao WhatsApp da casa', async () => {
+    beneficios.mockResolvedValue(COM_PLANOS)
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      barbearia: { ...CATALOGO.barbearia, telefone: '(81) 98963-4433' },
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const linha = await screen.findByText('Audax Club')
+    fireEvent.click((linha.closest('details') as HTMLElement).querySelector('summary') as HTMLElement)
 
     expect(await screen.findByText('Audax Corte')).toBeTruthy()
     expect(screen.getByText(/Corte ilimitado durante a vigência/)).toBeTruthy()
@@ -314,7 +378,10 @@ describe('Audax Club na vitrine', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    expect(await screen.findByText('Audax Club')).toBeTruthy()
+    const linha = await screen.findByText('Audax Club')
+    fireEvent.click((linha.closest('details') as HTMLElement).querySelector('summary') as HTMLElement)
+
+    expect(await screen.findByText(/Corte ilimitado durante a vigência/)).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Conhecer plano' })).toBeNull()
   })
 

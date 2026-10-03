@@ -498,6 +498,11 @@ export function CarrosselDestaques({
   )
 }
 
+/** "R$ 20,00" — o menor preço do grupo, para a linha fechada mostrar o valor. */
+function menorPreco(servicos: { preco: number }[]): number {
+  return servicos.reduce((menor, s) => Math.min(menor, s.preco), Infinity)
+}
+
 /**
  * "Todos os serviços" em sanfona, agrupada pela CATEGORIA OFICIAL da casa.
  *
@@ -505,10 +510,14 @@ export function CarrosselDestaques({
  * categoria que a equipe digita no cadastro. Serviço sem categoria cai em
  * "Outros" em vez de sumir.
  *
- * `<details>` nativo: abre e fecha sem uma linha de estado, o teclado e o
- * leitor de tela já sabem o que é, e o primeiro grupo vem aberto para a pessoa
- * não precisar descobrir que existe uma lista escondida. Depois de montado,
- * quem abre e fecha é o navegador — o React só escreve o atributo uma vez.
+ * A LINHA FECHADA carrega a informação que faz a pessoa abrir: quantos serviços
+ * tem e a partir de quanto sai. Uma linha que só escreve "Cabelo" obriga a
+ * pessoa a abrir tudo para saber se o que ela quer está ali — e era
+ * exatamente por não ver os serviços que a vitrine anterior ficou ruim.
+ *
+ * Só o PRIMEIRO grupo vem aberto, para o caminho do agendamento ter um ponto de
+ * partida visível sem depender de toque. Os demais abrem com um clique, e o
+ * navegador guarda o estado depois — quem abriu, continua aberto.
  */
 export function SanfonaServicos({
   grupos,
@@ -527,18 +536,22 @@ export function SanfonaServicos({
           open={indice === 0}
           className="group rounded-2xl border border-cream-300 bg-cream-50"
         >
-          <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-            <span className="text-[15px] font-semibold text-noir-900">
-              {grupo.categoria}
-            </span>
-            <span className="flex items-center gap-2 text-[12.5px] text-noir-500">
-              {grupo.servicos.length}
-              <span
-                aria-hidden="true"
-                className="text-[11px] transition-transform group-open:rotate-180"
-              >
-                ▼
+          <summary className="flex min-h-[58px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0">
+              <span className="block text-[15px] leading-snug font-semibold text-noir-900">
+                {grupo.categoria}
               </span>
+              <span className="mt-0.5 block text-[12.5px] text-noir-500">
+                {grupo.servicos.length}{' '}
+                {grupo.servicos.length === 1 ? 'serviço' : 'serviços'} · a partir
+                de {formatarBRL(menorPreco(grupo.servicos))}
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="shrink-0 text-[11px] text-noir-400 transition-transform group-open:rotate-180"
+            >
+              ▼
             </span>
           </summary>
           <ul className="flex flex-col gap-2 px-3 pb-3">
