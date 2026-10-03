@@ -83,6 +83,14 @@ export type ConfigBarbearia = {
   telefone: string
   instagram: string
   mapa: string
+  /**
+   * Serviços em destaque na vitrine do agendamento público, na ordem gravada.
+   *
+   * Escolha do DONO, não ranking automático: o banco não tem contagem de
+   * serviços e não vamos inventar uma. Vazio = a vitrine mostra só a lista
+   * completa, sem nenhuma seção de destaque.
+   */
+  destaques: string[]
 }
 
 export type Configuracoes = {
@@ -112,7 +120,7 @@ export const CONFIG_PADRAO: Configuracoes = {
     comissao: { percentual: COMISSAO_PADRAO },
   },
 ia: { maxSugestoes: 2, botoesInterativos: false, nomeAtendente: 'Audax' },
-  barbearia: { endereco: '', telefone: '', instagram: '', mapa: '' },
+  barbearia: { endereco: '', telefone: '', instagram: '', mapa: '', destaques: [] },
 }
 
 export type EstadoConfig = {
@@ -254,6 +262,11 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       mapa: linkValido(texto(barbearia.mapa, '', 500))
         ? texto(barbearia.mapa, '', 500)
         : '',
+      // Destaques: nomes de serviço do catálogo oficial. Servem de filtro no
+      // catálogo público — um nome que não existir simplesmente não aparece.
+      destaques: listaDeTexto(barbearia.destaques, 12).map((d) =>
+        texto(d, '', 80),
+      ),
     },
   }
 }

@@ -147,6 +147,9 @@ expect(nomes).toEqual([
   '../supabase/migrations/033_producao_total_do_snapshot.sql',
   '../supabase/migrations/034_clube_beneficios_publicos.sql',
   '../supabase/migrations/035_clube_categorias_e_beneficios.sql',
+  '../supabase/migrations/036_vitrine_publica_e_whatsapp.sql',
+  '../supabase/migrations/037_confirmacao_whatsapp_publico.sql',
+  '../supabase/migrations/038_config_destaques.sql',
 ])
   })
 
@@ -1596,5 +1599,133 @@ describe('035 · categorias, químicos e texto dos benefícios', () => {
     expect(texto).not.toMatch(/clube_pote_calcular/)
     expect(texto).not.toMatch(/update public\.clube_producao/)
     expect(texto).not.toMatch(/update public\.clube_assinaturas/)
+  })
+})
+/* ------------------------------------------------------------------ */
+/* 036/037/038 - vitrine pública e confirmação no WhatsApp             */
+/* ------------------------------------------------------------------ */
+
+describe('036 · vitrine: foto do profissional e destaques do dono', () => {
+  const bruto = sql('../supabase/migrations/036_vitrine_publica_e_whatsapp.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('o catálogo devolve a foto do PROFISSIONAL, não do serviço', () => {
+    // `servicos` NÃO tem coluna de imagem — a foto existe em `profissionais`.
+    // Inventar `s.foto` quebraria a migration inteira.
+    expect(texto).not.toMatch(/s\.foto/)
+    expect(texto).toMatch(/'foto', case when btrim\(coalesce\(p\.foto, ''\)\) = '' then '' else p\.foto end/)
+    // E a foto vazia não vira imagem quebrada na tela.
+    expect(texto).toMatch(/case when btrim\(coalesce\(p\.foto, ''\)\) = '' then ''/)
+  })
+
+  it('os destaques vêm da configuração do dono, filtrados pelo catálogo', () => {
+    expect(texto).toMatch(/'destaques', coalesce\(/)
+    expect(texto).toMatch(/valor -> 'destaques'/)
+    // Serviço fora do catálogo não vira destaque quebrado.
+    expect(texto).toMatch(/where exists \(select 1 from servicos s where s\.nome = x\.nome and s\.ativo\)/)
+    // A ordem é a que o dono gravou.
+    expect(texto).toMatch(/with ordinality as x\(nome, ordem\)/)
+    expect(texto).toMatch(/jsonb_agg\(x\.nome order by x\.ordem\)/)
+  })
+
+  it('os destaques vivem na configuração que a casa já edita', () => {
+    expect(texto).toMatch(/from configuracoes_sistema b\s*\n\s*where b\.chave = 'barbearia'/)
+  })
+
+  it('a criação pública marca a origem — e só o wrapper muda', () => {
+    expect(texto).toMatch(/set duracao_min = v_dur,\s*\n\s*origem = 'publico'/)
+    // A REGRA de vaga é intocada: quem continua autoritativa é
+    // `agendamento_publico_criar`, que este script NÃO redefine.
+    expect(texto).not.toMatch(/create or replace function public\.agendamento_publico_criar\(/)
+    expect(texto).toMatch(/create or replace function public\.agendamento_publico_criar_complementos\(/)
+  })
+
+  it('a validação dos complementos é a mesma da 027', () => {
+    for (const intacto of [
+      "if not (trim(v_item) = any (coalesce(v_base.complementos, '{}'::text[]))) then",
+      "raise exception 'Complemento indisponível para este serviço.';",
+      'v_dur := v_dur + coalesce(v_compl.duracao_min, 0);',
+      "'[Complementos: ' || array_to_string(v_nomes, ', ') || ']';",
+    ]) {
+      expect(texto, intacto).toContain(intacto)
+    }
+  })
+
+  it('não mexe em preço, tabela nem política', () => {
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/create policy/i)
+    expect(texto).not.toMatch(/update public\.servicos\s+set\s+preco/)
+    expect(texto).not.toMatch(/agendamento_publico_slots/)
+  })
+})
+
+describe('037 · o cliente recebe a confirmação no WhatsApp', () => {
+  const bruto = sql('../supabase/migrations/037_confirmacao_whatsapp_publico.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('a confirmação ao cliente cobre também o agendamento público', () => {
+    expect(texto).toMatch(/tg_op = 'INSERT' and v_ag\.origem in \('painel', 'publico'\)/)
+    expect(texto).toMatch(/tg_op = 'UPDATE' and v_ag\.origem in \('painel', 'publico'\)/)
+  })
+
+  it('a falha de WhatsApp NÃO desfaz o agendamento', () => {
+    // A porta é a MESMA tolerante a falha da 026 — o agendamento já está
+    // gravado quando o AFTER trigger roda.
+    expect(texto).toMatch(/ia_notificar_com_seguranca/)
+    expect(texto).not.toMatch(/raise exception/)
+    expect(texto).toMatch(/'confirmacao_cliente:' \|\| v_ag\.id/)
+  })
+
+  it('a deduplicação continua por agendamento', () => {
+    // Uma reserva não recebe duas confirmações, mesmo que o trigger dispare
+    // mais de uma vez.
+    expect(texto.match(/'confirmacao_cliente:' \|\| v_ag\.id/g)?.length).toBe(1)
+  })
+
+  it('a mensagem traz complemento, endereço e WhatsApp oficial', () => {
+    // O complemento é lido do marcador que o sistema já grava na observação.
+    // O `\[` é o escape do literal de regex do próprio PostgreSQL.
+    expect(texto).toContain('[Complementos:')
+    expect(texto).toMatch(/regexp_match\(v_ag\.observacao/)
+    expect(texto).toMatch(/v_casa ->> 'endereco'/)
+    expect(texto).toMatch(/v_casa ->> 'telefone'/)
+    expect(texto).toMatch(/Agendamento confirmado/)
+  })
+
+  it('campo vazio da casa NÃO vira linha na mensagem', () => {
+    // "Nunca inventar endereço": sem endereço configurado, a linha some.
+    expect(texto).toMatch(
+      /nullif\('Endereço: ' \|\| nullif\(btrim\(coalesce\(v_casa ->> 'endereco', ''\)\), ''\), 'Endereço: '\)/,
+    )
+    expect(texto).toMatch(
+      /nullif\('WhatsApp: ' \|\| nullif\(btrim\(coalesce\(v_casa ->> 'telefone', ''\)\), ''\), 'WhatsApp: '\)/,
+    )
+  })
+
+  it('o aviso ao profissional e o pós-atendimento seguem intactos', () => {
+    expect(texto).toMatch(/'profissional_agendamento:' \|\| v_ag\.id/)
+    expect(texto).toMatch(/when 'publico' then 'Agendamento online'/)
+    expect(texto).toMatch(/'pos_atendimento:' \|\| v_ag\.id/)
+    expect(texto).toMatch(/'avaliacao:' \|\| v_ag\.id/)
+  })
+})
+
+describe('038 · o dono escolhe os destaques da vitrine', () => {
+  const bruto = sql('../supabase/migrations/038_config_destaques.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('valida `destaques` na chave barbearia', () => {
+    expect(texto).toMatch(/v_chave = 'barbearia' and p_valor \? 'destaques'/)
+    expect(texto).toMatch(/jsonb_typeof\(p_valor -> 'destaques'\) <> 'array'/)
+    expect(texto).toMatch(/jsonb_array_length\(p_valor -> 'destaques'\) > 12/)
+    expect(texto).toMatch(/Destaques inválidos/)
+  })
+
+  it('o resto da validação da 030 continua igual', () => {
+    // As regras do Club e a rejeição de chave desconhecida não podem sumir.
+    expect(texto).toMatch(/v_comissao_local < 0 or v_comissao_local > 1/)
+    expect(texto).toMatch(/if p_valor \? 'comissao' then/)
+    expect(texto).toMatch(/foreach v_texto in array array\['endereco', 'instagram'\] loop/)
+    expect(texto).toMatch(/Configuração desconhecida/)
   })
 })

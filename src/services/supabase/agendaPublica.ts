@@ -36,7 +36,12 @@ export type ServicoPublico = {
   complementos?: string[]
 }
 
-export type ProfissionalPublico = { id?: string; nome: string }
+export type ProfissionalPublico = {
+  id?: string
+  nome: string
+  /** Foto do profissional; '' quando a casa não cadastrou. */
+  foto?: string
+}
 
 /** Dados oficiais da casa — vêm da configuração, nunca são digitados no código. */
 export type BarbeariaPublica = {
@@ -50,6 +55,12 @@ export type CatalogoPublico = {
   servicos: ServicoPublico[]
   profissionais: ProfissionalPublico[]
   barbearia: BarbeariaPublica
+  /**
+   * Serviços em destaque, escolhidos pelo DONO em Configurações → Barbearia.
+   * Vazio é resposta válida: a vitrine só mostra a seção quando o dono
+   * configurou. Não existe ranking automático no banco.
+   */
+  destaques: string[]
 }
 
 export type PropostaPublica = {
@@ -160,15 +171,23 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
       servicos?: unknown
       profissionais?: unknown
       barbearia?: unknown
+      destaques?: unknown
     }
+    const destaques = Array.isArray(obj.destaques)
+      ? obj.destaques.filter((d): d is string => typeof d === 'string' && d.trim() !== '')
+      : []
     return {
       servicos: Array.isArray(obj.servicos)
         ? (obj.servicos as ServicoPublico[])
         : [],
       profissionais: Array.isArray(obj.profissionais)
-        ? (obj.profissionais as ProfissionalPublico[])
+        ? (obj.profissionais as ProfissionalPublico[]).map((p) => ({
+            ...p,
+            foto: p.foto ?? '',
+          }))
         : [],
       barbearia: normalizarBarbearia(obj.barbearia),
+      destaques,
     }
   }
 
@@ -179,7 +198,7 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
     ativo?: boolean
     complementos?: string[]
   }
-  type ProfissionalLocal = { nome: string; ativo?: boolean }
+  type ProfissionalLocal = { nome: string; ativo?: boolean; foto?: string }
   const servicosLocal = lerJSON<ServicoLocal[]>(CHAVE_SERVICOS, [])
   const profissionaisLocal = lerJSON<ProfissionalLocal[]>(
     CHAVE_PROFISSIONAIS,
@@ -196,9 +215,45 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
       })),
     profissionais: profissionaisLocal
       .filter((p) => p.ativo !== false && p.nome)
-      .map((p) => ({ nome: p.nome })),
+      .map((p) => ({ nome: p.nome, foto: p.foto ?? '' })),
     barbearia: BARBEARIA_VAZIA,
+    destaques: [],
   }
+}
+
+/**
+ * Bases (expediente + bloqueios + ocupação) de vários dias, com cache em memória.
+ *
+ * A etapa de DATA precisa saber quais dias têm atendimento antes de a pessoa
+ * escolher, e cada dia é uma chamada a `agendamento_publico_slots` — a MESMA
+ * RPC, sem regra nova. O cache existe só para não repetir 14 requisições a cada
+ * volta de etapa; o dia escolhido é sempre buscado de novo antes de mostrar
+ * horários, porque vaga muda de um segundo para o outro.
+ */
+const cacheBases = new Map<string, BaseDoDia>()
+
+export async function basesDoPeriodo(
+  dias: string[],
+): Promise<Map<string, BaseDoDia | null>> {
+  const faltando = dias.filter((d) => !cacheBases.has(d))
+  if (faltando.length > 0) {
+    await Promise.all(
+      faltando.map(async (dia) => {
+        try {
+          cacheBases.set(dia, await baseDoDia(dia))
+        } catch {
+          // Dia que não respondeu fica sem base: a tela o esconde, e o dia
+          // escolhido volta a ser buscado na hora dos horários.
+          cacheBases.set(dia, null as unknown as BaseDoDia)
+        }
+      }),
+    )
+  }
+  const saida = new Map<string, BaseDoDia | null>()
+  for (const dia of dias) {
+    saida.set(dia, cacheBases.get(dia) ?? null)
+  }
+  return saida
 }
 
 /** Base do dia (expediente + bloqueios + ocupação) da MESMA fonte da Agenda. */
@@ -316,22 +371,31 @@ export async function criarAgendamentoPublico(
   const db = supabase()
   if (db) {
     const complementos = (p.complementos ?? []).map((id) => id.trim()).filter(Boolean)
-    // Com complemento entra pela RPC nova (027), que valida os ids contra a
-    // coluna oficial `servicos.complementos` e delega a MESMA criação de
-    // baixo nível. Sem complemento, segue o caminho de sempre.
-    const rpc = complementos.length
-      ? 'agendamento_publico_criar_complementos'
-      : 'agendamento_publico_criar'
-    const { data, error } = await db.rpc(rpc, {
-      p_cliente: nome,
-      p_telefone: p.telefone.trim(),
-      p_servico: p.servico,
-      p_profissional: p.profissional,
-      p_data: p.data,
-      p_horario: p.horario,
-      p_observacao: (p.observacao ?? '').trim(),
-      ...(complementos.length ? { p_complementos: complementos } : {}),
-    })
+    /*
+     * SEMPRE pelo wrapper (027/036), mesmo sem complemento.
+     *
+     * Antes havia dois caminhos e o que não tinha complemento usava a RPC de
+     * baixo nível — que deixa a origem no default 'agenda'. A origem é o que
+     * separa reserva de cliente de reserva da equipe e o que faz a confirmação
+     * chegar no WhatsApp de quem agendou. Um caminho só evita a reserva online
+     * ficar sem confirmação.
+     *
+     * A validação dos ids contra `servicos.complementos` e a delegação para a
+     * criação real continuam sendo as da RPC — aqui não há regra nova.
+     */
+    const { data, error } = await db.rpc(
+      'agendamento_publico_criar_complementos',
+      {
+        p_cliente: nome,
+        p_telefone: p.telefone.trim(),
+        p_servico: p.servico,
+        p_profissional: p.profissional,
+        p_data: p.data,
+        p_horario: p.horario,
+        p_observacao: (p.observacao ?? '').trim(),
+        p_complementos: complementos,
+      },
+    )
     if (error) {
       return {
         ok: false,

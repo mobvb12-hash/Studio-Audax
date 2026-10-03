@@ -62,6 +62,14 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 /** O que a área do cliente faz quando não há sessão: pede identificação. */
+// SÓ o conteúdo público do Clube: a casa não tem nada configurado neste
+// cenário, e a seção do Club deve simplesmente não aparecer. O resto do
+// módulo é o de verdade — o painel do cliente depende dele.
+vi.mock('@/services/supabase/painel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/supabase/painel')>()),
+  carregarBeneficiosClube: () => Promise.resolve(null),
+}))
+
 vi.mock('@/services/supabase/agendaPublica', () => ({
   carregarCatalogo: () =>
     Promise.resolve({

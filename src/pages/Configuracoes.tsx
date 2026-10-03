@@ -9,6 +9,7 @@
 //   • desligar uma notificação NÃO impede agendamento (só o envio);
 //   • benefício e link de avaliação só existem depois de configurados aqui.
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useServicos } from '@/modules/servicos/store'
 import {
   CAMPO_FORM,
   ROTULO_FORM,
@@ -111,8 +112,13 @@ function Campo({
   )
 }
 
+/*
+ * Os destaques da vitrine pública usam o mesmo `dados`/`setDados` da configuração
+ * da casa, por isso o bloco fica dentro do componente principal.
+ */
 export default function Configuracoes() {
   const [dados, setDados] = useState<Configuracoes>(CONFIG_PADRAO)
+  const { servicos } = useServicos()
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState<ChaveConfig | null>(null)
   const [erro, setErro] = useState<Record<string, string>>({})
@@ -219,6 +225,22 @@ export default function Configuracoes() {
 
   const listaPlanos = useMemo(() => Object.keys(dados.clube.beneficios), [dados.clube.beneficios])
 
+  // Vitrine pública: os serviços que existem de fato no catálogo oficial.
+  const servicosDisponiveis = useMemo(
+    () => servicos.filter((s) => s.ativo !== false).map((s) => s.nome),
+    [servicos],
+  )
+
+  /** Move um destaque na ordem da vitrine. */
+  function moverDestaque(nome: string, direcao: -1 | 1) {
+    const atual = [...dados.barbearia.destaques]
+    const i = atual.indexOf(nome)
+    const j = i + direcao
+    if (i < 0 || j < 0 || j >= atual.length) return
+    ;[atual[i], atual[j]] = [atual[j], atual[i]]
+    definirBarbearia('destaques', atual)
+  }
+
   if (carregando) {
     return (
       <div className="flex h-64 items-center justify-center text-[#8A8171]">
@@ -314,6 +336,77 @@ export default function Configuracoes() {
             onChange={(e) => definirBarbearia('mapa', e.target.value)}
           />
         </Campo>
+        {/*
+          DESTAQUES DA VITRINE PÚBLICA.
+
+          O dono marca aqui os serviços que aparecem em destaque na primeira tela
+          do `/agendar`. A lista vem do CATÁLOGO OFICIAL: nada é digitado, e por
+          isso um destaque nunca pode apontar para um serviço que não existe.
+          A ordem dos botões é a ordem em que a vitrine mostra.
+
+          Não existe ranking automático no banco — e não inventamos contagem de
+          agendamento por serviço só para ordenar uma vitrine.
+        */}
+        {servicosDisponiveis.length > 0 && (
+          <div className="mt-4 rounded-lg border border-[#E5DCC3] p-4">
+            <p className={ROTULO_FORM}>Destaques na página de agendamento</p>
+            <p className="mt-1 text-xs text-[#8A8171]">
+              Os serviços marcados aparecem primeiro para quem chega pelo
+              Instagram ou pelo link. Sem marcar nenhum, a página mostra só a
+              lista completa.
+            </p>
+            <ul className="mt-3 flex flex-col gap-2">
+              {servicosDisponiveis.map((nome) => {
+                const marcado = dados.barbearia.destaques.includes(nome)
+                const posicao = dados.barbearia.destaques.indexOf(nome)
+                return (
+                  <li
+                    key={nome}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-[#E5DCC3] px-3 py-2"
+                  >
+                    <label className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={marcado}
+                        onChange={() =>
+                          definirBarbearia(
+                            'destaques',
+                            marcado
+                              ? dados.barbearia.destaques.filter((n) => n !== nome)
+                              : [...dados.barbearia.destaques, nome],
+                          )
+                        }
+                      />
+                      <span className="truncate text-sm text-[#1C1A15]">{nome}</span>
+                    </label>
+                    {marcado && (
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Subir ${nome} na vitrine`}
+                          disabled={posicao === 0}
+                          onClick={() => moverDestaque(nome, -1)}
+                          className="min-h-[32px] rounded border border-[#E5DCC3] px-2 text-[#4A4436] disabled:opacity-40"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Descer ${nome} na vitrine`}
+                          disabled={posicao === dados.barbearia.destaques.length - 1}
+                          onClick={() => moverDestaque(nome, 1)}
+                          className="min-h-[32px] rounded border border-[#E5DCC3] px-2 text-[#4A4436] disabled:opacity-40"
+                        >
+                          ↓
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
         <p className="text-xs text-[#8A8171]">
           O telefone é o botão de WhatsApp da página pública e a resposta da IA.
           Enquanto estiver vazio, nenhum dos dois mostra número — o sistema não

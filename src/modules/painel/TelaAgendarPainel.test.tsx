@@ -42,6 +42,7 @@ const CATALOGO: CatalogoPublico = {
     { id: 'pf-italo', nome: 'Ítalo' },
   ],
   barbearia: { endereco: '', telefone: '', instagram: '', mapa: '' },
+  destaques: [],
 }
 
 const COMPLEMENTOS: ServicoComComplementos[] = [

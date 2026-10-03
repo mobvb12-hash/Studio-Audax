@@ -1,0 +1,856 @@
+// ============================================================================
+// Agendamento público — o orquestrador do fluxo passo a passo.
+//
+// Uma etapa por vez. A pessoa escolhe, a tela avança. Ela volta quando quiser e
+// o que já foi escolhido continua lá — a menos que a troca tenha tornado a
+// escolha seguinte inválida (trocar o serviço zera o dia; trocar o dia zera o
+// horário; complemento que não cabe devolve o horário).
+//
+// NENHUMA REGRA DE DISPONIBILIDADE AQUI.
+//
+// Horário livre é sempre `horariosLivresPorProfissional`, com expediente, almoço,
+// bloqueio e ocupação da Agenda. Este arquivo só lembra o que a pessoa escolheu
+// e pergunta à Agenda o que está livre.
+// ============================================================================
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import BlocoBarbearia from '@/modules/painel/telas/BlocoBarbearia'
+import { SecaoAudaxClub } from './club'
+import { irParaAreaDoCliente } from '@/modules/painel/regras'
+import {
+  carregarCatalogo,
+  criarAgendamentoPublico,
+  horariosPublicosPorProfissional,
+  type CatalogoPublico,
+} from '@/services/supabase/agendaPublica'
+import {
+  alternarComplemento as alternarComplementoEstado,
+  complementosDisponiveis,
+  dadosValidos,
+  escolherData as escolherDataEstado,
+  escolherHorario as escolherHorarioEstado,
+  escolherProfissional as escolherProfissionalEstado,
+  escolherServico as escolherServicoEstado,
+  etapaAnterior,
+  etapaBloqueia,
+  ESTADO_VAZIO,
+  invalidateHorarioSeNaoCabe,
+  selecao,
+  type EstadoAgendamento,
+  type Etapa,
+  type ItemCatalogo,
+} from './estado'
+import {
+  Aviso,
+  Botao,
+  BotaoDia,
+  BotaoHora,
+  Campo,
+  CartaoProfissional,
+  CartaoServicoVitrine,
+  Carregando,
+  Confirmacao,
+  LinhaResumo,
+  Marca,
+  Progresso,
+  Resumo,
+  Tela,
+  dataPorExtenso,
+} from './ui'
+
+/** Quantos dias à frente oferecemos, na grade de datas. */
+const DIAS_A_FRENTE = 21
+
+/** Próximos dias a partir de hoje — atalho de data sem calendário nativo. */
+function proximosDias(quantidade: number): string[] {
+  const dias: string[] = []
+  const base = new Date()
+  for (let passo = 0; passo < 45 && dias.length < quantidade; passo += 1) {
+    const d = new Date(base.getTime() + passo * 86400000)
+    // Data LOCAL (America/Recife), nunca `toISOString()`: em UTC-3, à noite,
+    // o UTC já virou o dia seguinte e ofereceríamos "hoje" como "amanhã".
+    const mes = String(d.getMonth() + 1).padStart(2, '0')
+    const dia = String(d.getDate()).padStart(2, '0')
+    dias.push(`${d.getFullYear()}-${mes}-${dia}`)
+  }
+  return dias
+}
+
+export default function FluxoAgendamento() {
+  const [catalogo, setCatalogo] = useState<CatalogoPublico | null>(null)
+  const [carregandoCatalogo, setCarregandoCatalogo] = useState(true)
+  const [tentativa] = useState(0)
+
+  const [estado, setEstado] = useState<EstadoAgendamento>(ESTADO_VAZIO)
+  const [etapa, setEtapa] = useState<Etapa>('servico')
+
+  // Horários do dia escolhido — sempre da Agenda, nunca calculados aqui.
+  const [slots, setSlots] = useState<string[]>([])
+  const [carregandoSlots, setCarregandoSlots] = useState(false)
+
+  const [erro, setErro] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [confirmado, setConfirmado] = useState<{
+    cliente: string
+    servico: string
+    complementos: string[]
+    profissional: string
+    data: string
+    horario: string
+    valor: number
+  } | null>(null)
+
+  // Guarda a escolha do passo anterior sem mostrar (o React estrita monta duas
+  // vezes em dev): só o valor importa.
+  const redirecionarPara = useRef<Etapa | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    carregarCatalogo()
+      .then((c) => {
+        if (!vivo) return
+        setCatalogo(c)
+        setCarregandoCatalogo(false)
+      })
+      .catch((e: unknown) => {
+        if (!vivo) return
+        setErro(
+          e instanceof Error ? e.message : 'Não foi possível carregar os serviços.',
+        )
+        setCarregandoCatalogo(false)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [tentativa])
+
+  const servicos = useMemo(() => catalogo?.servicos ?? [], [catalogo])
+  /*
+   * A vitrine é a página que o dono divulga no Instagram: ela NÃO pode quebrar
+   * por um campo a menos. `destaques` e `foto` são as únicas coisas novas aqui,
+   * então ambos caem no padrão (lista vazia / sem imagem) em vez de derrubar a
+   * tela inteira.
+   */
+  const { base, complementos, duracaoMin, valor } = useMemo(
+    () => selecao(estado, servicos),
+    [estado, servicos],
+  )
+  const disponiveis = useMemo(
+    () => complementosDisponiveis(servicos, estado.servicoNome),
+    [servicos, estado.servicoNome],
+  )
+
+  /* ---------------------------------------------------------------- */
+  /* Navegação                                                          */
+  /* ---------------------------------------------------------------- */
+
+  const avancar = useCallback((destino: Etapa) => {
+    redirecionarPara.current = destino
+    setEtapa(destino)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  useEffect(() => {
+    // Aplica a navegação pedida no clique (fora do setState do handler, para
+    // não quebrar a cascata de render que o lint penaliza).
+    if (redirecionarPara.current === null) return
+    const destino = redirecionarPara.current
+    redirecionarPara.current = null
+    if (destino !== etapa) setEtapa(destino)
+  }, [etapa])
+
+  const voltar = useCallback(() => {
+    avancar(etapaAnterior(etapa))
+  }, [avancar, etapa])
+
+  /* ---------------------------------------------------------------- */
+  /* Horários: sempre a regra da Agenda                                 */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Recarrega a grade sob demanda — quando o servidor diz que o horário
+   * acabou de ser ocupado. O efeito da etapa é quem busca a lista ao abrir; aqui
+   * só repetimos a busca, e é por isso que ligar o "carregando" é seguro.
+   */
+  const recarregarSlots = useCallback(async () => {
+    if (!estado.data || !estado.profissional || !duracaoMin) {
+      setSlots([])
+      return
+    }
+    setCarregandoSlots(true)
+    try {
+      const livres = await horariosPublicosPorProfissional(
+        estado.data,
+        duracaoMin,
+        [estado.profissional],
+      )
+      setSlots(livres.map((s) => s.horario))
+    } catch (e: unknown) {
+      setSlots([])
+      setErro(
+        e instanceof Error ? e.message : 'Não foi possível carregar os horários.',
+      )
+    } finally {
+      setCarregandoSlots(false)
+    }
+  }, [estado.data, estado.profissional, duracaoMin])
+
+  useEffect(() => {
+    if (etapa !== 'horario' && etapa !== 'complementos') return
+    if (!estado.data || !estado.profissional || !duracaoMin) return
+    // O estado "carregando" é ligado no EVENTO (o clique que abriu a etapa),
+    // não no corpo do efeito: é o que evita o render em cascata que o lint
+    // penaliza. Aqui só Assíncrono.
+    let vivo = true
+    void horariosPublicosPorProfissional(estado.data, duracaoMin, [
+      estado.profissional,
+    ])
+      .then((livres) => {
+        if (vivo) setSlots(livres.map((s) => s.horario))
+      })
+      .catch(() => {
+        if (vivo) setSlots([])
+      })
+    return () => {
+      vivo = false
+    }
+  }, [etapa, estado.data, estado.profissional, duracaoMin])
+
+  /**
+   * Complemento escolhido: a duração muda, então o horário pode ter deixado de
+   * caber. Buscamos a lista de novo e, se o horário sumiu, devolvemos para a
+   * pessoa escolher outro — em vez de prometer um horário que o servidor recusa.
+   */
+  const alternarComplemento = useCallback(
+    (id: string) => {
+      setErro('')
+      const proximo = alternarComplementoEstado(estado, id)
+      setEstado(proximo)
+      const novaDuracao = selecao(proximo, servicos).duracaoMin
+      if (!estado.data || !estado.profissional || !novaDuracao) return
+      void (async () => {
+        setCarregandoSlots(true)
+        try {
+          const livres = await horariosPublicosPorProfissional(
+            estado.data,
+            novaDuracao,
+            [estado.profissional],
+          )
+          const horas = livres.map((s) => s.horario)
+          setSlots(horas)
+          const revisto = invalidateHorarioSeNaoCabe(proximo, horas)
+          if (revisto.horario === '') {
+            setEstado(revisto)
+            setErro(
+              'Esse complemento não cabe mais no horário escolhido. Escolha outro horário.',
+            )
+          }
+        } catch {
+          setSlots([])
+        } finally {
+          setCarregandoSlots(false)
+        }
+      })()
+    },
+    [estado, servicos],
+  )
+
+  /* ---------------------------------------------------------------- */
+  /* Escolhas                                                           */
+  /* ---------------------------------------------------------------- */
+
+  function escolherServico(nome: string) {
+    const proximo = escolherServicoEstado(estado, nome, [])
+    setEstado(proximo)
+    setErro('')
+    avancar('profissional')
+  }
+
+  function escolherProfissional(nome: string) {
+    setEstado(escolherProfissionalEstado(estado, nome))
+    setErro('')
+    avancar('data')
+  }
+
+  function escolherData(iso: string) {
+    setEstado(escolherDataEstado(estado, iso))
+    setErro('')
+    avancar('horario')
+  }
+
+  function escolherHorario(hora: string) {
+    setEstado(escolherHorarioEstado(estado, hora))
+    setErro('')
+    avancar('complementos')
+  }
+
+  async function confirmar() {
+    if (enviando || !base || !dadosValidos(estado)) return
+    setErro('')
+    setEnviando(true)
+    try {
+      const resultado = await criarAgendamentoPublico({
+        cliente: estado.nome,
+        telefone: estado.telefone,
+        servico: base.nome,
+        profissional: estado.profissional,
+        data: estado.data,
+        horario: estado.horario,
+        observacao: estado.observacao,
+        complementos: estado.complementoIds,
+      })
+      if (!resultado.ok) {
+        setErro(resultado.erro)
+        // Horário tomado entre a lista e o envio: volta para a etapa de
+        // horário com a lista nova, sem perder o que a pessoa escolheu.
+        if (/ocupado|conflito|indispon/i.test(resultado.erro)) {
+          avancar('horario')
+          await recarregarSlots()
+        }
+        return
+      }
+      setConfirmado({
+        cliente: estado.nome.trim(),
+        servico: base.nome,
+        complementos: complementos.map((c) => c.nome),
+        profissional: estado.profissional,
+        data: estado.data,
+        horario: estado.horario,
+        valor,
+      })
+      avancar('confirmacao')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  function recomecar() {
+    setConfirmado(null)
+    setEstado(ESTADO_VAZIO)
+    setSlots([])
+    setErro('')
+    avancar('servico')
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Telas                                                              */
+  /* ---------------------------------------------------------------- */
+
+  if (carregandoCatalogo) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-cream-100">
+        <Carregando texto="Carregando os serviços…" />
+      </div>
+    )
+  }
+
+  if (!catalogo || catalogo.servicos.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-cream-100 px-4">
+        <div className="w-full max-w-md rounded-2xl border border-cream-300 bg-cream-50 p-6 text-center">
+          <h1 className="font-serif-display text-[20px] font-semibold text-noir-900">
+            Studio Audax
+          </h1>
+          <p className="mt-2 text-[14px] text-noir-500">
+            Nenhum serviço disponível no momento. Tente mais tarde.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <EtapaConteudo
+      etapa={etapa}
+      catalogo={catalogo}
+      estado={estado}
+      base={base}
+      complementos={complementos}
+      disponiveis={disponiveis}
+      duracaoMin={duracaoMin}
+      valor={valor}
+      slots={slots}
+      carregandoSlots={carregandoSlots}
+      erro={erro}
+      enviando={enviando}
+      confirmado={confirmado}
+      aoEscolherServico={escolherServico}
+      aoEscolherProfissional={escolherProfissional}
+      aoEscolherData={escolherData}
+      aoEscolherHorario={escolherHorario}
+      aoAlternarComplemento={alternarComplemento}
+      aoConfirmar={() => void confirmar()}
+      aoRecomecar={recomecar}
+      aoVoltar={voltar}
+      aoAvancar={avancar}
+      aoDefinir={(campo, novo) =>
+        setEstado((atual) => ({ ...atual, [campo]: novo }))
+      }
+    />
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* As telas, separadas para o arquivo não ficar gigante                  */
+/* ------------------------------------------------------------------ */
+
+type PropsEtapa = {
+  etapa: Etapa
+  catalogo: CatalogoPublico
+  estado: EstadoAgendamento
+  base: ReturnType<typeof selecao>['base']
+  complementos: ReturnType<typeof selecao>['complementos']
+  disponiveis: ReturnType<typeof selecao>['complementos']
+  duracaoMin: number
+  valor: number
+  slots: string[]
+  carregandoSlots: boolean
+  erro: string
+  enviando: boolean
+  confirmado: {
+    cliente: string
+    servico: string
+    complementos: string[]
+    profissional: string
+    data: string
+    horario: string
+    valor: number
+  } | null
+  aoEscolherServico: (nome: string) => void
+  aoEscolherProfissional: (nome: string) => void
+  aoEscolherData: (iso: string) => void
+  aoEscolherHorario: (hora: string) => void
+  aoAlternarComplemento: (id: string) => void
+  aoConfirmar: () => void
+  aoRecomecar: () => void
+  aoVoltar: () => void
+  /** Avanço explícito: "Continuar" na etapa de complementos e de dados. */
+  aoAvancar: (destino: Etapa) => void
+  aoDefinir: (campo: 'nome' | 'telefone' | 'observacao', valor: string) => void
+}
+
+function EtapaConteudo(props: PropsEtapa) {
+  const { etapa } = props
+  if (etapa === 'servico') return <EtapaServicos {...props} />
+  if (etapa === 'profissional') return <EtapaProfissional {...props} />
+  if (etapa === 'data') return <EtapaData {...props} />
+  if (etapa === 'horario') return <EtapaHorario {...props} />
+  if (etapa === 'complementos') return <EtapaComplementos {...props} />
+  if (etapa === 'dados') return <EtapaDados {...props} />
+  if (etapa === 'resumo') return <EtapaResumo {...props} />
+  return <EtapaConfirmacao {...props} />
+}
+
+/**
+ * Resolve os destaques do dono contra o catálogo.
+ *
+ * `destaques` é uma lista de NOMES escolhida pelo dono. Se um nome não existir
+ * mais no catálogo (serviço desativado ou renomeado), ele simplesmente não
+ * aparece — a vitrine nunca mostra um card que aponta para nada.
+ *
+ * Aceita lista vazia e `undefined`: é o estado normal de quem ainda não
+ * configurou, e a vitrine só esconde a seção.
+ */
+function normalizarDestaques(
+  nomes: string[] | undefined,
+  servicos: ItemCatalogo[],
+): ItemCatalogo[] {
+  return (nomes ?? [])
+    .map((nome) => servicos.find((s) => s.nome === nome))
+    .filter((s): s is ItemCatalogo => Boolean(s))
+}
+
+/** Vitrine: destaques, todos os serviços e os dados da casa. */
+function EtapaServicos({
+  catalogo,
+  estado,
+  aoEscolherServico,
+}: PropsEtapa) {
+  const destaques = normalizarDestaques(catalogo.destaques, catalogo.servicos)
+  const resto = catalogo.servicos.filter((s) => !destaques.some((d) => d.nome === s.nome))
+
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <header className="mb-6 text-center">
+        <Marca />
+        <h1 className="mt-4 font-serif-display text-[28px] leading-tight font-semibold text-noir-900">
+          Agende seu horário
+        </h1>
+        <p className="mx-auto mt-2 max-w-sm text-[14.5px] leading-relaxed text-noir-500">
+          Escolha o serviço e a gente cuida do resto.
+        </p>
+      </header>
+
+      {destaques.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+            Destaques da casa
+          </h2>
+          <div className="flex flex-col gap-2">
+            {destaques.map((s) => (
+              <CartaoServicoVitrine
+                key={s.id ?? s.nome}
+                nome={s.nome}
+                preco={s.preco}
+                duracaoMin={s.duracaoMin}
+                selecionado={estado.servicoNome === s.nome}
+                aoEscolher={() => aoEscolherServico(s.nome)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="mb-6">
+        <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+          Todos os serviços
+        </h2>
+        <div className="flex flex-col gap-2">
+          {resto.map((s) => (
+            <CartaoServicoVitrine
+              key={s.id ?? s.nome}
+              nome={s.nome}
+              preco={s.preco}
+              duracaoMin={s.duracaoMin}
+              selecionado={estado.servicoNome === s.nome}
+              aoEscolher={() => aoEscolherServico(s.nome)}
+            />
+          ))}
+        </div>
+      </section>
+
+      <div className="mt-6">
+        <SecaoAudaxClub />
+      </div>
+      <div className="mt-6">
+        <BlocoBarbearia barbearia={catalogo.barbearia} />
+      </div>
+    </main>
+  )
+}
+
+function EtapaProfissional({ catalogo, estado, aoEscolherProfissional, aoVoltar }: PropsEtapa) {
+  const servico = catalogo.servicos.find((s) => s.nome === estado.servicoNome)
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="profissional" />
+      <Tela
+        etapa="profissional"
+        titulo="Escolha seu barbeiro"
+        descricao={
+          servico
+            ? `Para ${servico.nome}. Quem estiver disponível aparece aqui.`
+            : undefined
+        }
+        voltar={aoVoltar}
+      >
+        <div className="flex flex-col gap-2">
+          {(catalogo.profissionais ?? []).map((p) => (
+            <CartaoProfissional
+              key={p.id ?? p.nome}
+              nome={p.nome}
+              foto={p.foto}
+              selecionado={estado.profissional === p.nome}
+              aoEscolher={() => aoEscolherProfissional(p.nome)}
+            />
+          ))}
+        </div>
+      </Tela>
+    </main>
+  )
+}
+
+function EtapaData({ estado, aoEscolherData, aoVoltar }: PropsEtapa) {
+  const dias = useMemo(() => proximosDias(DIAS_A_FRENTE), [])
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="data" />
+      <Tela
+        etapa="data"
+        titulo="Escolha o dia"
+        descricao={`Com ${estado.profissional}.`}
+        voltar={aoVoltar}
+      >
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+          {dias.map((iso) => (
+            <BotaoDia
+              key={iso}
+              iso={iso}
+              selecionado={estado.data === iso}
+              aoEscolher={() => aoEscolherData(iso)}
+            />
+          ))}
+        </div>
+      </Tela>
+    </main>
+  )
+}
+
+function EtapaHorario({
+  estado,
+  slots,
+  carregandoSlots,
+  erro,
+  aoEscolherHorario,
+  aoVoltar,
+}: PropsEtapa) {
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="horario" />
+      <Tela
+        etapa="horario"
+        titulo="Horários disponíveis"
+        descricao={`${estado.profissional} · ${dataPorExtenso(estado.data)}`}
+        voltar={aoVoltar}
+      >
+        {erro && <Aviso texto={erro} />}
+        {carregandoSlots && <Carregando texto="Buscando horários…" />}
+        {!carregandoSlots && slots.length === 0 && (
+          <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
+            Não há horário livre neste dia para este profissional. Escolha outro
+            dia.
+          </p>
+        )}
+        {!carregandoSlots && slots.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {slots.map((hora) => (
+              <BotaoHora
+                key={hora}
+                hora={hora}
+                selecionado={estado.horario === hora}
+                aoEscolher={() => aoEscolherHorario(hora)}
+              />
+            ))}
+          </div>
+        )}
+      </Tela>
+    </main>
+  )
+}
+
+function EtapaComplementos({
+  estado,
+  disponiveis,
+  erro,
+  aoAlternarComplemento,
+  aoVoltar,
+  aoAvancar,
+  catalogo,
+}: PropsEtapa) {
+  const prosseguir = () => aoAvancar('dados')
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="complementos" />
+      <Tela
+        etapa="complementos"
+        titulo="Quer completar seu atendimento?"
+        descricao={
+          disponiveis.length === 0
+            ? 'A casa não cadastrou complementos para este serviço.'
+            : 'Sugestões da casa para este serviço. Nada é cobrado sem você escolher.'
+        }
+        voltar={aoVoltar}
+      >
+        {erro && <Aviso texto={erro} />}
+        <div className="flex flex-col gap-2">
+          {disponiveis.map((c) => {
+            const marcado = Boolean(c.id) && estado.complementoIds.includes(c.id as string)
+            return (
+              <button
+                key={c.id ?? c.nome}
+                type="button"
+                onClick={() => c.id && aoAlternarComplemento(c.id)}
+                aria-pressed={marcado}
+                className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                  marcado
+                    ? 'border-gold-600 bg-gold-200/50'
+                    : 'border-cream-300 bg-cream-50 hover:border-gold-400'
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-semibold text-noir-900">
+                    {c.nome}
+                  </span>
+                  <span className="block text-[12.5px] text-noir-500">
+                    {c.duracaoMin} min
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-[14px] font-semibold text-noir-800">
+                    R$ {c.preco.toFixed(2).replace('.', ',')}
+                  </span>
+                  <span className="block text-[10.5px] font-bold tracking-[0.1em] text-gold-700 uppercase">
+                    {marcado ? 'Adicionado' : 'Adicionar'}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="mt-5">
+          <Botao aoClicar={prosseguir} variante="primario">
+            Continuar
+          </Botao>
+        </div>
+        <p className="mt-3 text-[12px] text-noir-500">
+          Studio Audax · {catalogo.barbearia.endereco}
+        </p>
+      </Tela>
+    </main>
+  )
+}
+
+function EtapaDados({ estado, erro, aoDefinir, aoVoltar, aoAvancar }: PropsEtapa) {
+  const [tentou, setTentou] = useState(false)
+  const valido = dadosValidos(estado)
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="dados" />
+      <Tela
+        etapa="dados"
+        titulo="Seus dados"
+        descricao="Para confirmar e para a gente falar com você."
+        voltar={aoVoltar}
+      >
+        {erro && <Aviso texto={erro} />}
+        <div className="flex flex-col gap-3">
+          <Campo
+            id="ag-nome"
+            rotulo="Nome"
+            valor={estado.nome}
+            autoComplete="name"
+            aoMudar={(v) => aoDefinir('nome', v)}
+          />
+          <Campo
+            id="ag-fone"
+            rotulo="Telefone com DDD"
+            valor={estado.telefone}
+            placeholder="(81) 99999-9999"
+            inputMode="tel"
+            autoComplete="tel"
+            aoMudar={(v) => aoDefinir('telefone', v)}
+          />
+        </div>
+        {tentou && !valido && (
+          <p role="alert" className="mt-3 text-[13px] text-red-700">
+            Informe um nome e um telefone com DDD para continuar.
+          </p>
+        )}
+        <div className="mt-5">
+          <Botao
+            variante="primario"
+            aoClicar={() => {
+              setTentou(true)
+              if (valido) aoAvancar('resumo')
+            }}
+          >
+            Continuar
+          </Botao>
+        </div>
+      </Tela>
+    </main>
+  )
+}
+
+function EtapaResumo({
+  estado,
+  catalogo,
+  base,
+  complementos,
+  duracaoMin,
+  valor,
+  erro,
+  enviando,
+  aoConfirmar,
+  aoVoltar,
+}: PropsEtapa) {
+  const bloqueado = etapaBloqueia(estado, 'resumo')
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="resumo" />
+      <Tela
+        etapa="resumo"
+        titulo="Confira seu horário"
+        descricao="Confira antes de confirmar."
+        voltar={aoVoltar}
+      >
+        {erro && <Aviso texto={erro} />}
+        <Resumo>
+          <LinhaResumo rotulo="Serviço" valor={base?.nome ?? ''} />
+          {complementos.length > 0 && (
+            <LinhaResumo
+              rotulo="Complementos"
+              valor={complementos.map((c) => c.nome).join(', ')}
+            />
+          )}
+          <LinhaResumo rotulo="Profissional" valor={estado.profissional} />
+          <LinhaResumo rotulo="Data" valor={dataPorExtenso(estado.data)} />
+          <LinhaResumo rotulo="Horário" valor={estado.horario} />
+          <LinhaResumo rotulo="Duração" valor={`${duracaoMin} min`} />
+          <LinhaResumo
+            rotulo="Valor"
+            valor={`R$ ${valor.toFixed(2).replace('.', ',')}`}
+          />
+        </Resumo>
+        {catalogo.barbearia.endereco && (
+          <p className="mt-3 text-[13px] leading-relaxed text-noir-600">
+            Studio Audax
+            <br />
+            {catalogo.barbearia.endereco}
+          </p>
+        )}
+        <div className="mt-5">
+          <Botao
+            variante="primario"
+            aoClicar={aoConfirmar}
+            desabilitado={bloqueado || enviando}
+          >
+            {enviando ? 'Confirmando…' : 'Confirmar agendamento'}
+          </Botao>
+        </div>
+      </Tela>
+    </main>
+  )
+}
+
+function EtapaConfirmacao({ confirmado, catalogo, aoRecomecar }: PropsEtapa) {
+  if (!confirmado) return null
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Confirmacao
+        titulo="Agendamento confirmado!"
+        frase={`${confirmado.cliente}, seu horário com ${confirmado.profissional} está reservado.`}
+        acoes={
+          <>
+            {/* Vai para a ÁREA DO CLIENTE pela URL oficial — não para o
+                painel nem para um hash que ninguém pode divulgar. */}
+            <Botao variante="primario" aoClicar={() => irParaAreaDoCliente('agendamentos')}>
+              Ver meu agendamento
+            </Botao>
+            <Botao aoClicar={aoRecomecar}>Voltar ao início</Botao>
+          </>
+        }
+      >
+        <div className="mt-4 space-y-1.5 text-left">
+          <LinhaResumo rotulo="Serviço" valor={confirmado.servico} />
+          {confirmado.complementos.length > 0 && (
+            <LinhaResumo
+              rotulo="Complementos"
+              valor={confirmado.complementos.join(', ')}
+            />
+          )}
+          <LinhaResumo rotulo="Profissional" valor={confirmado.profissional} />
+          <LinhaResumo rotulo="Data" valor={dataPorExtenso(confirmado.data)} />
+          <LinhaResumo rotulo="Horário" valor={confirmado.horario} />
+        </div>
+        {catalogo.barbearia.endereco && (
+          <p className="mt-4 text-left text-[13px] leading-relaxed text-noir-600">
+            Studio Audax
+            <br />
+            {catalogo.barbearia.endereco}
+          </p>
+        )}
+      </Confirmacao>
+    </main>
+  )
+}
+

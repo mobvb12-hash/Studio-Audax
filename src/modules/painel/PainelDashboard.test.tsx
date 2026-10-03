@@ -58,9 +58,11 @@ describe('PainelDashboard', () => {
     render(<PainelDashboard />)
 
     await waitFor(() =>
-      expect(screen.getByText('Olá, Ana')).toBeTruthy(),
+      expect(screen.getByText('Olá, Ana!')).toBeTruthy(),
     )
-    expect(screen.getByText('Próximo agendamento')).toBeTruthy()
+    expect(screen.getByText('Seu próximo horário')).toBeTruthy()
+    // A ação de ver o agendamento é explícita.
+    expect(screen.getByRole('button', { name: 'Ver agendamento' })).toBeTruthy()
     expect(screen.getByText('Corte')).toBeTruthy()
     expect(screen.getByText('Últimos atendimentos')).toBeTruthy()
     expect(screen.getByText('Barba')).toBeTruthy()
@@ -74,10 +76,10 @@ describe('PainelDashboard', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('Você ainda não tem um agendamento marcado.'),
+        screen.getByText('Você ainda não possui um próximo horário.'),
       ).toBeTruthy(),
     )
-    expect(screen.getByRole('button', { name: 'Agendar horário' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Agendar meu horário' })).toBeTruthy()
     expect(screen.queryByText('Últimos atendimentos')).toBeNull()
   })
 
@@ -97,7 +99,7 @@ describe('PainelDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
     await waitFor(() =>
       expect(
-        screen.getByText('Você ainda não tem um agendamento marcado.'),
+        screen.getByText('Você ainda não possui um próximo horário.'),
       ).toBeTruthy(),
     )
   })

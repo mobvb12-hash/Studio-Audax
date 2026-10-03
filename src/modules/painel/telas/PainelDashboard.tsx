@@ -107,33 +107,44 @@ export default function PainelDashboard() {
     <div className="flex flex-col gap-6">
       <header>
         <h1 className="font-serif-display text-[24px] leading-tight font-semibold text-noir-900">
-          {primeiroNome ? `Olá, ${primeiroNome}` : 'Seu painel'}
+          {primeiroNome ? `Olá, ${primeiroNome}!` : 'Seu painel'}
         </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-noir-500">
           Acompanhe seus horários e faça novos agendamentos.
         </p>
       </header>
 
-      <Secao titulo="Próximo agendamento">
+      <Secao titulo="Seu próximo horário">
         {proximo ? (
           <>
             <CartaoAgendamento agendamento={proximo} destaque />
-            {proximos.length > 1 && (
+            <div className="mt-3 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => navegarPainel('agendamentos')}
-                className="mt-3 text-[13px] font-medium text-noir-500 hover:text-noir-900"
+                className="min-h-[44px] w-full rounded-xl border border-cream-300 px-4 text-[14px] font-medium text-noir-800 hover:border-gold-400"
               >
-                + {proximos.length - 1}{' '}
-                {proximos.length - 1 === 1
-                  ? 'outro agendamento futuro'
-                  : 'outros agendamentos futuros'}
+                Ver agendamento
               </button>
-            )}
+              {proximos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => navegarPainel('agendamentos')}
+                  className="text-[13px] font-medium text-noir-500 hover:text-noir-900"
+                >
+                  + {proximos.length - 1}{' '}
+                  {proximos.length - 1 === 1
+                    ? 'outro agendamento futuro'
+                    : 'outros agendamentos futuros'}
+                </button>
+              )}
+            </div>
           </>
         ) : (
-          <EstadoVazio titulo="Você ainda não tem um agendamento marcado.">
-            <Botao aoClicar={agendar}>Agendar horário</Botao>
+          <EstadoVazio titulo="Você ainda não possui um próximo horário.">
+            <Botao aoClicar={agendar} variante="primario">
+              Agendar meu horário
+            </Botao>
           </EstadoVazio>
         )}
       </Secao>
