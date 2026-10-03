@@ -8,6 +8,7 @@ import {
   type CatalogoPublico,
 } from '@/services/supabase/agendaPublica'
 import type { SlotLivre } from '@/modules/agenda/regras'
+import { carregarBeneficiosClube } from '@/services/supabase/painel'
 
 /**
  * O fluxo do agendamento público, passo a passo.
@@ -51,6 +52,7 @@ vi.mock('@/services/supabase/painel', () => ({
 const catalogo = vi.mocked(carregarCatalogo)
 const slots = vi.mocked(horariosPublicosPorProfissional)
 const criar = vi.mocked(criarAgendamentoPublico)
+const beneficios = vi.mocked(carregarBeneficiosClube)
 
 const CATALOGO: CatalogoPublico = {
   servicos: [
@@ -59,9 +61,25 @@ const CATALOGO: CatalogoPublico = {
       nome: 'Corte Audax',
       preco: 30,
       duracaoMin: 30,
+      categoria: 'Cabelo',
       complementos: ['srv-barba'],
     },
-    { id: 'srv-barba', nome: 'Barba', preco: 20, duracaoMin: 20, complementos: [] },
+    {
+      id: 'srv-barba',
+      nome: 'Barba',
+      preco: 20,
+      duracaoMin: 20,
+      categoria: 'Barba',
+      complementos: [],
+    },
+    {
+      id: 'srv-luzes',
+      nome: 'Luzes',
+      preco: 90,
+      duracaoMin: 60,
+      categoria: 'Tratamento',
+      complementos: [],
+    },
   ],
   profissionais: [
     { id: 'pf-cleiton', nome: 'Cleiton Silva', foto: '' },
@@ -72,6 +90,7 @@ const CATALOGO: CatalogoPublico = {
     telefone: '',
     instagram: '@studioaudax__',
     mapa: '',
+    fotos: [],
   },
   destaques: ['Barba'],
 }
@@ -93,7 +112,9 @@ beforeEach(() => {
   catalogo.mockReset()
   slots.mockReset()
   criar.mockReset()
+  beneficios.mockReset()
   catalogo.mockResolvedValue(CATALOGO)
+  beneficios.mockResolvedValue(null)
   // 08:00 e 09:00 livres; 10:00 ocupado. A grade é a REAL devolvida pela Agenda.
   slots.mockResolvedValue([
     { horario: '08:00', profissionais: ['Cleiton Silva'] },
@@ -111,14 +132,15 @@ describe('vitrine (primeira tela)', () => {
     expect(await screen.findByText('Agende seu horário')).toBeTruthy()
     // Serviço do catálogo, com nome e preço vindos do banco.
     expect(screen.getByRole('button', { name: /^Corte Audax - R\$/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /^Barba - R\$/ })).toBeTruthy()
+    // Destaque do dono: mesmo serviço, botão de agendar.
+    expect(screen.getByRole('button', { name: 'Agendar Barba' })).toBeTruthy()
   })
 
-  it('cada serviço tem o botão ESCOLHER escrito', async () => {
+  it('cada serviço da lista tem o botão ESCOLHER escrito', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    for (const nome of ['Corte Audax', 'Barba']) {
+    for (const nome of ['Corte Audax', 'Luzes']) {
       const cartao = screen.getByRole('button', { name: new RegExp(`^${nome} -`) })
       expect(cartao.textContent).toContain('Escolher')
       expect(cartao.textContent).toContain('min')
@@ -131,18 +153,100 @@ describe('vitrine (primeira tela)', () => {
 
     expect(screen.getByText('Destaques da casa')).toBeTruthy()
     // O destaque não é repetido na lista de todos.
-    const cartoesBarba = screen.getAllByRole('button', { name: /^Barba - R\$/ })
-    expect(cartoesBarba).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Agendar Barba' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /^Barba - R\$/ })).toBeNull()
   })
 
-  it('sem destaques configurados, a seção some', async () => {
+  it('o destaque some sem configuração, mas o serviço continua na lista', async () => {
     catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
     expect(screen.queryByText('Destaques da casa')).toBeNull()
-    // E o serviço continua disponível na lista completa.
+    expect(screen.queryByRole('button', { name: 'Agendar Barba' })).toBeNull()
+    // E o serviço continua disponível na lista completa, dentro do grupo Barba.
     expect(screen.getByRole('button', { name: /^Barba - R\$/ })).toBeTruthy()
+  })
+
+  it('agrupa a lista pela categoria oficial da casa, e o primeiro grupo vem aberto', async () => {
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const grupos = screen.getAllByRole('group')
+    expect(grupos).toHaveLength(3)
+    expect(grupos.map((g) => g.getAttribute('open') !== null)).toEqual([
+      true,
+      false,
+      false,
+    ])
+    // A categoria é a que o dono digitou no cadastro — a sanfona não inventa.
+    expect(grupos[0].textContent).toContain('Cabelo')
+    expect(grupos[1].textContent).toContain('Barba')
+    expect(grupos[2].textContent).toContain('Tratamento')
+  })
+
+  it('serviço sem categoria vai para "Outros" em vez de sumir', async () => {
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      destaques: [],
+      servicos: [{ id: 'srv-x', nome: 'Pezinho', preco: 15, duracaoMin: 10 }],
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(screen.getByText('Outros')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Pezinho - R\$/ })).toBeTruthy()
+  })
+
+  it('abre e fecha a sanfona', async () => {
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const grupos = screen.getAllByRole('group')
+    fireEvent.click(grupos[2].querySelector('summary') as HTMLElement)
+    expect(grupos[2].getAttribute('open')).not.toBeNull()
+  })
+
+  it('mostra a equipe, com a foto que a casa cadastrou', async () => {
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      profissionais: [
+        { id: 'pf-cleiton', nome: 'Cleiton Silva', foto: 'https://fotos/c.png' },
+        { id: 'pf-italo', nome: 'Italo Santos', foto: '' },
+      ],
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(screen.getByText('Nossa equipe')).toBeTruthy()
+    const imagem = document.querySelector('img[src="https://fotos/c.png"]')
+    expect(imagem).not.toBeNull()
+    // Sem foto, cai na inicial do nome.
+    expect(screen.getByText('I')).toBeTruthy()
+  })
+
+  it('galeria só aparece com foto cadastrada pela casa', async () => {
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      barbearia: {
+        ...CATALOGO.barbearia,
+        fotos: ['https://fotos/casa1.jpg', 'https://fotos/casa2.jpg'],
+      },
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(screen.getByLabelText('Fotos do Studio Audax')).toBeTruthy()
+    expect(document.querySelector('img[src="https://fotos/casa1.jpg"]')).not.toBeNull()
+  })
+
+  it('sem foto, a galeria não existe — nada de imagem de demonstração', async () => {
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(screen.queryByLabelText('Fotos do Studio Audax')).toBeNull()
   })
 
   it('mostra os dados públicos da casa', async () => {
@@ -163,6 +267,62 @@ describe('vitrine (primeira tela)', () => {
     render(<AgendarPublico />)
 
     expect(await screen.findByText(/Nenhum serviço disponível/)).toBeTruthy()
+  })
+})
+
+describe('Audax Club na vitrine', () => {
+  it('mostra os benefícios oficiais e leva ao WhatsApp da casa', async () => {
+    beneficios.mockResolvedValue({
+      coberturas: { cabelo: ['Cabelo'] },
+      desconto: { quimicos: 0.1, produtos: 0.1 },
+      rotulos: { cabelo: 'Audax Corte' },
+      textos: { cabelo: ['Corte ilimitado durante a vigência'] },
+    })
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      barbearia: { ...CATALOGO.barbearia, telefone: '(81) 98963-4433' },
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(await screen.findByText('Audax Corte')).toBeTruthy()
+    expect(screen.getByText(/Corte ilimitado durante a vigência/)).toBeTruthy()
+    /*
+     * O botão é a conversa no WhatsApp OFICIAL — com o nome do plano na
+     * mensagem e nenhum preço, que não está em configuração nenhuma.
+     */
+    const links = screen.getAllByRole('link', { name: 'Conhecer plano' })
+    const doCorte = links.find((l) =>
+      decodeURIComponent(l.getAttribute('href') ?? '').includes('Audax Corte'),
+    )
+    expect(doCorte).toBeTruthy()
+    const href = doCorte?.getAttribute('href') ?? ''
+    expect(href.startsWith('https://wa.me/5581989634433?text=')).toBe(true)
+    expect(decodeURIComponent(href)).not.toContain('R$')
+    for (const link of links) {
+      expect(link.getAttribute('href') ?? '').toMatch(/^https:\/\/wa\.me\/55/)
+    }
+  })
+
+  it('sem telefone oficial o botão some — nada de número inventado', async () => {
+    beneficios.mockResolvedValue({
+      coberturas: { cabelo: ['Cabelo'] },
+      desconto: { quimicos: 0, produtos: 0 },
+      rotulos: {},
+      textos: { cabelo: ['Corte ilimitado durante a vigência'] },
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(await screen.findByText('Audax Club')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Conhecer plano' })).toBeNull()
+  })
+
+  it('sem configuração do Club a seção inteira não aparece', async () => {
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    expect(screen.queryByText('Audax Club')).toBeNull()
   })
 })
 
@@ -353,7 +513,7 @@ describe('complementos', () => {
     // Recomeça escolhendo a Barba, que não tem complementos.
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Barba - R\$/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agendar Barba' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()

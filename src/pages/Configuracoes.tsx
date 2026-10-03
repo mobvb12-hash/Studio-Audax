@@ -241,6 +241,22 @@ export default function Configuracoes() {
     definirBarbearia('destaques', atual)
   }
 
+  /** Troca o link de uma foto da galeria, na posição dela. */
+  function trocarFoto(indice: number, valor: string) {
+    const atual = [...dados.barbearia.fotos]
+    if (indice < 0 || indice >= atual.length) return
+    atual[indice] = valor
+    definirBarbearia('fotos', atual)
+  }
+
+  /** Remove uma foto da galeria. */
+  function removerFoto(indice: number) {
+    definirBarbearia(
+      'fotos',
+      dados.barbearia.fotos.filter((_, i) => i !== indice),
+    )
+  }
+
   if (carregando) {
     return (
       <div className="flex h-64 items-center justify-center text-[#8A8171]">
@@ -412,6 +428,73 @@ export default function Configuracoes() {
           Enquanto estiver vazio, nenhum dos dois mostra número — o sistema não
           inventa telefone. O mapa, se vazio, é montado a partir do endereço.
         </p>
+
+        {/*
+          GALERIA DA CASA.
+
+          Os links das fotos que aparecem no topo da vitrine do `/agendar`, na
+          ordem digitada. O sistema não sobe arquivo: a foto é um link, como o
+          mapa e o Instagram — quem publica o `/agendar` já tem as imagens em
+          algum lugar com URL.
+
+          Sem foto nenhuma, a galeria não aparece: a vitrine abre direto nos
+          serviços. Só http(s) é aceito, porque a foto entra como `<img src>`.
+        */}
+        <div className="mt-4 rounded-lg border border-[#E5DCC3] p-4">
+          <p className={ROTULO_FORM}>Fotos da barbearia</p>
+          <p className="mt-1 text-xs text-[#8A8171]">
+            Até 8 links de fotos da casa, na ordem em que devem aparecer.
+            Sem nenhuma, a página de agendamento abre direto nos serviços.
+          </p>
+          {dados.barbearia.fotos.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-2">
+              {dados.barbearia.fotos.map((foto, indice) => (
+                <li key={indice} className="flex items-center gap-2">
+                  {foto ? (
+                    <img
+                      src={foto}
+                      alt=""
+                      className="h-12 w-16 shrink-0 rounded border border-[#E5DCC3] object-cover"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="flex h-12 w-16 shrink-0 items-center justify-center rounded border border-[#E5DCC3] text-[10px] text-[#8A8171]"
+                    >
+                      sem foto
+                    </span>
+                  )}
+                  <input
+                    className={CAMPO_FORM}
+                    placeholder="https://…"
+                    aria-label={`Link da foto ${indice + 1}`}
+                    value={foto}
+                    onChange={(e) => trocarFoto(indice, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Remover foto ${indice + 1}`}
+                    onClick={() => removerFoto(indice)}
+                    className="min-h-[32px] shrink-0 rounded border border-[#E5DCC3] px-2 text-[#4A4436]"
+                  >
+                    Remover
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {dados.barbearia.fotos.length < 8 && (
+            <button
+              type="button"
+              onClick={() =>
+                definirBarbearia('fotos', [...dados.barbearia.fotos, ''])
+              }
+              className="mt-3 min-h-[36px] rounded-lg border border-[#E5DCC3] px-3 text-[13px] font-semibold text-[#4A4436]"
+            >
+              + Adicionar foto
+            </button>
+          )}
+        </div>
       </Caixa>
 
       <Caixa

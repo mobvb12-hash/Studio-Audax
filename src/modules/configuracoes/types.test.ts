@@ -104,6 +104,61 @@ describe('normalizarConfiguracoes', () => {
   })
 })
 
+describe('galeria da barbearia (barbearia.fotos)', () => {
+  it('lê a lista na ordem gravada', () => {
+    const config = normalizarConfiguracoes({
+      barbearia: { fotos: ['https://fotos/1.jpg', 'https://fotos/2.jpg'] },
+    })
+    expect(config.barbearia.fotos).toEqual([
+      'https://fotos/1.jpg',
+      'https://fotos/2.jpg',
+    ])
+  })
+
+  it('o padrão é lista vazia: sem foto, a galeria não aparece', () => {
+    expect(CONFIG_PADRAO.barbearia.fotos).toEqual([])
+    for (const entrada of [undefined, null, {}, { barbearia: {} }]) {
+      expect(normalizarConfiguracoes(entrada).barbearia.fotos).toEqual([])
+    }
+  })
+
+  it('descarta esquema perigoso — a foto entra como <img src>', () => {
+    const config = normalizarConfiguracoes({
+      barbearia: {
+        fotos: [
+          'javascript:alert(1)',
+          'data:text/html,x',
+          'ftp://fotos/1.jpg',
+          'foto.jpg',
+          'https://fotos/ok.jpg',
+        ],
+      },
+    })
+    expect(config.barbearia.fotos).toEqual(['https://fotos/ok.jpg'])
+  })
+
+  it('ignora entrada que não é texto e corta no limite do servidor', () => {
+    const config = normalizarConfiguracoes({
+      barbearia: {
+        fotos: [
+          1,
+          null,
+          { url: 'x' },
+          ...Array.from({ length: 12 }, (_, i) => `https://fotos/${i}.jpg`),
+        ],
+      },
+    })
+    expect(config.barbearia.fotos).toHaveLength(8)
+  })
+
+  it('foto com espaço é recusada, igual aos outros links', () => {
+    const config = normalizarConfiguracoes({
+      barbearia: { fotos: ['https://fotos/a b.jpg'] },
+    })
+    expect(config.barbearia.fotos).toEqual([])
+  })
+})
+
 describe('problemaNaConfig', () => {
   it('aceita a configuração padrão', () => {
     for (const chave of CHAVES_CONFIG) {

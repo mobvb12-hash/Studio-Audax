@@ -91,6 +91,15 @@ export type ConfigBarbearia = {
    * completa, sem nenhuma seção de destaque.
    */
   destaques: string[]
+  /**
+   * Galeria de fotos da casa, na ordem gravada, mostrada no topo da vitrine do
+   * agendamento público.
+   *
+   * Só link http(s) ou vazio — a foto entra como `<img src>`, e é o esquema do
+   * link que impede a configuração de injetar script na página. Vazio = a
+   * vitrine esconde a galeria e abre direto nos serviços.
+   */
+  fotos: string[]
 }
 
 export type Configuracoes = {
@@ -120,7 +129,14 @@ export const CONFIG_PADRAO: Configuracoes = {
     comissao: { percentual: COMISSAO_PADRAO },
   },
 ia: { maxSugestoes: 2, botoesInterativos: false, nomeAtendente: 'Audax' },
-  barbearia: { endereco: '', telefone: '', instagram: '', mapa: '', destaques: [] },
+  barbearia: {
+    endereco: '',
+    telefone: '',
+    instagram: '',
+    mapa: '',
+    destaques: [],
+    fotos: [],
+  },
 }
 
 export type EstadoConfig = {
@@ -267,6 +283,11 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       destaques: listaDeTexto(barbearia.destaques, 12).map((d) =>
         texto(d, '', 80),
       ),
+      // Galeria: link http(s) ou nada. Foto com outro esquema é descartada na
+      // leitura — a tela nunca mostra um campo quebrado.
+      fotos: listaDeTexto(barbearia.fotos, 8)
+        .map((f) => texto(f, '', 2000))
+        .filter((f) => linkValido(f)),
     },
   }
 }

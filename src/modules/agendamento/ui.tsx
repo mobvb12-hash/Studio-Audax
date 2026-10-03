@@ -8,8 +8,10 @@
 // reaproveita o que já existe (Marca, Botao, BotaoLink, Aviso, EstadoV,
 // Campo, Resumo, LinhaResumo) e acrescenta só o que o fluxo passo a passo
 // precisa — casca de etapa, indicador numerado, cartão com foto, botão de
-// voltar e o cartão de serviço da vitrine.
+// voltar, o cartão de serviço da vitrine e os blocos dela (galeria da casa,
+// carrossel de destaques, sanfona de serviços e equipe).
 // ============================================================================
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { dataLocal } from '@/lib/apresentacao'
 import { formatarBRL } from '@/lib/moeda'
@@ -333,4 +335,275 @@ export function dataPorExtenso(iso: string): string {
   const data = d.toLocaleDateString('pt-BR')
   const diaSemana = d.toLocaleDateString('pt-BR', { weekday: 'long' })
   return `${diaSemana}, ${data}`
+}
+
+/* ------------------------------------------------------------------ */
+/* Blocos da vitrine                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Uma pessoa da equipe, só o mínimo que a vitrine precisa mostrar. */
+type PessoaVitrine = { id?: string; nome: string; foto?: string }
+
+/** Rótulo da seção, no mesmo desenho dos outros títulos da vitrine. */
+function TituloSecao({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+      {children}
+    </h2>
+  )
+}
+
+/** Esconde a barra de rolagem: quem desliza é o dedo, não um dedo mole. */
+const SEM_BARRA =
+  'overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+
+/**
+ * Galeria da casa, no topo da vitrine.
+ *
+ * As fotos vêm de `barbearia.fotos` — a configuração que o dono edita. Vazio é
+ * resposta válida e NORMAL: enquanto a casa não cadastrar foto nenhuma, a
+ * galeria simplesmente não existe e a vitrine abre direto nos serviços. Não
+ * entra imagem de banco de imagens nem foto de demonstração: a vitrine não
+ * mostra uma barbearia que não é a do dono.
+ *
+ * Foto que falha ao carregar some em vez de virar moldura quebrada — o
+ * cadastro é link, e link pode vencer.
+ */
+export function GaleriaBarbearia({ fotos }: { fotos?: string[] }) {
+  const [quebradas, setQuebradas] = useState<number[]>([])
+  const lista = (fotos ?? []).map((f) => f.trim()).filter(Boolean)
+  if (lista.length === 0) return null
+
+  return (
+    <section aria-label="Fotos do Studio Audax" className="mb-7">
+      <ul className={`-mx-4 flex snap-x snap-mandatory gap-3 px-4 sm:-mx-6 sm:px-6 ${SEM_BARRA}`}>
+        {lista.map((foto, indice) =>
+          quebradas.includes(indice) ? null : (
+            <li
+              key={`${foto}-${indice}`}
+              className="w-[82%] shrink-0 snap-start sm:w-[45%]"
+            >
+              <img
+                src={foto}
+                alt=""
+                loading={indice === 0 ? 'eager' : 'lazy'}
+                onError={() =>
+                  setQuebradas((atual) =>
+                    atual.includes(indice) ? atual : [...atual, indice],
+                  )
+                }
+                className="h-44 w-full rounded-2xl border border-cream-300 bg-cream-200 object-cover sm:h-60"
+              />
+            </li>
+          ),
+        )}
+      </ul>
+    </section>
+  )
+}
+
+/** Cartão do destaque: nome, duração, preço e o botão de agendar. */
+function CartaoDestaque({
+  nome,
+  preco,
+  duracaoMin,
+  selecionado,
+  aoEscolher,
+}: {
+  nome: string
+  preco: number
+  duracaoMin: number
+  selecionado: boolean
+  aoEscolher: () => void
+}) {
+  return (
+    <li
+      className={`flex w-[74%] shrink-0 snap-start flex-col justify-between gap-3 rounded-2xl border p-4 transition-colors sm:w-[268px] ${
+        selecionado
+          ? 'border-gold-600 bg-gold-200/50'
+          : 'border-cream-300 bg-cream-50'
+      }`}
+    >
+      <div>
+        <p className="text-[17px] leading-snug font-semibold text-noir-900">
+          {nome}
+        </p>
+        <p className="mt-0.5 text-[12.5px] text-noir-500">{duracaoMin} min</p>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={`text-[15px] font-semibold tabular-nums ${
+            selecionado ? 'text-gold-800' : 'text-noir-800'
+          }`}
+        >
+          {formatarBRL(preco)}
+        </span>
+        <button
+          type="button"
+          onClick={aoEscolher}
+          aria-pressed={selecionado}
+          aria-label={`Agendar ${nome}`}
+          className={`min-h-[38px] rounded-lg px-3.5 text-[12px] font-bold tracking-[0.1em] uppercase transition-colors ${
+            selecionado
+              ? 'border border-gold-600 text-gold-800'
+              : 'bg-gold-500 text-noir-900 hover:bg-gold-400'
+          }`}
+        >
+          {selecionado ? 'Escolhido' : 'Agendar'}
+        </button>
+      </div>
+    </li>
+  )
+}
+
+/**
+ * "Destaques da casa" em carrossel: os serviços que o DONO escolheu em
+ * Configurações, na ordem que ele gravou.
+ *
+ * Rolagem horizontal com `snap` em vez de setas e bolinhas: no celular o
+ * arrasto é o gesto que a pessoa já conhece e não exige ponteiro fino nem
+ * estado de "qual slide está na tela" — que é o que quebraria se a lista
+ * mudasse de tamanho depois de montada.
+ */
+export function CarrosselDestaques({
+  servicos,
+  selecionado,
+  aoEscolher,
+}: {
+  servicos: { nome: string; preco: number; duracaoMin: number }[]
+  selecionado: string
+  aoEscolher: (nome: string) => void
+}) {
+  if (servicos.length === 0) return null
+  return (
+    <div>
+      <ul className={`-mx-4 flex snap-x snap-mandatory gap-3 px-4 sm:-mx-6 sm:px-6 ${SEM_BARRA}`}>
+        {servicos.map((s) => (
+          <CartaoDestaque
+            key={s.nome}
+            nome={s.nome}
+            preco={s.preco}
+            duracaoMin={s.duracaoMin}
+            selecionado={selecionado === s.nome}
+            aoEscolher={() => aoEscolher(s.nome)}
+          />
+        ))}
+      </ul>
+      {servicos.length > 1 && (
+        <p className="mt-2 text-[11.5px] text-noir-400">
+          Arraste para ver os outros destaques.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * "Todos os serviços" em sanfona, agrupada pela CATEGORIA OFICIAL da casa.
+ *
+ * O agrupamento vem de `agruparPorCategoria` (migration 039) — a mesma
+ * categoria que a equipe digita no cadastro. Serviço sem categoria cai em
+ * "Outros" em vez de sumir.
+ *
+ * `<details>` nativo: abre e fecha sem uma linha de estado, o teclado e o
+ * leitor de tela já sabem o que é, e o primeiro grupo vem aberto para a pessoa
+ * não precisar descobrir que existe uma lista escondida. Depois de montado,
+ * quem abre e fecha é o navegador — o React só escreve o atributo uma vez.
+ */
+export function SanfonaServicos({
+  grupos,
+  selecionado,
+  aoEscolher,
+}: {
+  grupos: { categoria: string; servicos: { nome: string; preco: number; duracaoMin: number }[] }[]
+  selecionado: string
+  aoEscolher: (nome: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {grupos.map((grupo, indice) => (
+        <details
+          key={grupo.categoria}
+          open={indice === 0}
+          className="group rounded-2xl border border-cream-300 bg-cream-50"
+        >
+          <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+            <span className="text-[15px] font-semibold text-noir-900">
+              {grupo.categoria}
+            </span>
+            <span className="flex items-center gap-2 text-[12.5px] text-noir-500">
+              {grupo.servicos.length}
+              <span
+                aria-hidden="true"
+                className="text-[11px] transition-transform group-open:rotate-180"
+              >
+                ▼
+              </span>
+            </span>
+          </summary>
+          <ul className="flex flex-col gap-2 px-3 pb-3">
+            {grupo.servicos.map((s) => (
+              <li key={s.nome}>
+                <CartaoServicoVitrine
+                  nome={s.nome}
+                  preco={s.preco}
+                  duracaoMin={s.duracaoMin}
+                  selecionado={selecionado === s.nome}
+                  aoEscolher={() => aoEscolher(s.nome)}
+                />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * "Nossa equipe": quem trabalha na casa, com a foto que o dono cadastrou.
+ *
+ * É INFORMAÇÃO, não escolha: aqui ninguém é selecionado. O profissional é
+ * escolhido na etapa seguinte, onde a Agenda já diz quem está livre no dia.
+ * Por isso estes cartões não são botão — botão que não faz nada é pior que
+ * texto, e a pessoa ia procurar onde clicar.
+ */
+export function EquipeVitrine({ profissionais }: { profissionais: PessoaVitrine[] }) {
+  if (profissionais.length === 0) return null
+  return (
+    <div>
+      <TituloSecao>Nossa equipe</TituloSecao>
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {profissionais.map((p) => (
+          <li
+            key={p.id ?? p.nome}
+            className="flex items-center gap-3 rounded-2xl border border-cream-300 bg-cream-50 p-3"
+          >
+            {p.foto ? (
+              <img
+                src={p.foto}
+                alt=""
+                loading="lazy"
+                className="h-11 w-11 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream-200 font-serif-display text-[15px] font-semibold text-noir-600"
+              >
+                {p.nome.trim().charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="min-w-0 text-[15px] font-semibold text-noir-900">
+              {p.nome}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[11.5px] text-noir-400">
+        Você escolhe o profissional no próximo passo, com quem estiver livre no
+        dia.
+      </p>
+    </div>
+  )
 }

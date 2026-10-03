@@ -150,6 +150,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/036_vitrine_publica_e_whatsapp.sql',
   '../supabase/migrations/037_confirmacao_whatsapp_publico.sql',
   '../supabase/migrations/038_config_destaques.sql',
+  '../supabase/migrations/039_vitrine_galeria_e_categoria.sql',
 ])
   })
 
@@ -1723,6 +1724,90 @@ describe('038 · o dono escolhe os destaques da vitrine', () => {
 
   it('o resto da validação da 030 continua igual', () => {
     // As regras do Club e a rejeição de chave desconhecida não podem sumir.
+    expect(texto).toMatch(/v_comissao_local < 0 or v_comissao_local > 1/)
+    expect(texto).toMatch(/if p_valor \? 'comissao' then/)
+    expect(texto).toMatch(/foreach v_texto in array array\['endereco', 'instagram'\] loop/)
+    expect(texto).toMatch(/Configuração desconhecida/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 039 - a vitrine no formato de uma vitrine                          */
+/* ------------------------------------------------------------------ */
+
+describe('039 · a categoria do serviço e a galeria da casa', () => {
+  const bruto = sql('../supabase/migrations/039_vitrine_galeria_e_categoria.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('o serviço expõe a CATEGORIA que a casa já usa no cadastro', () => {
+    // `servicos.categoria` existe (036+) — a vitrine agrupa por ela em vez de
+    // inventar taxonomia própria.
+    expect(texto).toMatch(/'categoria', btrim\(coalesce\(s\.categoria, ''\)\)/)
+    // Vazio vira string vazia, nunca null: o frontend decide o rótulo.
+    expect(texto).not.toMatch(/'categoria', s\.categoria,/)
+  })
+
+  it('a galeria vem da mesma configuração que endereço e telefone', () => {
+    expect(texto).toMatch(/'fotos', coalesce\(/)
+    expect(texto).toMatch(/from configuracoes_sistema b\s*\n\s*where b\.chave = 'barbearia'/)
+    // A ordem é a que o dono gravou.
+    expect(texto).toMatch(/with ordinality as f\(foto, ord\)/)
+    expect(texto).toMatch(/jsonb_agg\(f order by ord\)/)
+  })
+
+  it('casa sem foto configurada devolve lista vazia, não erro', () => {
+    expect(texto).toMatch(/coalesce\(b\.valor -> 'fotos', '\[\]'::jsonb\)/)
+    expect(texto).toMatch(/'\[\]'::jsonb\),\s*\n\s*'endereco'/)
+  })
+
+  it('preço, duração, complementos, profissionais e destaques ficam IGUAIS', () => {
+    // O agrupamento e a galeria são ACRESCENTOS: nada do que já existia pode
+    // ter mudado de nome, de forma ou de lugar.
+    for (const intacto of [
+      "'id', s.id",
+      "'nome', s.nome",
+      "'preco', s.preco",
+      "'duracaoMin', s.duracao_min",
+      "'complementos', (",
+      "'id', p.id",
+      "'foto', case when btrim(coalesce(p.foto, '')) = ''",
+      "'destaques', coalesce(",
+      "where exists (select 1 from servicos s where s.nome = x.nome and s.ativo)",
+      "jsonb_agg(x.nome order by x.ordem)",
+    ]) {
+      expect(texto).toContain(intacto)
+    }
+    // A ordem do catálogo continua sendo por nome.
+    expect(texto).toMatch(/\) order by s\.nome/)
+  })
+
+  it('a regra de Agenda e a de criação pública NÃO são redefinidas', () => {
+    // Este script só mexe no catálogo e na validação de configuração. Se ele
+    // redefinisse a criação, estaríamos trocando a regra que garante a vaga.
+    expect(texto).not.toMatch(/create or replace function public\.agendamento_publico_criar\(/)
+    expect(texto).not.toMatch(/create or replace function public\.agendamento_publico_slots\(/)
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/create or replace trigger/i)
+  })
+
+  it('a galeria só aceita link http(s) — é o que segura a página', () => {
+    // A foto entra como `<img src>`: esquema errado na configuração seria
+    // javascript: no lugar da imagem.
+    expect(texto).toMatch(/v_chave = 'barbearia' and p_valor \? 'fotos'/)
+    expect(texto).toMatch(/jsonb_typeof\(p_valor -> 'fotos'\) <> 'array'/)
+    expect(texto).toMatch(/jsonb_array_length\(p_valor -> 'fotos'\) > 8/)
+    expect(texto).toMatch(/Fotos da barbearia inválidas/)
+    expect(texto).toMatch(/Foto da barbearia precisa ser um link http\(s\)\./)
+    expect(texto).toContain("and v_texto !~ '^https?://[^[:space:]]+$' then")
+  })
+
+  it('foto vazia é liberada, para o dono limpar sem quebrar o registro', () => {
+    expect(texto).toMatch(/if btrim\(v_texto\) <> '' and length\(v_texto\) > 2000 then/)
+  })
+
+  it('a validação do 038 (destaques) e as regras do Club seguem idênticas', () => {
+    expect(texto).toMatch(/v_chave = 'barbearia' and p_valor \? 'destaques'/)
+    expect(texto).toMatch(/jsonb_array_length\(p_valor -> 'destaques'\) > 12/)
     expect(texto).toMatch(/v_comissao_local < 0 or v_comissao_local > 1/)
     expect(texto).toMatch(/if p_valor \? 'comissao' then/)
     expect(texto).toMatch(/foreach v_texto in array array\['endereco', 'instagram'\] loop/)

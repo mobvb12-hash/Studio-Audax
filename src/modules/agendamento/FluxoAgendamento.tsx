@@ -24,6 +24,7 @@ import {
 } from '@/services/supabase/agendaPublica'
 import {
   alternarComplemento as alternarComplementoEstado,
+  agruparPorCategoria,
   complementosDisponiveis,
   dadosValidos,
   escolherData as escolherDataEstado,
@@ -45,14 +46,17 @@ import {
   BotaoDia,
   BotaoHora,
   Campo,
+  CarrosselDestaques,
   CartaoProfissional,
-  CartaoServicoVitrine,
   Carregando,
   Confirmacao,
+  EquipeVitrine,
+  GaleriaBarbearia,
   LinhaResumo,
   Marca,
   Progresso,
   Resumo,
+  SanfonaServicos,
   Tela,
   dataPorExtenso,
 } from './ui'
@@ -459,70 +463,90 @@ function normalizarDestaques(
     .filter((s): s is ItemCatalogo => Boolean(s))
 }
 
-/** Vitrine: destaques, todos os serviços e os dados da casa. */
+/**
+ * A vitrine: onde a pessoa começa a agendar.
+ *
+ * A ordem das seções é a de uma vitrine de verdade — photos da casa, o que a
+ * casa recomenda, o Club, a lista completa, quem faz o serviço e onde a casa
+ * fica:
+ *
+ *   1. Galeria da casa          (só se o dono cadastrou foto)
+ *   2. Destaques da casa        (carrossel; só se o dono escolheu destaques)
+ *   3. Audax Club               (planos e benefícios oficiais)
+ *   4. Todos os serviços       (sanfona, agrupada pela categoria da casa)
+ *   5. Nossa equipe             (quem trabalha aqui)
+ *   6. Onde fica a casa         (endereço, WhatsApp, Instagram, mapa)
+ *
+ * Duas colunas no desktop (a sexta vira a lateral que gruda enquanto a pessoa
+ * rola) e uma coluna no celular, que é onde isso é usado.
+ *
+ * Tudo que aparece aqui vem do catálogo oficial e da configuração do dono. Se
+ * a casa não configurou destaques, fotos ou categoria, a seção correspondente
+ * simplesmente não existe — a vitrine não inventa conteúdo para parecer cheia.
+ */
 function EtapaServicos({
   catalogo,
   estado,
   aoEscolherServico,
 }: PropsEtapa) {
   const destaques = normalizarDestaques(catalogo.destaques, catalogo.servicos)
-  const resto = catalogo.servicos.filter((s) => !destaques.some((d) => d.nome === s.nome))
+  const resto = catalogo.servicos.filter(
+    (s) => !destaques.some((d) => d.nome === s.nome),
+  )
 
   return (
-    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
-      <header className="mb-6 text-center">
+    <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-16 sm:px-6">
+      <header className="mb-6">
         <Marca />
-        <h1 className="mt-4 font-serif-display text-[28px] leading-tight font-semibold text-noir-900">
+        <h1 className="mt-4 font-serif-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[32px]">
           Agende seu horário
         </h1>
-        <p className="mx-auto mt-2 max-w-sm text-[14.5px] leading-relaxed text-noir-500">
+        <p className="mt-2 max-w-sm text-[14.5px] leading-relaxed text-noir-500">
           Escolha o serviço e a gente cuida do resto.
         </p>
       </header>
 
-      {destaques.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
-            Destaques da casa
-          </h2>
-          <div className="flex flex-col gap-2">
-            {destaques.map((s) => (
-              <CartaoServicoVitrine
-                key={s.id ?? s.nome}
-                nome={s.nome}
-                preco={s.preco}
-                duracaoMin={s.duracaoMin}
-                selecionado={estado.servicoNome === s.nome}
-                aoEscolher={() => aoEscolherServico(s.nome)}
+      <GaleriaBarbearia fotos={catalogo.barbearia.fotos} />
+
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          {destaques.length > 0 && (
+            <section className="mb-7">
+              <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+                Destaques da casa
+              </h2>
+              <CarrosselDestaques
+                servicos={destaques}
+                selecionado={estado.servicoNome}
+                aoEscolher={aoEscolherServico}
               />
-            ))}
+            </section>
+          )}
+
+          <div className="mb-7">
+            <SecaoAudaxClub barbearia={catalogo.barbearia} />
           </div>
-        </section>
-      )}
 
-      <section className="mb-6">
-        <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
-          Todos os serviços
-        </h2>
-        <div className="flex flex-col gap-2">
-          {resto.map((s) => (
-            <CartaoServicoVitrine
-              key={s.id ?? s.nome}
-              nome={s.nome}
-              preco={s.preco}
-              duracaoMin={s.duracaoMin}
-              selecionado={estado.servicoNome === s.nome}
-              aoEscolher={() => aoEscolherServico(s.nome)}
+          <section className="mb-7">
+            <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+              Todos os serviços
+            </h2>
+            <SanfonaServicos
+              grupos={agruparPorCategoria(resto)}
+              selecionado={estado.servicoNome}
+              aoEscolher={aoEscolherServico}
             />
-          ))}
-        </div>
-      </section>
+          </section>
 
-      <div className="mt-6">
-        <SecaoAudaxClub />
-      </div>
-      <div className="mt-6">
-        <BlocoBarbearia barbearia={catalogo.barbearia} />
+          <EquipeVitrine profissionais={catalogo.profissionais ?? []} />
+        </div>
+
+        {/* Onde fica a casa: coluna lateral no desktop, bloco no fim no
+            celular. É o mesmo `BlocoBarbearia` da Área do Cliente — os dados
+            públicos da casa têm uma tela só. */}
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          <BlocoBarbearia barbearia={catalogo.barbearia} />
+        </aside>
       </div>
     </main>
   )

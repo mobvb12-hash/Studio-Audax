@@ -32,6 +32,12 @@ export type ServicoPublico = {
   nome: string
   preco: number
   duracaoMin: number
+  /**
+   * Categoria oficial da casa (Cabelo, Barba, Tratamento). É a taxonomia que a
+   * equipe já usa na tela de Serviços — a vitrine só a LÊ para agrupar, nunca
+   * cria categoria nova.
+   */
+  categoria?: string
   /** ids de complemento sugeridos pela própria casa (nunca pré-marcados) */
   complementos?: string[]
 }
@@ -49,6 +55,11 @@ export type BarbeariaPublica = {
   telefone: string
   instagram: string
   mapa: string
+  /**
+   * Galeria da casa, na ordem gravada. Vazio é resposta válida: a vitrine
+   * esconde a galeria e abre direto nos serviços.
+   */
+  fotos?: string[]
 }
 
 export type CatalogoPublico = {
@@ -141,6 +152,7 @@ const BARBEARIA_VAZIA: BarbeariaPublica = {
   telefone: '',
   instagram: '',
   mapa: '',
+  fotos: [],
 }
 
 function normalizarBarbearia(bruto: unknown): BarbeariaPublica {
@@ -151,6 +163,15 @@ function normalizarBarbearia(bruto: unknown): BarbeariaPublica {
     telefone: texto(obj.telefone),
     instagram: texto(obj.instagram),
     mapa: texto(obj.mapa),
+    // Foto quebrada não pode derrubar a vitrine: só http(s) sobrevive, e o
+    // `<img>` esconde a que não carregar.
+    fotos: Array.isArray(obj.fotos)
+      ? obj.fotos
+          .filter((f): f is string => typeof f === 'string')
+          .map((f) => f.trim())
+          .filter((f) => /^https?:\/\/\S+$/.test(f))
+          .slice(0, 8)
+      : [],
   }
 }
 
@@ -196,6 +217,7 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
     preco?: number
     duracaoMin?: number
     ativo?: boolean
+    categoria?: string
     complementos?: string[]
   }
   type ProfissionalLocal = { nome: string; ativo?: boolean; foto?: string }
@@ -211,6 +233,9 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
         nome: s.nome,
         preco: Number(s.preco) || 0,
         duracaoMin: Number(s.duracaoMin) || 30,
+        // Mesma chave do cadastro de Serviços: a categoria é a que a casa já
+        // digitou, inclusive aqui.
+        categoria: (s.categoria ?? '').trim(),
         complementos: Array.isArray(s.complementos) ? s.complementos : [],
       })),
     profissionais: profissionaisLocal
@@ -224,11 +249,17 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
 /**
  * Bases (expediente + bloqueios + ocupação) de vários dias, com cache em memória.
  *
- * A etapa de DATA precisa saber quais dias têm atendimento antes de a pessoa
- * escolher, e cada dia é uma chamada a `agendamento_publico_slots` — a MESMA
- * RPC, sem regra nova. O cache existe só para não repetir 14 requisições a cada
- * volta de etapa; o dia escolhido é sempre buscado de novo antes de mostrar
- * horários, porque vaga muda de um segundo para o outro.
+ * É a MESMA base que `baseDoDia` lê, só que em lote — o cache existe para não
+ * repetir a mesma chamada quando a pessoa abre e fecha etapas no mesmo dia.
+ *
+ * A grade de datas NÃO consulta isto: ela oferece os próximos dias e quem não
+ * tem horário livre é avisado na etapa de horário. Filtrar aqui exigiria uma
+ * chamada por dia (21 por visita) para descobrir que a Agenda tem um único
+ * expediente sem dia da semana — o expediente é o mesmo para toda semana, então
+ * a consulta não descartaria dia nenhum, só custaria 21 requisições.
+ *
+ * O dia escolhido é sempre buscado de novo antes de mostrar horários, porque
+ * vaga muda de um segundo para o outro.
  */
 const cacheBases = new Map<string, BaseDoDia>()
 

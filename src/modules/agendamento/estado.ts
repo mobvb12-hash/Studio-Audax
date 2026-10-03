@@ -230,7 +230,44 @@ export type ItemCatalogo = {
   nome: string
   preco: number
   duracaoMin: number
+  categoria?: string
   complementos?: string[]
+}
+
+/** Rótulo do grupo quando a casa não categorizou o serviço. */
+export const CATEGORIA_SEM_ROTULO = 'Outros'
+
+export type GrupoServicos = {
+  categoria: string
+  servicos: ItemCatalogo[]
+}
+
+/**
+ * Agrupa os serviços pela CATEGORIA OFICIAL da casa (migration 039).
+ *
+ * Três decisões que evitam inventar taxonomia na vitrine:
+ *
+ *   • A categoria é a que a equipe já digita no cadastro de Serviços. Se a
+ *     vitrine inventasse um agrupamento próprio, o mesmo serviço apareceria em
+ *     dois lugares diferentes conforme o texto mudasse.
+ *   • Serviço SEM categoria vai para "Outros" — some nenhum e ganha um grupo
+ *     com nome honesto, em vez de aparecer solto e quebrar o desenho.
+ *   • A ordem dos grupos segue a PRIMEIRA ocorrência no catálogo (que vem
+ *     ordenado por nome da RPC), e dentro do grupo a ordem é a do catálogo.
+ *     Não há colar A-Z: a casa escolhe a ordem em que o serviço aparece.
+ */
+export function agruparPorCategoria(servicos: ItemCatalogo[]): GrupoServicos[] {
+  const grupos = new Map<string, ItemCatalogo[]>()
+  for (const servico of servicos) {
+    const rotulo = (servico.categoria ?? '').trim() || CATEGORIA_SEM_ROTULO
+    const atual = grupos.get(rotulo)
+    if (atual) atual.push(servico)
+    else grupos.set(rotulo, [servico])
+  }
+  return Array.from(grupos, ([categoria, lista]) => ({
+    categoria,
+    servicos: lista,
+  }))
 }
 
 /** Serviço base + complementos escolhidos, na ordem do catálogo. */
