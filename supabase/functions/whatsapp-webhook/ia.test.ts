@@ -382,18 +382,38 @@ describe('mapearFontes', () => {
   it('extrai apenas campos públicos das funções oficiais', () => {
     const fontesMapeadas = mapearFontes(
       {
-        servicos: [{ id: '1', nome: 'Corte', preco: 45, duracaoMin: 30, categoria: 'x' }],
+        // migration 025: o catálogo público devolve `id` e os `complementos`
+        // (ids de serviço) para que a sugestão use o cadastro oficial.
+        servicos: [
+          {
+            id: '1',
+            nome: 'Corte',
+            preco: 45,
+            duracaoMin: 30,
+            categoria: 'x',
+            complementos: ['2'],
+          },
+        ],
         profissionais: [{ id: 'p1', nome: 'Ana', telefone: 'não deve passar' }],
       },
       { expediente: { inicio: '08:00', fim: '20:00', almocoInicio: '12:00', almocoFim: '13:00' } },
     )
     expect(fontesMapeadas.servicos).toEqual([
-      { nome: 'Corte', preco: 45, duracaoMin: 30 },
+      { nome: 'Corte', preco: 45, duracaoMin: 30, id: '1', complementos: ['2'] },
     ])
     expect(fontesMapeadas.profissionais).toEqual([{ nome: 'Ana' }])
     expect(JSON.stringify(fontesMapeadas)).not.toContain('telefone')
     expect(fontesMapeadas.endereco).toBeNull()
   })
+
+  it('catálogo sem id/complementos devolve só os campos antigos', () => {
+    const fontesMapeadas = mapearFontes(
+      { servicos: [{ nome: 'Corte', preco: 45, duracaoMin: 30 }], profissionais: [] },
+      { expediente: null },
+    )
+    expect(fontesMapeadas.servicos).toEqual([{ nome: 'Corte', preco: 45, duracaoMin: 30 }])
+  })
+
 
   it('responde a estruturas ausentes sem lançar', () => {
     const vazias = mapearFontes(null, undefined)

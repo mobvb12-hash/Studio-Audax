@@ -12,7 +12,8 @@
     "build:dev": "tsc -b && vite build --mode development",
     "lint": "eslint .",
     "test": "vitest run",
-    "typecheck": "tsc -b",
+    "test:edge": "vitest run supabase/functions",
+    "typecheck": "tsc -b && tsc -p tsconfig.edge.json",
     "preview": "vite preview"
   },
   "dependencies": {

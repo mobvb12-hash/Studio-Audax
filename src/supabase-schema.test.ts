@@ -133,6 +133,10 @@ expect(nomes).toEqual([
       '../supabase/migrations/019_painel_agendamento.sql',
       '../supabase/migrations/020_painel_clube.sql',
       '../supabase/migrations/021_agenda_lock_concorrencia.sql',
+      '../supabase/migrations/022_configuracoes_e_auditoria_ia.sql',
+      '../supabase/migrations/023_identidade_cliente_e_clube.sql',
+      '../supabase/migrations/024_notificacoes_whatsapp.sql',
+      '../supabase/migrations/025_catalogo_complementos.sql',
     ])
   })
 
@@ -141,8 +145,12 @@ expect(nomes).toEqual([
     // WhatsApp (contexto 30 min / dedup 15 min) apaga somente linhas
     // próprias — sem isso as tabelas cresceriam sem fim. Qualquer outro
     // delete/drop/truncate continua proibido em qualquer script.
+    // Exceção da 022: a MESMA natureza para `ia_eventos`, que é registro
+    // operacional da IA com retenção de 180 dias (janela de análise do
+    // aprendizado). Nenhuma tabela de negócio entra nesta lista — e a
+    // exceção continua sendo por NOME de tabela, não por trecho genérico.
     const limpezaTtl =
-      /\bdelete\s+from\s+(?:public\.)?(?:ia_contexto_whatsapp|ia_mensagens_whatsapp)\b/i
+      /\bdelete\s+from\s+(?:public\.)?(?:ia_contexto_whatsapp|ia_mensagens_whatsapp|ia_eventos)\b/i
     const destrutivo = /\b(drop\s+table|drop\s+column|truncate|delete\s+from)\b/i
     for (const [caminho, texto] of Object.entries(scripts)) {
       const achados = comandos(texto).filter(

@@ -9,6 +9,11 @@ import {
 import { useProfissionais } from '@/modules/profissionais/store'
 import type { Profissional } from '@/modules/profissionais/types'
 
+/** Só dígitos do que o usuário digitou (aceita pontuação e espaços). */
+function digitosDoTelefone(valor: string): string {
+  return valor.replace(/\D/g, '')
+}
+
 type Props = {
   profissional?: Profissional | null
   onFechar: () => void
@@ -26,6 +31,12 @@ export default function ProfissionalFormModal({
   const [telefone, setTelefone] = useState(() => profissional?.telefone ?? '')
   const [email, setEmail] = useState(() => profissional?.email ?? '')
   const [foto, setFoto] = useState(() => profissional?.foto ?? '')
+  const [whatsappNotificacao, setWhatsappNotificacao] = useState(
+    () => profissional?.whatsappNotificacao ?? '',
+  )
+  const [notificarAgendamentos, setNotificarAgendamentos] = useState(
+    () => profissional?.notificarAgendamentos !== false,
+  )
   const [erro, setErro] = useState('')
   const [processandoFoto, setProcessandoFoto] = useState(false)
   const arquivoRef = useRef<HTMLInputElement>(null)
@@ -64,7 +75,19 @@ export default function ProfissionalFormModal({
       setErro('Informe um e-mail válido ou deixe em branco.')
       return
     }
-    const dados = { nome, telefone, email, foto }
+    // O canal de notificação é opcional: sem ele o agendamento segue normal.
+    if (whatsappNotificacao.trim() && !/^\d{10,13}$/.test(digitosDoTelefone(whatsappNotificacao))) {
+      setErro('Informe um WhatsApp de notificação válido ou deixe em branco.')
+      return
+    }
+    const dados = {
+      nome,
+      telefone,
+      email,
+      foto,
+      whatsappNotificacao: whatsappNotificacao.trim(),
+      notificarAgendamentos,
+    }
     try {
       if (profissional) {
         const antigo = profissional.nome
@@ -196,6 +219,44 @@ export default function ProfissionalFormModal({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Canal de NOTIFICAÇÃO de novo agendamento (migration 024).
+            Fica separado do telefone administrativo: quem recebe o aviso de
+            "novo agendamento" pode ser um número diferente do contato da
+            ficha. Vazio = não recebe aviso, e o agendamento segue normal. */}
+        <div className="mt-4 rounded-xl border border-[#E5DCC3] bg-[#FBF8F1] p-3">
+          <p className="text-[13px] font-semibold text-[#4A4436]">
+            Aviso de novo agendamento
+          </p>
+          <p className="mt-0.5 text-xs text-[#6B6353]">
+            O profissional recebe no WhatsApp configurado abaixo um aviso com
+            cliente, serviço, data e horário. Sem número, o agendamento continua
+            normalmente — só o aviso não é enviado.
+          </p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <label className={rotulo} htmlFor="prof-wa-notif">
+                WhatsApp de notificação
+              </label>
+              <input
+                id="prof-wa-notif"
+                className={campo}
+                placeholder="(11) 99999-9999"
+                value={whatsappNotificacao}
+                onChange={(e) => setWhatsappNotificacao(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 pb-2 text-[13px] text-[#4A4436]">
+              <input
+                id="prof-notificar"
+                type="checkbox"
+                checked={notificarAgendamentos}
+                onChange={(e) => setNotificarAgendamentos(e.target.checked)}
+              />
+              Receber avisos
+            </label>
           </div>
         </div>
 

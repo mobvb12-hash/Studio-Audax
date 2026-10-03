@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+﻿import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfissionalFormModal from './ProfissionalFormModal'
 import {
@@ -105,6 +105,8 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
       foto: FOTO_ANTIGA,
       ativo: true,
       criadoEm: '2026-01-01T00:00:00.000Z',
+      whatsappNotificacao: '',
+      notificarAgendamentos: true,
     }
     localStorage.setItem(
       'studio-audax:profissionais:v1',
@@ -196,5 +198,94 @@ describe('ProfissionalFormModal — foto, telefone e e-mail', () => {
     fireEvent.click(screen.getByText('Cadastrar profissional'))
     expect(onFechar).not.toHaveBeenCalled()
     expect(screen.getByText(/e-mail válido/i)).toBeTruthy()
+  })
+})
+
+describe('ProfissionalFormModal — WhatsApp de notificação', () => {
+  it('cadastra com o canal de notificação configurado', async () => {
+    const { onFechar } = montar()
+    fireEvent.change(screen.getByLabelText(/nome completo/i), {
+      target: { value: 'Bruno Notificação' },
+    })
+    fireEvent.change(screen.getByLabelText(/WhatsApp de notificação/i), {
+      target: { value: '(81) 99737-3593' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cadastrar profissional'))
+    })
+    await waitFor(() => expect(onFechar).toHaveBeenCalled())
+    const criado = lerLista().find((p) => p.nome === 'Bruno Notificação')
+    expect(criado?.whatsappNotificacao).toBe('(81) 99737-3593')
+    expect(criado?.notificarAgendamentos).toBe(true)
+  })
+
+  it('sem número o profissional é salvo assim mesmo (aviso só não sai)', async () => {
+    const { onFechar } = montar()
+    fireEvent.change(screen.getByLabelText(/nome completo/i), {
+      target: { value: 'Sem WhatsApp' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cadastrar profissional'))
+    })
+    await waitFor(() => expect(onFechar).toHaveBeenCalled())
+    const criado = lerLista().find((p) => p.nome === 'Sem WhatsApp')
+    expect(criado?.whatsappNotificacao).toBe('')
+  })
+
+  it('recusa WhatsApp inválido com mensagem clara', () => {
+    const { onFechar } = montar()
+    fireEvent.change(screen.getByLabelText(/nome completo/i), {
+      target: { value: 'Número Ruim' },
+    })
+    fireEvent.change(screen.getByLabelText(/WhatsApp de notificação/i), {
+      target: { value: '123' },
+    })
+    fireEvent.click(screen.getByText('Cadastrar profissional'))
+    expect(onFechar).not.toHaveBeenCalled()
+    expect(screen.getByText(/WhatsApp de notificação válido/i)).toBeTruthy()
+  })
+
+  it('editar carrega o canal salvo e permite desligar o aviso', async () => {
+    const existente: Profissional = {
+      id: 'p1',
+      nome: 'Audax Ferreira',
+      telefone: '',
+      email: '',
+      foto: '',
+      ativo: true,
+      criadoEm: '2026-01-01T00:00:00.000Z',
+      whatsappNotificacao: '(81) 99737-3593',
+      notificarAgendamentos: true,
+    }
+    localStorage.setItem('studio-audax:profissionais:v1', JSON.stringify([existente]))
+    const { onFechar } = montar(existente)
+    const campo = screen.getByLabelText(/WhatsApp de notificação/i) as HTMLInputElement
+    expect(campo.value).toBe('(81) 99737-3593')
+
+    fireEvent.click(screen.getByLabelText(/Receber avisos/i))
+    fireEvent.change(campo, { target: { value: '(81) 98888-0000' } })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Salvar alterações'))
+    })
+    await waitFor(() => expect(onFechar).toHaveBeenCalled())
+    const salvo = lerLista().find((p) => p.id === 'p1')
+    expect(salvo?.whatsappNotificacao).toBe('(81) 98888-0000')
+    expect(salvo?.notificarAgendamentos).toBe(false)
+  })
+
+  it('cadastro antigo sem os campos novos continua carregando', () => {
+    const antigo = {
+      id: 'p2',
+      nome: 'Cadastro Antigo',
+      telefone: '',
+      email: '',
+      foto: '',
+      ativo: true,
+      criadoEm: '2026-01-01T00:00:00.000Z',
+    } as Profissional
+    montar(antigo)
+    const campo = screen.getByLabelText(/WhatsApp de notificação/i) as HTMLInputElement
+    expect(campo.value).toBe('')
+    expect((screen.getByLabelText(/Receber avisos/i) as HTMLInputElement).checked).toBe(true)
   })
 })

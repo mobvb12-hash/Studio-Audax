@@ -73,6 +73,16 @@ import {
   type ResultadoRpc,
   type RpcAutorizada,
 } from './acoes.ts'
+import { lerConfiguracoes, type Configuracoes } from './configuracoes.ts'
+import { interpretarIdentidade, type ClubeCliente } from './identidade.ts'
+import {
+  interpretarPendentes,
+  parametrosResolver,
+  processarFila,
+  RPC_FILA,
+  type NotificacaoPendente,
+} from './notificacoes.ts'
+import { montarEvento, parametrosEvento } from './auditoria.ts'
 
 const TIMEOUT_EVOLUTION_MS = 15_000
 
@@ -132,6 +142,114 @@ function urlWebhook(base: string): string {
   return `${base.replace(/\/+$/, '')}/functions/v1/whatsapp-webhook`
 }
 
+/** Chamada de RPC com a credencial server-to-server (mesmo padrão do fetch). */
+async function chamarRpcInterna(
+  segredos: { base: string },
+  chaveSecreta: string | null,
+  nome: RpcAutorizada,
+  params: Record<string, string>,
+): Promise<ResultadoRpc> {
+  if (!chaveSecreta) return { ok: false, motivo: 'Credencial de acesso ausente.' }
+  try {
+    const { url, init } = montarRpcSecreto(segredos.base, chaveSecreta, nome, params)
+    const resposta = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) })
+    return interpretarRpc(resposta.status, await resposta.text())
+  } catch (erro) {
+    const estourou = erro instanceof Error && erro.name === 'TimeoutError'
+    return {
+      ok: false,
+      motivo: estourou
+        ? 'A consulta não respondeu em 15s.'
+        : motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+    }
+  }
+}
+
+/**
+ * Processa a fila `ia_notificacoes` (migration 024): notificação de novo
+ * agendamento ao profissional, confirmação ao cliente do painel, agradecimento
+ * pós-atendimento e link de avaliação.
+ *
+ * Garantias:
+ *   • só envia o que está COM COMMIT no banco — a fila é escrita por trigger
+ *     depois da gravação, então não existe notificação de agendamento que
+ *     falhou (§11);
+ *   • deduplicação é do banco (chave única) — reprocessar não duplica (§21);
+ *   • uma falha registra 'falha' e NÃO impede os itens seguintes (§12);
+ *   • o envio continua passando pelo `whatsapp-enviar`: a Evolution só é
+ *     falada por ele.
+ */
+async function processarFilaNotificacoes(
+  segredos: { base: string },
+  responder: (status: number, corpo: unknown) => Response,
+): Promise<Response> {
+  const chaveSecreta = lerChaveSecreta((nome) => Deno.env.get(nome))
+  if (!chaveSecreta || !segredos.base) {
+    return responder(500, {
+      ok: false,
+      motivo: 'Credencial de acesso ausente — fila não processada.',
+    })
+  }
+
+  const leitura = await chamarRpcInterna(segredos, chaveSecreta, RPC_FILA.ler, {})
+  if (!leitura.ok) {
+    return responder(502, { ok: false, motivo: leitura.motivo })
+  }
+  const pendentes: NotificacaoPendente[] = interpretarPendentes(leitura.dados)
+  if (!pendentes.length) {
+    return responder(200, { ok: true, enviadas: 0, falhas: 0, itens: [] })
+  }
+
+  const resolver = async (id: string, ok: boolean, motivo: string | null): Promise<boolean> => {
+    const resultado = await chamarRpcInterna(
+      segredos,
+      chaveSecreta,
+      RPC_FILA.resolver,
+      parametrosResolver({ id } as NotificacaoPendente, ok, motivo),
+    )
+    return resultado.ok
+  }
+
+  const resumos = await processarFila(pendentes, async (pendente) => {
+    try {
+      const { url, init } = montarPedidoEnvio(segredos.base, chaveSecreta, {
+        telefone: pendente.destino,
+        mensagem: pendente.mensagem,
+      })
+      const resposta = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) })
+      const resultado = interpretarEnvio(resposta.status, await resposta.text())
+      await resolver(pendente.id, resultado.ok, resultado.motivo ?? null)
+      console.log(
+        '[whatsapp-fila]',
+        JSON.stringify({
+          tipo: pendente.tipo,
+          ok: resultado.ok,
+          status: resposta.status,
+          motivo: resultado.ok ? null : (resultado.motivo ?? null),
+          tentativas: pendente.tentativas,
+        }),
+      )
+      return {
+        id: pendente.id,
+        tipo: pendente.tipo,
+        ok: resultado.ok,
+        motivo: resultado.ok ? null : (resultado.motivo ?? null),
+      }
+    } catch (erro) {
+      const motivo = motivoSeguro(erro instanceof Error ? erro.message : 'erro')
+      await resolver(pendente.id, false, motivo)
+      return { id: pendente.id, tipo: pendente.tipo, ok: false, motivo }
+    }
+  })
+
+  return responder(200, {
+    ok: true,
+    enviadas: resumos.filter((r) => r.ok).length,
+    falhas: resumos.filter((r) => !r.ok).length,
+    itens: resumos.map((r) => ({ tipo: r.tipo, ok: r.ok, motivo: r.motivo })),
+  })
+}
+
 /** Motivo legível da Evolution sem vazar corpo arbitrário (máx. 300 chars). */
 function motivoEvolution(status: number, corpo: string): string {
   try {
@@ -189,6 +307,19 @@ export default {
       const { data, error } = await ctx.supabase.auth.getUser(token)
       if (error || !data.user || data.user.role !== 'authenticated') {
         return responder(401, { ok: false, motivo: 'Sessão inválida ou ausente.' })
+      }
+
+      // -------------------------------------------------------------------
+      // Fila de notificações (itens 11/14/15/21). Sai ANTES da validação de
+      // segredos da Evolution: este caminho não fala com a Evolution — quem
+      // envia é o `whatsapp-enviar`. Precisa só da credencial
+      // SUPABASE_SECRET_KEYS e da sessão de usuário.
+      //
+      // A fila é deduplicada pelo banco (chave única), então repetir o
+      // processamento nunca duplica mensagem.
+      // -------------------------------------------------------------------
+      if (acao === 'notificar-pendentes') {
+        return processarFilaNotificacoes(segredos, responder)
       }
 
       const problema = validarSegredos(segredos)
@@ -288,8 +419,7 @@ export default {
         // Diagnóstico: lê a especificação OpenAPI da instância Evolution REAL
         // (a doc pública 2.3.7 divergiu do servidor) e devolve somente os
         // fragmentos dos caminhos de webhook — nunca a URL base da Evolution.
-        if (acao === 'evolution-spec') {
-          const candidatos = ['openapi.json', 'docs-json', 'api-json', 'swagger-json']
+        if (acao === 'evolution-spec') {          const candidatos = ['openapi.json', 'docs-json', 'api-json', 'swagger-json']
           const tentativas: { ponto: string; status: number }[] = []
           let espec: Record<string, unknown> | null = null
           for (const ponto of candidatos) {
@@ -467,6 +597,29 @@ export default {
       const numeroTeste = (Deno.env.get('IA_NUMERO_TESTE') ?? '').trim()
       const remetente = normalizarNumero(remetenteBruto)
 
+      // Configuração CENTRALIZADA (migration 022). Falha aqui não é problema:
+      // `lerConfiguracoes` devolve o PADRÃO, que é o comportamento de sempre.
+      const configLida = await lerConfiguracoes(async () => {
+        const resultado = await chamarRpcInterna(
+          segredos,
+          chaveSecreta,
+          'ia_configuracoes_ler',
+          {},
+        )
+        if (!resultado.ok) throw new Error(resultado.motivo)
+        return resultado.dados
+      })
+      const config: Configuracoes = configLida.config
+      if (!configLida.doBanco) {
+        console.log(
+          '[whatsapp-ia]',
+          JSON.stringify({
+            evento: 'configuracao-padrao',
+            motivo: configLida.motivo ?? 'indisponivel',
+          }),
+        )
+      }
+
       // Contexto PERSISTENTE: lido do banco a cada invocação — é o que
       // permite a segunda mensagem ("2") continuar o fluxo aberto pela
       // primeira, independentemente do isolate que processar cada uma.
@@ -513,6 +666,46 @@ export default {
           deps: {
             agora: () => Date.now(),
             hoje: () => dataLocalRecife(),
+            config,
+            // Identificação multi-sinal (§6/§9): só existe quando há
+            // credencial; sem ela a conversa cai no fluxo antigo por telefone.
+            identificarCliente: chaveSecreta
+              ? async (p) => {
+                  const resultado = await chamarRpcInterna(segredos, chaveSecreta, 'ia_clientes_identificar', {
+                    p_telefone: p.telefone,
+                    p_nome: p.nome,
+                    p_cpf: p.cpf,
+                  })
+                  if (!resultado.ok) return null
+                  return interpretarIdentidade(resultado.dados)
+                }
+              : undefined,
+            clubeDoCliente: chaveSecreta
+              ? async (clienteId) => {
+                  const resultado = await chamarRpcInterna(segredos, chaveSecreta, 'ia_clube_cliente', {
+                    p_cliente_id: clienteId,
+                  })
+                  if (!resultado.ok) return null
+                  const clube = (resultado.dados as { clube?: unknown } | null)?.clube
+                  if (!clube || typeof clube !== 'object') return null
+                  const bloco = clube as Record<string, unknown>
+                  const plano = typeof bloco.plano === 'string' ? bloco.plano : ''
+                  if (!plano) return null
+                  return {
+                    plano,
+                    ativo: bloco.ativo === true,
+                    atrasado: bloco.atrasado === true,
+                    valorMensal:
+                      typeof bloco.valorMensal === 'number' || typeof bloco.valorMensal === 'string'
+                        ? bloco.valorMensal
+                        : null,
+                    dataAssinatura:
+                      typeof bloco.dataAssinatura === 'string' ? bloco.dataAssinatura : null,
+                    proximoVencimento:
+                      typeof bloco.proximoVencimento === 'string' ? bloco.proximoVencimento : null,
+                  } as ClubeCliente
+                }
+              : undefined,
             carregarCatalogo: async () => {
               const { data, error } = await ctx.supabase.rpc(
                 'agendamento_publico_catalogo',
@@ -674,6 +867,65 @@ export default {
         : fontesCarregadas
           ? identificarServico(texto, fontesCarregadas)
           : null
+
+      /* ------------------------------------------------------------------
+       * Auditoria/aprendizado (§17/§20): registra intenção, resultado,
+       * ambiguidade e os SLOTS do contexto. É somente leitura — nenhuma
+       * regra comercial é lida de volta, e o registro nunca pode virar
+       * comando (uma mensagem de cliente não muda código nem preço).
+       * Falha aqui é logada e ignorada: perder uma linha de auditoria não
+       * pode derrubar o atendimento.
+       * ---------------------------------------------------------------- */
+      if (chaveSecreta) {
+        try {
+          const rascunho = saidaConversa?.contexto.rascunho
+          const eventoAprendizado = montarEvento({
+            fluxo: irParaConversa
+              ? 'conversa'
+              : interna
+                ? 'interna'
+                : 'informativa',
+            intencao: resultadoIa.intencao.tipo,
+            acao: saidaConversa?.acao ?? '',
+            executada: saidaConversa?.executada ?? false,
+            motivo: saidaConversa?.motivo ?? null,
+            telefone: remetente,
+            ambiguidade: rascunho?.etapa === 'escolhendo' ? 'multiplos-alvos' : '',
+            termosDesconhecidos: rascunho && !rascunho.servico ? ['servico'] : [],
+            correcoes: rascunho?.servicosCombinados?.length
+              ? rascunho.servicosCombinados
+              : [],
+            contexto: {
+              acao: rascunho?.acao ?? '',
+              etapa: rascunho?.etapa ?? '',
+              servico: rascunho?.servico ?? '',
+              profissional: rascunho?.profissional ?? '',
+              data: rascunho?.data ?? '',
+              periodo: rascunho?.periodo ?? '',
+              esperandoNome: rascunho?.esperandoNome ? 'sim' : '',
+              esperandoCpf: rascunho?.esperandoCpf ? 'sim' : '',
+              identificacao: rascunho?.clienteId ? 'resolvida' : '',
+              sugestao: rascunho?.sugestao ? 'oferecida' : '',
+            },
+            duracaoMs: Date.now() - inicioIa,
+          })
+          await chamarRpcInterna(
+            segredos,
+            chaveSecreta,
+            'ia_evento_registrar',
+            parametrosEvento(eventoAprendizado),
+          )
+        } catch (erro) {
+          console.log(
+            '[whatsapp-ia]',
+            JSON.stringify({
+              evento: 'auditoria-falhou',
+              motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
+            }),
+          )
+        }
+      }
+
       // Log técnico: fluxo + metadados + serviço + diagnóstico seguro +
       // resposta gerada. O texto recebido do cliente NUNCA é logado, nenhum
       // secret entra aqui, e telefone/identificador de ação vão apenas como
@@ -738,6 +990,11 @@ export default {
           const { url, init } = montarPedidoEnvio(baseSupabase, chaveSecreta, {
             telefone: normalizarNumero(remetenteBruto) ?? '',
             mensagem: resultadoIa.resposta,
+            // Botões interativos (item 10): só na oferta de horários e só
+            // quando a configuração liga `ia.botoesInterativos`. O texto já
+            // vem numerado — se a Evolution recusar o interativo, o
+            // `whatsapp-enviar` reenvia como texto e nada se perde.
+            ...(saidaConversa?.botoes ? { botoes: saidaConversa.botoes } : {}),
           })
           const respostaEnvio = await fetch(url, {
             ...init,

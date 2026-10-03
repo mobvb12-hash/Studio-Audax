@@ -11,6 +11,8 @@ function profissional(override: Partial<Profissional> = {}): Profissional {
     foto: '',
     ativo: true,
     criadoEm: '2026-01-01T00:00:00.000Z',
+    whatsappNotificacao: '',
+    notificarAgendamentos: true,
     ...override,
   }
 }

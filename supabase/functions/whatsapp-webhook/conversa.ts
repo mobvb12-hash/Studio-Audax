@@ -19,6 +19,88 @@
 //   - texto do cliente NUNCA vira SQL: parâmetros tipados, listas por índice;
 //   - toda resposta é não-vaza, em português, ≤ 4096 caracteres.
 import type { FonteServico, FontesOficiais, Turno } from './ia.ts'
+import { normalizar } from './texto.ts'
+// Só TIPOS: ./identidade.ts e ./configuracoes.ts usam VALUES de outros módulos,
+// então a importação precisa ser apagada na compilação para não criar ciclo.
+import type { ClubeCliente, ResultadoIdentidade } from './identidade.ts'
+import type { Configuracoes } from './configuracoes.ts'
+import {
+  cadastroNecessarioMsg,
+  capitalizar,
+  conflitoCpfMsg,
+  desambiguacaoMsg,
+  ehPerguntaDeClube,
+  extrairCpf,
+  clubeMsg,
+  redigirCpf,
+} from './identidade.ts'
+import { CONFIG_PADRAO } from './configuracoes.ts'
+import {
+  ehRecusaDeSugestao,
+  podeSugerir,
+  sugerirComplementos,
+  sugestoesMsg,
+  type SugestaoComplemento,
+} from './sugestoes.ts'
+
+  /** Reexporta `normalizar` para manter a API pública anterior intacta. */
+export { normalizar }
+
+/**
+ * Desambiguação sem candidatos em memória: usada quando a resposta só diz
+ * "ambíguo" e a conversa ainda não tem a lista. A pergunta é a mesma do §6 —
+ * curta, sem expor dado de ninguém.
+ */
+const IDENTIDADE_SEM_CANDIDATOS: ResultadoIdentidade = {
+  situacao: 'ambiguo',
+  sinais: [],
+  cpfInformado: false,
+  cpfValido: false,
+  candidatos: [],
+}
+
+/**
+ * Serviços extras OFERECIDOS depois que o agendamento foi criado (§3).
+ *
+ * Duas fontes, uma só regra: nunca repetir o que já está agendado e nunca
+ * sugerir serviço fora do catálogo oficial.
+ *   1. o que o cliente CITOU em combinação ("cabelo e barba") — respeitado
+ *      mesmo que a configuração não liste o complemento;
+ *   2. os COMPLEMENTOS configurados pelo admin no serviço base — e apenas se
+ *      esse serviço ainda não foi recusado neste atendimento.
+ */
+function calcularExtras(
+  rascunho: Rascunho,
+  catalogo: FonteServico[],
+  limite: number,
+): SugestaoComplemento[] {
+  const base = rascunho.servico
+  if (!base) return []
+  const jaAgendados = [base, ...(rascunho.servicosCombinados ?? [])].filter(Boolean)
+  const citados = (rascunho.servicosCombinados ?? [])
+    .map((nome) => catalogo.find((s) => s.nome === nome && s.ativo !== false))
+    .filter((s): s is FonteServico => Boolean(s))
+
+  const teto = Math.max(0, Math.min(Math.trunc(limite) || 2, 3))
+  if (!citados.length && !podeSugerir(base, rascunho.sugestoesRecusadas ?? [])) return []
+  const emSugestao = (s: FonteServico): SugestaoComplemento => ({
+    id: s.id ?? '',
+    nome: s.nome,
+    preco: s.preco ?? null,
+    duracaoMin: typeof s.duracaoMin === 'number' ? s.duracaoMin : null,
+  })
+  if (citados.length >= teto) return citados.slice(0, teto).map(emSugestao)
+
+  const restantes = teto - citados.length
+  const oficiais = podeSugerir(base, rascunho.sugestoesRecusadas ?? [])
+    ? sugerirComplementos(catalogo, base, jaAgendados, restantes)
+    : []
+
+  return [
+    ...citados.slice(0, teto).map(emSugestao),
+    ...oficiais,
+  ]
+}
 
 /* ------------------------------------------------------------------ */
 /* Tipos                                                               */
@@ -40,6 +122,21 @@ export type ResumoAgendamento = {
   status: string
 }
 
+/**
+ * Complemento OFERECIDO depois que o agendamento já foi criado (§3). Fica no
+ * rascunho apenas o que é necessário para, se o cliente disser "quero", criar
+ * o serviço adicional no MESMO horário pela MESMA agenda oficial (e, se não
+ * couber, o servidor explica — nada é prometido).
+ */
+export type SugestaoPendente = {
+  base: string
+  extras: string[]
+  data: string
+  horario: string
+  profissional: string
+  cliente: string
+}
+
 export type Rascunho = {
   acao: AcaoConversa
   etapa: 'coletando' | 'escolhendo' | 'confirmando'
@@ -59,6 +156,17 @@ export type Rascunho = {
   listaServicos: string[]
   listaProfissionais: string[]
   esperandoNome: boolean
+  /* --- identificação do cliente (itens 6, 7 e 9) --- */
+  /** id do cadastro oficial resolvido (nunca é dito ao cliente) */
+  clienteId: string | null
+  /** a máquina está pedindo CPF para desempatar a identidade */
+  esperandoCpf: boolean
+  /* --- sugestão de complemento (item 3) --- */
+  /** serviços citados em combinação ("cabelo e barba") — viram oferta extra */
+  servicosCombinados: string[]
+  sugestao: SugestaoPendente | null
+  /** serviços-base já recusados — não voltam a ser sugeridos */
+  sugestoesRecusadas: string[]
 }
 
 export type ContextoConversa = {
@@ -79,6 +187,21 @@ export type DependenciasConversa = {
   carregarSlots: (data: string) => Promise<PacoteSlots>
   listarAgendamentos?: (telefone: string) => Promise<ResumoAgendamento[]>
   clientePorTelefone?: (telefone: string) => Promise<string | null>
+  /**
+   * Identificação MULTI-SINAL (§6/§9): telefone + nome + CPF. Opcional —
+   * sem ela a conversa usa exatamente o comportamento antigo (nome por
+   * telefone). Traz `novo`/`unico`/`ambiguo` e NUNCA escolhe sozinha em
+   * caso de conflito.
+   */
+  identificarCliente?: (p: {
+    telefone: string
+    nome: string
+    cpf: string
+  }) => Promise<ResultadoIdentidade | null>
+  /** Clube do cliente já identificado (§8) — dados oficiais, nada inventado. */
+  clubeDoCliente?: (clienteId: string) => Promise<ClubeCliente | null>
+  /** Configuração centralizada (022) — ausente = CONFIG_PADRAO. */
+  config?: Configuracoes
   criar: (p: {
     cliente: string
     telefone: string
@@ -114,34 +237,64 @@ export type SaidaConversa = {
   executada: boolean
   servico: string | null
   motivo: string | null
+  /**
+   * Botões interativos OPCIONAIS (item 10). Só é preenchido na oferta de
+   * horários e apenas quando a configuração liga `ia.botoesInterativos`.
+   * O texto da mensagem já traz a listagem numerada — os botões são um
+   * complemento visual, e o `whatsapp-enviar` cai para o texto se a
+   * Evolution recusar. Ausente = envio de texto puro, como sempre.
+   */
+  botoes?: { id: string; texto: string }[]
 }
 
 /* ------------------------------------------------------------------ */
 /* Normalização e expressões                                           */
 /* ------------------------------------------------------------------ */
 
-export function normalizar(valor: string): string {
-  return (valor ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
 const PADRAO_CANCELAR = /(cancelar|cancela|desmarcar|desmarca)/
+/**
+ * §16 — cancelamento indireto, do jeito que as pessoas falam de verdade:
+ * "não vou conseguir ir", "não posso ir", "desistir". Sem isto, o cancelamento
+ * viraria "não encontrei agendamentos" ou cairia no fluxo informativo.
+ */
+const PADRAO_CANCELAR_INDIRETO =
+  /\b(nao vou (conseguir|poder)? ir|nao posso ir|nao vou nao ir|desistir|desisti|nao comparecerei)\b/
 const PADRAO_REMARCAR = /(remarcar|remarca|reagendar|reagenda)/
-const PADRAO_CRIAR = /(marcar|marca[rs]?|agendar|agende|reservar|reserva)/
+/**
+ * §16 — remarcação indireta: "troca meu horário", "preciso mudar meu horário",
+ * "tem como passar para sábado". Só vale quando a frase fala de TEMPO
+ * (data/horário/dia) — "passar" sozinho não é remarcação.
+ */
+const PADRAO_MUDAR_DATA =
+  /\b(mudar|mudou|mudo|mover|trocar|troca|trocou|troco|passar|adiar|antecipar|pospor|reposicionar)\b/
+/**
+ * "Adiar"/"antecipar" já dizem remarcação sozinhos — não precisam citar data
+ * nem horário para que o sentido seja inequívoco.
+ */
+const PADRAO_REMARCA_DIRETA = /\b(adiar|antecipar|pospor)\b/
+/** Campo de tempo citado: data real OU o próprio campo ("meu horário"). */
+const PADRAO_CAMPO_TEMPO =
+  /(hoje|amanha|\b(segunda|terca|quarta|quinta|sexta)(-feira)?\b|\bsabado\b|\bdomingo\b|\d{1,2}\/\d{1,2}|\d{1,2}:\d{2}|\d{1,2}h\b|\d{1,2}\s+horas?\b|de (janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)|\bhorarios?\b|\bhoras?\b|\bdata(s)?\b|\bdia(s)?\b|\bsemana\b|\bdepois de amanha\b)/
+const PADRAO_CRIAR = /(marcar|marca[rs]?|agendar|agende|reservar|reserva|\bme (coloca|coloque|pons|põe)\b)/
 const PADRAO_TEMPO =
   /(hoje|amanha|\b(segunda|terca|quarta|quinta|sexta)(-feira)?\b|\bsabado\b|\bdomingo\b|\d{1,2}\/\d{1,2}|\d{1,2}:\d{2}|\d{1,2}h\b|\d{1,2}\s+horas?\b|de (janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro))/
 const PADRAO_INTENCAO_AGENDA =
-  /(horario|vaga|cort|barb|sobrancelh|platinad|luzes|atendimento|marcar|agendar|reservar|quero|queria|gostaria|preciso|prefiro|pode|consegue|\btem\b|da para)/
+  /(horario|\bhora\b|vaga|cort|barb|sobrancelh|platinad|luzes|atendimento|marcar|agendar|reservar|quero|queria|gostaria|preciso|prefiro|pode|consegue|\btem\b|da para)/
 const PADRAO_INFORMATIVA =
   /\b(quanto|quanto[s]?|custa|custo|precos?|valores?|endereco|onde|funcionamento|telefone|contato|instagram|site|cardapio|abre|fecha|aberto|horario de (?:funcionamento|abertura|atendimento)|cartao|pix|pagamento|dinheiro)\b/
-/** Pergunta de disponibilidade sem data explícita ("tem vaga?", "tem horário?"). */
+/**
+ * Pergunta de disponibilidade sem data explícita ("tem vaga?", "tem horário?").
+ * Inclui as formas abreviadas do dia a dia: "qualquer horário serve",
+ * "qual horário", "q hora", "que horas".
+ */
 const PADRAO_VAGA =
-  /\bvagas?\b|\btem(?:emos|)?\b[^.?!]{0,40}\bhorarios?\b|\b(quero|queria|gostaria|preciso|prefiro)\b[^.?!]{0,40}\b(horarios?|vagas?)\b|\bhorarios?\b[^.?!]{0,20}\b(livres?|disponiveis?|tem|temos)\b/
-/** Menção a período do dia ("quero à tarde", "prefiro de manhã"). */
-const PADRAO_PERIODO = /\b(manha|tarde|noite|almoco|cedo|fim do dia)\b/
+  /\bvagas?\b|\btem(?:emos|)?\b[^.?!]{0,40}\bhorarios?\b|\b(quero|queria|gostaria|preciso|prefiro)\b[^.?!]{0,40}\b(horarios?|vagas?)\b|\bhorarios?\b[^.?!]{0,20}\b(livres?|disponiveis?|tem|temos)\b|\bqual(quer)?\s+(horario|horarios|data|dia)\b[^.?!]{0,20}\b(serve|pode|ta bom|tem|temos|vai)\b|\bq\s+hora\b|\bque horas\b|\bqual a (melhor|primeira) hora\b|\bqualquer\s+(barbeiro|profissional)\b/
+/**
+ * Menção a período do dia ("quero à tarde", "prefiro de manhã", "no final do
+ * dia"). "fim/final do dia" são o TRECHO FINAL do expediente.
+ */
+const PADRAO_PERIODO =
+  /\b(manha|tarde|noite|almoco|cedo|fim do dia|final do dia|final da tarde|no fim da tarde|fim da tarde|primeira hora)\b/
 /**
  * Cliente escolhendo PESSOA ("quero com o Cleiton"): intenção de agenda +
  * "com <algo>". Alvos não-pessoas (preço/cartão/endereço) já caem em
@@ -150,20 +303,40 @@ const PADRAO_PERIODO = /\b(manha|tarde|noite|almoco|cedo|fim do dia)\b/
  */
 const PADRAO_COM_ALGUEM =
   /\b(quero|queria|gostaria|preciso|prefiro|pode|marcar|agendar)\b[^.?!]{0,40}\bcom\s+(?:o|a|os|as|meu|minha|meus|minhas|ele|ela)?\s*(?!(?:voce|voces|alguem|atendimento|suporte|ajuda)\b)[a-zá-ú]{3,}\b/
-/** Intenção de serviço em linguagem natural ("quero cortar o cabelo"). */
-const PADRAO_SERVICO_AGENDA = /\b(cort\w*|barba|cabelo|degrad\w*|sobrancelha\w*|platinad\w*|luzes)\b/
+/**
+ * Intenção de serviço em linguagem natural ("quero cortar o cabelo").
+ * `\bbarba\b` com fronteira final: "barbeiro" NÃO é serviço de barba.
+ */
+const PADRAO_SERVICO_AGENDA =
+  /\b(cort\w*|barba\b|cabelo\b|degrad\w*|sobrancelha\w*|platinad\w*|luzes)\b/
 
 /**
  * AÇÃO detectada no texto. É SUPERSET de PADRAO_ACAO de ./ia.ts (todo
  * verbo bloqueado pelo classificador cai aqui) e inclui gatilhos de
  * intenção sem verbo de agenda ("quero cortar amanhã", "tem horário amanhã?").
- * A ordem importa: remarcar/cancelar contêm "marca" — os dois vêm primeiro.
+ * A ordem importa: remarcar/cancelar contêm "marca" — os dois vêm primeiros.
+ *
+ * `acaoPendente` (opcional) é o rascunho em andamento. Ele existe para uma
+ * única regra: "trocar/mudar/passar" só vira REMARCAÇÃO quando não estamos
+ * montando um agendamento novo. Sem ele, "quero trocar o horário" no meio de
+ * uma reserva zeraria o rascunho e recomeçaria do zero — exatamente o que o
+ * item 5 (contexto) proíbe.
  */
-export function detectarAcao(texto: string): AcaoConversa | null {
+export function detectarAcao(
+  texto: string,
+  acaoPendente?: AcaoConversa | null,
+): AcaoConversa | null {
   const t = normalizar(texto)
   if (!t) return null
-  if (PADRAO_CANCELAR.test(t)) return 'cancelar'
+  if (PADRAO_CANCELAR.test(t) || PADRAO_CANCELAR_INDIRETO.test(t)) return 'cancelar'
   if (PADRAO_REMARCAR.test(t)) return 'remarcar'
+  if (
+    acaoPendente !== 'criar' &&
+    (PADRAO_REMARCA_DIRETA.test(t) ||
+      (PADRAO_MUDAR_DATA.test(t) && PADRAO_CAMPO_TEMPO.test(t)))
+  ) {
+    return 'remarcar'
+  }
   if (PADRAO_CRIAR.test(t)) return 'criar'
   if (PADRAO_TEMPO.test(t) && PADRAO_INTENCAO_AGENDA.test(t)) return 'criar'
   // Disponibilidade/periodo/servico com intencao de agenda — nunca porca
@@ -338,8 +511,12 @@ function isoValida(ano: number, mes: number, dia: number): string | null {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * Datas em linguagem natural. `\bhj\b` cobre o "quero cortar hj" — abreviação
+ * comum em conversa de WhatsApp e sem ambiguidade em português.
+ */
 const RE_DATA =
-  /\b(depois de amanha|amanha|hoje)\b|(\d{1,2})\s*\/\s*(\d{1,2})\b|\b(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b|\b(segunda-feira|segunda|terca-feira|terca|quarta-feira|quarta|quinta-feira|quinta|sexta-feira|sexta|sabado|domingo)\b/g
+  /\b(depois de amanha|amanha|hoje|hj)\b|(\d{1,2})\s*\/\s*(\d{1,2})\b|\b(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b|\b(segunda-feira|segunda|terca-feira|terca|quarta-feira|quarta|quinta-feira|quinta|sexta-feira|sexta|sabado|domingo)\b/g
 
 /**
  * Todas as datas mencionadas, em ordem de aparição (textos normalizados).
@@ -569,6 +746,24 @@ function nomesAtivos(servicos: FonteServico[]): string[] {
 }
 
 /**
+ * Palavras do dia a dia que NÃO são serviço, mesmo compartilhando os 4
+ * primeiros caracteres com um nome do catálogo. "Barbeiro" e "Barba" começam
+ * igual — sem esta lista a IA ofereceria barba a quem só perguntou por
+ * "qualquer barbeiro". A lista é explícita de propósito: é mais auditável
+ * (e menos surpresa) do que afrouxar o casamento de nomes.
+ */
+const NAO_E_SERVICO = new Set([
+  'barbeiro',
+  'barbeiros',
+  'barbearia',
+  'barbearias',
+  'barbear',
+  'cabeleireiro',
+  'cabeleireiros',
+  'cabeleireira',
+])
+
+/**
  * Serviço citado: correspondência exata (substring do nome oficial) e, na
  * ausência dela, agrupamento por palavras-chave (≥4 letras). Empate →
  * `ambiguos` para o cliente escolher — nunca se assume.
@@ -586,7 +781,11 @@ export function extrairServico(
   // resolver combinações reais ("cabelo e barba" → "Corte + Barba").
   const SINONIMOS: Record<string, string[]> = { cabelo: ['corte'] }
   const tokensExpandidos = [
-    ...new Set(tokens.flatMap((tk) => [tk, ...(SINONIMOS[tk] ?? [])])),
+    ...new Set(
+      tokens
+        .filter((tk) => !NAO_E_SERVICO.has(tk))
+        .flatMap((tk) => [tk, ...(SINONIMOS[tk] ?? [])]),
+    ),
   ]
   const pontuados: { nome: string; score: number }[] = []
   for (const nome of nomes) {
@@ -626,8 +825,89 @@ export function extrairServico(
   return { servico: null, ambiguos: topo.slice(0, 4).map((p) => p.nome) }
 }
 
+/**
+ * Serviços citados EM COMBINAÇÃO ("quero cabelo e barba", "corte e sobrancelha").
+ *
+ * A agenda oficial trabalha com UM serviço por linha, então isto NÃO cria
+ * agendamento duplo: o primeiro serviço vira o agendamento e os outros viram
+ * OFERTA OPCIONAL — exatamente o mesmo caminho da sugestão de complemento
+ * (§3). Sem esta lista, "quero cabelo e barba" escolheria só "Barba" e o
+ * cliente perderia o corte.
+ *
+ * Regras: só nome oficial do catálogo, sinônimos do mesmo jeito do
+ * `extrairServico`, e o nome mais específico absorve os mais genéricos
+ * ("Corte + Barba" faz "Corte" e "Barba" deixarem de ser sugeridos à parte).
+ */
+export function extrairServicosCombinados(
+  texto: string,
+  servicos: FonteServico[],
+): string[] {
+  const alvo = normalizar(texto)
+  if (!alvo) return []
+  const nomes = nomesAtivos(servicos)
+  if (!nomes.length) return []
+
+  const tokens = alvo.split(/[^a-z0-9]+/).filter(Boolean)
+  const SINONIMOS: Record<string, string[]> = { cabelo: ['corte'] }
+  const presentes = new Set(
+    tokens
+      .filter((tk) => !NAO_E_SERVICO.has(tk))
+      .flatMap((tk) => [tk, ...(SINONIMOS[tk] ?? [])]),
+  )
+
+  const casados = nomes.filter((nome) => {
+    const chave = normalizar(nome)
+    if (alvo.includes(chave)) return true
+    const palavras = chave.split(/[^a-z0-9]+/).filter((p) => p.length >= 3)
+    return palavras.length > 0 && palavras.every((p) => presentes.has(p))
+  })
+  if (casados.length < 2) return casados
+
+  // Nome mais específico vence: um serviço já coberto por outro mais
+  // específico sai da lista. "Corte + Barba" cobre "Corte" e "Barba" — os dois
+  // simples deixariam de aparecer como oferta separada.
+  const palavrasDe = (nome: string): string[] =>
+    normalizar(nome).split(/[^a-z0-9]+/).filter(Boolean)
+  const ordenados = [...casados].sort((a, b) => b.length - a.length)
+  const finais: string[] = []
+  for (const nome of ordenados) {
+    const termos = palavrasDe(nome)
+    const coberto = finais.some((ja) => {
+      const outros = palavrasDe(ja)
+      return outros.length > 0 && termos.every((p) => outros.includes(p))
+    })
+    if (!coberto) finais.push(nome)
+  }
+
+  // ORDEM DO TEXTO: em "quero cabelo e barba" quem vem primeiro é o principal
+  // e o outro vira oferta — é assim que a pessoa falou. A posição é a do
+  // PRIMEIRO token que casa com alguma palavra do nome, passando pelo mesmo
+  // sinônimo do cliente ("cabelo" conta como "corte").
+  const SINONIMOS_POR_TOKEN: Record<string, string[]> = { cabelo: ['corte'] }
+  const posicaoDe = (nome: string): number => {
+    const porNome = alvo.indexOf(normalizar(nome))
+    if (porNome >= 0) return porNome
+    const palavras = palavrasDe(nome)
+    let melhor = Number.MAX_SAFE_INTEGER
+    tokens.forEach((tk, indice) => {
+      const equivalente = [tk, ...(SINONIMOS_POR_TOKEN[tk] ?? [])]
+      if (palavras.some((p) => equivalente.includes(p))) {
+        melhor = Math.min(melhor, indice)
+      }
+    })
+    return melhor
+  }
+  return finais.sort((a, b) => posicaoDe(a) - posicaoDe(b))
+}
+
 const NAO_E_PROFISSIONAL = [
   'quem',
+  // "qualquer barbeiro"/"com qualquer profissional" = SEM preferência de
+  // profissional. Sem esta entrada a IA responderia "não encontrei
+  // 'qualquer' entre os profissionais", que é o oposto do que o cliente quis.
+  'qualquer',
+  'qual',
+  'anyone',
   'voce',
   'vc',
   'atendimento',
@@ -922,7 +1202,7 @@ function ambiguosMsg(ambiguos: string[]): string {
 }
 
 function profissionalDesconhecidoMsg(desconhecido: string, nomes: string[]): string {
-  return `Não encontrei "${desconhecido}" entre os profissionais ativos. Temos: ${nomes
+  return `Não encontrei "${capitalizar(desconhecido)}" entre os profissionais ativos. Temos: ${nomes
     .slice(0, 8)
     .join(', ')}. Com qual deles?`
 }
@@ -1098,6 +1378,11 @@ export function novoRascunho(acao: AcaoConversa): Rascunho {
     listaServicos: [],
     listaProfissionais: [],
     esperandoNome: false,
+    clienteId: null,
+    esperandoCpf: false,
+    servicosCombinados: [],
+    sugestao: null,
+    sugestoesRecusadas: [],
   }
 }
 
@@ -1112,6 +1397,8 @@ type Passo = {
   rascunho: Rascunho | null
   executada: boolean
   motivo: string | null
+  /** botões interativos opcionais (item 10) — só na oferta de horários */
+  botoes?: { id: string; texto: string }[]
 }
 
 /* ------------------------------------------------------------------ */
@@ -1129,9 +1416,13 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
     rascunho: null,
   }
   const historico: Turno[] = [...base.historico]
+  // O histórico é PERSISTIDO (30 min, migration 016). Se o cliente escreveu
+  // um CPF, ele entra mascarado: o número completo é usado na hora para
+  // identificar e não sobrevive em nenhuma linha do banco (§9).
+  const textoNoHistorico = redigirCpf(texto)
   const anterior = historico[historico.length - 1]
-  if (!anterior || anterior.papel !== 'cliente' || anterior.texto !== texto) {
-    historico.push({ papel: 'cliente', texto })
+  if (!anterior || anterior.papel !== 'cliente' || anterior.texto !== textoNoHistorico) {
+    historico.push({ papel: 'cliente', texto: textoNoHistorico })
   }
 
   let rascunho: Rascunho | null = base.rascunho
@@ -1146,6 +1437,7 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
       motivo?: string | null
       rascunhoFinal?: Rascunho | null
       servico?: string | null
+      botoes?: { id: string; texto: string }[]
     } = {},
   ): SaidaConversa => {
     const textoFinal = recortar(resposta)
@@ -1165,6 +1457,7 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
       executada: opcoes.executada ?? false,
       servico: opcoes.servico ?? rascunho?.servico ?? null,
       motivo: opcoes.motivo ?? null,
+      ...(opcoes.botoes && opcoes.botoes.length ? { botoes: opcoes.botoes } : {}),
     }
   }
 
@@ -1215,6 +1508,93 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
     }
   }
 
+  const config = deps.config ?? CONFIG_PADRAO
+
+  /**
+   * Botões da oferta de horários (item 10). Sempre opcional e sempre em
+   * PARALELO ao texto numerado: se a Evolution recusar o envio interativo,
+   * o `whatsapp-enviar` reenvia como texto e o cliente escolhe do mesmo
+   * jeito. Rótulo = hora legível ("13h30"); no máximo 3 (limite do WhatsApp).
+   */
+  const botoesDeHorarios = (opcoes: OpcaoSlot[]): { id: string; texto: string }[] | undefined => {
+    if (!config.ia.botoesInterativos || !opcoes.length) return undefined
+    return opcoes.slice(0, 3).map((o, i) => ({ id: String(i + 1), texto: horaLegivel(o.horario) }))
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Identificação multi-sinal (§6/§9)                                    */
+  /* ------------------------------------------------------------------ */
+
+  type Desfecho =
+    | { tipo: 'ok'; cliente: string; clienteId: string; clube: ClubeCliente | null }
+    | { tipo: 'perguntar-cpf' }
+    | { tipo: 'perguntar-nome' }
+    | { tipo: 'cadastrar' }
+    | { tipo: 'indisponivel' }
+
+  /**
+   * Resolve a identidade com telefone + nome + CPF. Conservative por
+   * construção:
+   *   • `ambiguo` (mais de um cadastro OU sinais em conflito) NUNCA vira
+   *     escolha automática — vira "perguntar-nome" (§6) ou "perguntar-cpf"
+   *     quando o cliente do Clube precisa do sinal forte (§9);
+   *   • `novo` vira "cadastrar" (com link do painel, se configurado) (§7);
+   *   • falha da RPC vira "indisponivel" e o fluxo antigo (nome por telefone)
+   *     assume — identificação nova nunca derruba o atendimento.
+   * O CPF informado é usado NA HORA e descartado: não vai para o rascunho,
+   * para o log nem para a resposta.
+   */
+  const resolverIdentidade = async (
+    nomeInformado: string,
+    cpfInformado = '',
+    preferirCpf = false,
+  ): Promise<Desfecho> => {
+    if (!deps.identificarCliente) return { tipo: 'indisponivel' }
+    let resultado: ResultadoIdentidade | null
+    try {
+      resultado = await deps.identificarCliente({
+        telefone,
+        nome: nomeInformado,
+        cpf: cpfInformado,
+      })
+    } catch {
+      return { tipo: 'indisponivel' }
+    }
+    if (!resultado) return { tipo: 'indisponivel' }
+    const situacao = resultado?.situacao
+    const candidatos = Array.isArray(resultado?.candidatos) ? resultado.candidatos : []
+
+    if (situacao === 'ambiguo') {
+      return preferirCpf ? { tipo: 'perguntar-cpf' } : { tipo: 'perguntar-nome' }
+    }
+    if (situacao === 'novo') return { tipo: 'cadastrar' }
+
+    // `unico` (ou qualquer coisa inesperada): só segue com um candidato que
+    // realmente tenha nome. Resposta fora de formato é tratada como
+    // indisponível — nunca como confiança.
+    const candidato = candidatos[0]
+    const nomeCandidato =
+      candidato && typeof candidato.nome === 'string' ? candidato.nome.trim() : ''
+    if (situacao !== 'unico' || !nomeCandidato || typeof candidato.id !== 'string') {
+      return { tipo: 'indisponivel' }
+    }
+
+    let clube: ClubeCliente | null = null
+    if (deps.clubeDoCliente) {
+      try {
+        clube = await deps.clubeDoCliente(candidato.id)
+      } catch {
+        clube = null
+      }
+    }
+    return {
+      tipo: 'ok',
+      cliente: nomeCandidato.slice(0, 80),
+      clienteId: candidato.id,
+      clube,
+    }
+  }
+
   /* ------------------ passo A: estado pendente --------------------- */
 
   if (rascunho && rascunho.etapa === 'escolhendo') {
@@ -1260,6 +1640,25 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
           const ok = `Agendado! ${r.servico} com ${r.profissional} em ${formatarDataBR(
             r.data ?? '',
           )} às ${horaLegivel(r.horario ?? '')}. O agendamento aguarda a confirmação da nossa equipe.`
+          const extras = calcularExtras(r, fontes.servicos, config.ia.maxSugestoes)
+          if (extras.length && r.servico && r.data && r.horario && r.profissional) {
+            r.sugestao = {
+              base: r.servico,
+              extras: extras.map((e) => e.nome),
+              data: r.data,
+              horario: r.horario,
+              profissional: r.profissional,
+              cliente: r.cliente ?? '',
+            }
+            r.etapa = 'coletando'
+            r.esperandoNome = false
+            r.esperandoCpf = false
+            return fechar(`${ok}\n\n${sugestoesMsg(extras)}`, {
+              acao: 'criar',
+              executada: true,
+              rascunhoFinal: r,
+            })
+          }
           rascunho = null
           return fechar(ok, { acao: 'criar', executada: true, rascunhoFinal: null })
         }
@@ -1273,6 +1672,7 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
             executada: false,
             motivo: resultado.motivo,
             rascunhoFinal: passo.rascunho,
+            botoes: passo.botoes,
           })
         }
         return fechar(falhaMsg(resultado.motivo), {
@@ -1340,8 +1740,138 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
       return fechar(MSG.descartado, { rascunhoFinal: null, acao: acaoAtual })
     }
     // mensagem nova durante a confirmação → recomeça com a intenção atual
-    const novaAcao = detectarAcao(texto)
+    const novaAcao = detectarAcao(texto, acaoAtual)
     rascunho = novaAcao && novaAcao !== acaoAtual ? novoRascunho(novaAcao) : { ...rascunho, etapa: 'coletando' }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* passo A2 — resposta à SUGESTÃO de complemento (§3)                 */
+  /* O agendamento já foi criado; aqui o cliente só diz sim ou não.       */
+  /* "não" encerra e NUNCA reaparece neste atendimento.                   */
+  /* "sim" agenda o serviço extra no MESMO dia/horário/profissional pela   */
+  /* agenda oficial — e se não couber, é o servidor que explica.          */
+  /* ------------------------------------------------------------------ */
+  if (rascunho && rascunho.sugestao) {
+    const sugestao = rascunho.sugestao
+    if (ehRecusaDeSugestao(texto)) {
+      rascunho = null
+      return fechar('Perfeito, seguimos assim. Qualquer coisa é só chamar aqui.', {
+        acao: 'criar',
+        executada: true,
+        rascunhoFinal: null,
+        motivo: 'sugestao-recusada',
+      })
+    }
+    if (ehAfirmacao(texto, 'criar') || extrairServicosCombinados(texto, fontes.servicos).length) {
+      const desejados = extrairServicosCombinados(texto, fontes.servicos)
+      const extras = desejados.length
+        ? sugestao.extras.filter((e) => desejados.includes(e))
+        : sugestao.extras
+      if (!extras.length) {
+        rascunho = null
+        return fechar(MSG.descartado, { acao: 'criar', executada: true, rascunhoFinal: null })
+      }
+      const resultados: string[] = []
+      const falhas: string[] = []
+      for (const extra of extras) {
+        const escrito = await deps.criar({
+          cliente: sugestao.cliente,
+          telefone,
+          servico: extra,
+          profissional: sugestao.profissional,
+          data: sugestao.data,
+          horario: sugestao.horario,
+        })
+        if (escrito.ok) {
+          resultados.push(extra)
+        } else {
+          falhas.push(falhaMsg(escrito.motivo))
+        }
+      }
+      const partes: string[] = []
+      if (resultados.length) {
+        partes.push(
+          `Adicionei ${resultados.join(' e ')} em ${formatarDataBR(sugestao.data)} às ${horaLegivel(
+            sugestao.horario,
+          )} com ${sugestao.profissional}.`,
+        )
+      }
+      partes.push(...falhas)
+      if (!partes.length) partes.push(MSG.descartado)
+      rascunho = null
+      return fechar(partes.join('\n'), {
+        acao: 'criar',
+        executada: resultados.length > 0,
+        servico: resultados[0] ?? null,
+        rascunhoFinal: null,
+        motivo: falhas.length ? 'complemento-indisponivel' : null,
+      })
+    }
+    // nem sim nem não → o rascunho segue normal
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* passo A3 — Audax Club (§8/§9): o cliente perguntou sobre o plano.   */
+  /* Só responde quando NÃO há reserva em andamento (senão o contexto do   */
+  /* agendamento manda) e preserva qualquer rascunho existente.            */
+  /* ------------------------------------------------------------------ */
+  const emAgendamento = rascunho !== null && rascunho.etapa !== 'confirmando'
+  if (!emAgendamento && deps.identificarCliente && ehPerguntaDeClube(texto)) {
+    const cpfDaMensagem = extrairCpf(texto)
+    // §9: cliente do Clube com mais de um cadastro no mesmo telefone →
+    // o sinal forte é o CPF, então é ele que se pede.
+    const desfecho = await resolverIdentidade(
+      rascunho?.cliente ?? '',
+      cpfDaMensagem ?? '',
+      true,
+    )
+    if (desfecho.tipo === 'ok' && desfecho.clube) {
+      const textoClube = clubeMsg(desfecho.clube, config, hoje)
+      if (textoClube) {
+        return fechar(textoClube, {
+          acao: null,
+          executada: false,
+          rascunhoFinal: rascunho,
+          motivo: 'clube-informado',
+        })
+      }
+      return fechar(
+        'Encontrei o seu cadastro, mas não localizei assinatura ativa no Audax Club.',
+        { acao: null, executada: false, rascunhoFinal: rascunho, motivo: 'clube-sem-plano' },
+      )
+    }
+    if (desfecho.tipo === 'ok') {
+      return fechar(
+        'Encontrei o seu cadastro e não localizei assinatura no Audax Club. Se quiser, a recepção pode te explicar os planos.',
+        { acao: null, executada: false, rascunhoFinal: rascunho, motivo: 'clube-sem-plano' },
+      )
+    }
+    if (desfecho.tipo === 'perguntar-cpf') {
+      if (rascunho) rascunho.esperandoCpf = true
+      return fechar('Antes disso, para eu achar seu plano com segurança, me informa seu CPF? Só os números.', {
+        acao: null,
+        executada: false,
+        rascunhoFinal: rascunho,
+        motivo: 'identidade-ambigua',
+      })
+    }
+    if (desfecho.tipo === 'perguntar-nome') {
+      if (rascunho) rascunho.esperandoNome = true
+      return fechar(desambiguacaoMsg(IDENTIDADE_SEM_CANDIDATOS, rascunho?.cliente ?? ''), {
+        acao: null,
+        executada: false,
+        rascunhoFinal: rascunho,
+        motivo: 'identidade-ambigua',
+      })
+    }
+    if (desfecho.tipo === 'cadastrar') {
+      return fechar(cadastroNecessarioMsg(config), {
+        acao: null,
+        executada: false,
+        rascunhoFinal: rascunho,
+        motivo: 'sem-cadastro',
+      })
+    }
   }
 
   /* ------------------ passo B: extração ---------------------------- */
@@ -1366,6 +1896,62 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
   }
   const r = rascunho
 
+  /* ------------------------------------------------------------------ */
+  /* CPF solicitado: a resposta é o CPF, e só o CPF.                    */
+  /* (§9) Ele NÃO é guardado em lugar nenhum além desta chamada — o       */
+  /* rascunho, o log de auditoria e a resposta ficam sem ele.             */
+  /* ------------------------------------------------------------------ */
+  if (r.esperandoCpf && acao === 'criar') {
+    const cpf = extrairCpf(texto)
+    r.esperandoCpf = false
+    if (!cpf) {
+      r.esperandoCpf = true
+      r.etapa = 'coletando'
+      const passo = await avancar(r)
+      return fechar(`Não consegui ler esse CPF. Pode me informar só os números?\n${passo.resposta}`, {
+        rascunhoFinal: r,
+        motivo: 'cpf-invalido',
+        botoes: passo.botoes,
+      })
+    }
+    const desfecho = await resolverIdentidade(r.cliente ?? '', cpf, true)
+    if (desfecho.tipo === 'ok') {
+      r.cliente = desfecho.cliente
+      r.clienteId = desfecho.clienteId
+      r.esperandoNome = false
+      const passo = await avancar(r)
+      return fechar(passo.resposta, {
+        executada: passo.executada,
+        motivo: passo.motivo,
+        rascunhoFinal: passo.rascunho,
+      })
+    }
+    if (desfecho.tipo === 'perguntar-cpf') {
+      r.esperandoCpf = true
+      r.etapa = 'coletando'
+      return fechar(conflitoCpfMsg(), {
+        rascunhoFinal: r,
+        motivo: 'cpf-sem-correspondencia',
+      })
+    }
+    if (desfecho.tipo === 'perguntar-nome') {
+      r.esperandoNome = true
+      r.etapa = 'coletando'
+      return fechar(desambiguacaoMsg(IDENTIDADE_SEM_CANDIDATOS, r.cliente ?? ''), {
+        rascunhoFinal: r,
+        motivo: 'identidade-ambigua',
+      })
+    }
+    if (desfecho.tipo === 'cadastrar') {
+      r.etapa = 'coletando'
+      return fechar(cadastroNecessarioMsg(config), {
+        rascunhoFinal: r,
+        motivo: 'sem-cadastro',
+      })
+    }
+    r.esperandoCpf = false
+  }
+
   /* Nome do cliente tem PRIORIDADE no estado de coleta do nome: nenhum
      parser de campo pode "roubar" a resposta. Só sai da captura quando o
      texto traz sinal inequívoco de OUTRO campo (horário, data, período,
@@ -1379,6 +1965,31 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
     !ehRespostaDeCampo(texto, hoje, fontes.servicos)
 
   if (capturandoNome) {
+    // O cliente respondeu um CPF onde a máquina pedia o nome: isso é SINAL DE
+    // IDENTIDADE, não nome. Gravar o número como `agendamentos.cliente`
+    // seria escrever dado sensível na agenda — e não ajudaria ninguém.
+    if (extrairCpf(texto)) {
+      const desfecho = await resolverIdentidade(r.cliente ?? '', extrairCpf(texto) ?? '', true)
+      if (desfecho.tipo === 'ok') {
+        r.cliente = desfecho.cliente
+        r.clienteId = desfecho.clienteId
+        r.esperandoNome = false
+        const passo = await avancar(r)
+        return fechar(passo.resposta, {
+          executada: passo.executada,
+          motivo: passo.motivo,
+          rascunhoFinal: passo.rascunho,
+          botoes: passo.botoes,
+        })
+      }
+      r.esperandoNome = false
+      r.esperandoCpf = true
+      r.etapa = 'coletando'
+      return fechar(conflitoCpfMsg(), {
+        rascunhoFinal: r,
+        motivo: 'cpf-sem-correspondencia',
+      })
+    }
     // Pontuação final ("Silva.") é do texto, não do nome.
     const nome = texto
       .trim()
@@ -1414,6 +2025,26 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
     if (servicoExtraido.servico) {
       if (acao !== 'cancelar' || !r.alvo) {
         r.servico = servicoExtraido.servico
+      }
+    }
+
+    // §3 — serviços citados em combinação ficam registrados como OFERTA
+    // extra (nunca como agendamento paralelo): o PRIMEIRO citado vira o
+    // agendamento e os outros só entram se o cliente disser que sim.
+    if (acao === 'criar') {
+      const combinados = extrairServicosCombinados(texto, fontes.servicos)
+      // Em "quero cabelo e barba" a ordem falada manda: quem vem primeiro é o
+      // serviço principal e o resto vira oferta. Sem isto, o casamento por
+      // palavra solta ("barba") escolheria o serviço errado.
+      if (
+        combinados.length >= 2 &&
+        (!r.servico || combinados.includes(r.servico))
+      ) {
+        r.servico = combinados[0]
+      }
+      const extras = combinados.filter((nome) => nome !== r.servico)
+      if (extras.length) {
+        r.servicosCombinados = [...new Set([...(r.servicosCombinados ?? []), ...extras])]
       }
     }
 
@@ -1551,6 +2182,7 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
           rascunho: rascunhoAtual,
           executada: false,
           motivo: null,
+          botoes: botoesDeHorarios(opcoes),
         }
       }
       const livres = profissionaisLivresNaHora(grade, rascunhoAtual.horario)
@@ -1603,8 +2235,54 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
         }
       }
 
+      /* -------------------------------------------------------------- */
+      /* Identidade (§6/§7) antes de qualquer coisa: telefone + nome +    */
+      /* CPF. Um cadastro só → segue sozinho; mais de um → pergunta;      */
+      /* nenhum → pede cadastro com o link do painel.                    */
+      /* Sem `identificarCliente` (deploy parcial/teste antigo), cai no  */
+      /* comportamento anterior: telefone → nome.                        */
+      /* -------------------------------------------------------------- */
       if (!rascunhoAtual.cliente) {
-        if (deps.clientePorTelefone) {
+        const desfecho = await resolverIdentidade(rascunhoAtual.cliente ?? '')
+        if (desfecho.tipo === 'ok') {
+          rascunhoAtual.cliente = desfecho.cliente
+          rascunhoAtual.clienteId = desfecho.clienteId
+        } else if (desfecho.tipo === 'perguntar-cpf') {
+          rascunhoAtual.esperandoCpf = true
+          rascunhoAtual.esperandoNome = false
+          rascunhoAtual.etapa = 'coletando'
+          return {
+            resposta:
+              'Encontrei mais de um cadastro com esse número. Para eu não te atribuir o agendamento errado, me informa seu CPF? Só os números.',
+            rascunho: rascunhoAtual,
+            executada: false,
+            motivo: 'identidade-ambigua',
+          }
+        } else if (desfecho.tipo === 'perguntar-nome') {
+          rascunhoAtual.esperandoNome = true
+          rascunhoAtual.esperandoCpf = false
+          rascunhoAtual.etapa = 'coletando'
+          return {
+            resposta: desambiguacaoMsg(IDENTIDADE_SEM_CANDIDATOS, rascunhoAtual.cliente ?? ''),
+            rascunho: rascunhoAtual,
+            executada: false,
+            motivo: 'identidade-ambigua',
+          }
+        } else if (desfecho.tipo === 'cadastrar') {
+          rascunhoAtual.esperandoNome = false
+          rascunhoAtual.esperandoCpf = false
+          rascunhoAtual.etapa = 'coletando'
+          return {
+            resposta: cadastroNecessarioMsg(config),
+            rascunho: rascunhoAtual,
+            executada: false,
+            motivo: 'sem-cadastro',
+          }
+        }
+      }
+
+      if (!rascunhoAtual.cliente) {
+        if (deps.clientePorTelefone && telefone) {
           try {
             const nome = await deps.clientePorTelefone(telefone)
             if (nome && nome.trim()) rascunhoAtual.cliente = nome.trim().slice(0, 80)
@@ -1735,6 +2413,7 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
         rascunho: rascunhoAtual,
         executada: false,
         motivo: null,
+        botoes: botoesDeHorarios(opcoes),
       }
     }
     const livres = profissionaisLivresNaHora(grade, rascunhoAtual.horario)
@@ -1803,5 +2482,6 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
     executada: passo.executada,
     motivo: passo.motivo,
     rascunhoFinal: rascunho,
+    botoes: passo.botoes,
   })
 }

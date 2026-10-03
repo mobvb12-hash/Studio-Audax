@@ -20,6 +20,15 @@ export const RPCS_AUTORIZADAS = [
   'ia_contexto_salvar',
   'ia_contexto_fechar',
   'ia_mensagem_registrar',
+  // identidade multi-sinal + Clube (migration 023)
+  'ia_clientes_identificar',
+  'ia_clube_cliente',
+  // configuração centralizada + auditoria/aprendizado (migration 022)
+  'ia_configuracoes_ler',
+  'ia_evento_registrar',
+  // fila de notificações com dedup (migration 024)
+  'ia_notificacoes_pendentes',
+  'ia_notificacao_resolver',
 ] as const
 
 export type RpcAutorizada = (typeof RPCS_AUTORIZADAS)[number]
@@ -29,6 +38,10 @@ export type RpcMontada = { url: string; init: RequestInit }
 const RE_TELEFONE = /^\d{10,13}$/
 const RE_DATA = /^\d{4}-\d{2}-\d{2}$/
 const RE_HORARIO = /^\d{1,2}:\d{2}$/
+/** CPF formatado ou cru — só para a RPC de identidade; nunca é logado. */
+const RE_CPF = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
+const RE_TEXTO_CURTO = /^[\s\S]{0,120}$/
+const RE_TEXTO_MEDIO = /^[\s\S]{0,300}$/
 
 function validarParametros(
   nome: RpcAutorizada,
@@ -78,6 +91,54 @@ function validarParametros(
   }
   if (nome === 'ia_agendamento_cancelar' && typeof params.p_id === 'string') {
     if (!/^[A-Za-z0-9_-]{6,64}$/.test(params.p_id)) return 'Identificador inválido.'
+  }
+  if (nome === 'ia_clientes_identificar') {
+    // CPF: formato válido ou vazio — a validação de dígito é do servidor
+    // (audax_cpf_valido); aqui só barramos lixo/caractere estranho.
+    const cpf = params.p_cpf
+    if (typeof cpf === 'string' && cpf.trim() !== '' && !RE_CPF.test(cpf.trim())) {
+      return 'CPF inválido.'
+    }
+    const nome = params.p_nome
+    if (typeof nome === 'string' && !RE_TEXTO_CURTO.test(nome)) {
+      return 'Nome inválido.'
+    }
+  }
+  if (nome === 'ia_clube_cliente' && typeof params.p_cliente_id === 'string') {
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(params.p_cliente_id)) {
+      return 'Cliente inválido.'
+    }
+  }
+  if (nome === 'ia_evento_registrar') {
+    // Textos curtos/médios e JSON estruturado — nada de transcrição da
+    // conversa e nada de dado sensível (o servidor ainda recusa 6+ dígitos).
+    // `campo` garante string: `params` é `Record<string, unknown>` e um
+    // `unknown` não pode ser entregue direto a uma expressão regular.
+    const campo = (chave: string): string => (typeof params[chave] === 'string' ? (params[chave] as string) : '')
+    if (!RE_TEXTO_CURTO.test(campo('p_fluxo'))) return 'Registro inválido.'
+    if (!RE_TEXTO_CURTO.test(campo('p_intencao'))) return 'Registro inválido.'
+    if (!RE_TEXTO_CURTO.test(campo('p_acao'))) return 'Registro inválido.'
+    if (!RE_TEXTO_MEDIO.test(campo('p_motivo'))) return 'Registro inválido.'
+    if (!RE_TEXTO_CURTO.test(campo('p_remetente'))) return 'Registro inválido.'
+    if (!RE_TEXTO_CURTO.test(campo('p_ambiguidade'))) return 'Registro inválido.'
+    if (!/^[a-z]{1,5}$/.test(campo('p_executada'))) return 'Registro inválido.'
+    for (const chave of ['p_termos', 'p_correcoes', 'p_contexto', 'p_acoes']) {
+      const valor = params[chave]
+      if (typeof valor !== 'string' || valor.length > 8000) return 'Registro inválido.'
+    }
+    for (const chave of ['p_digitos', 'p_duracao_ms']) {
+      const valor = params[chave]
+      if (typeof valor !== 'string' || !/^\d{0,6}$/.test(valor)) return 'Registro inválido.'
+    }
+  }
+  if (nome === 'ia_notificacao_resolver' && typeof params.p_id === 'string') {
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(params.p_id)) return 'Identificador inválido.'
+    if (typeof params.p_ok === 'string' && !/^(true|false)$/.test(params.p_ok)) {
+      return 'Resultado inválido.'
+    }
+    if (!RE_TEXTO_MEDIO.test(typeof params.p_motivo === 'string' ? params.p_motivo : '')) {
+      return 'Motivo inválido.'
+    }
   }
   return null
 }

@@ -34,6 +34,10 @@ export type FonteServico = {
   preco: number | string
   duracaoMin?: number | null
   ativo?: boolean
+  /** id do serviço no catálogo oficial (025) — usado para resolver complementos */
+  id?: string
+  /** ids de serviços que o admin configurou como complemento deste (025) */
+  complementos?: string[]
 }
 
 export type FonteProfissional = { nome: string; ativo?: boolean }
@@ -357,6 +361,17 @@ export function mapearFontes(catalogoBruto: unknown, slotsBruto: unknown): Fonte
       nome: typeof linha.nome === 'string' ? linha.nome : '',
       preco: typeof linha.preco === 'number' || typeof linha.preco === 'string' ? linha.preco : '',
       duracaoMin: typeof linha.duracaoMin === 'number' ? linha.duracaoMin : null,
+      // 025: id e ids de complemento do catálogo oficial. As chaves só entram
+      // quando o catálogo realmente as devolveu — o provedor de IA continua
+      // recebendo só nome/preço/duração/expediente (montarContextoOficial).
+      ...(typeof linha.id === 'string' ? { id: linha.id } : {}),
+      ...(Array.isArray(linha.complementos)
+        ? {
+            complementos: linha.complementos
+              .filter((id): id is string => typeof id === 'string')
+              .slice(0, 12),
+          }
+        : {}),
     })),
     profissionais: lista(catalogo.profissionais).map((linha) => ({
       nome: typeof linha.nome === 'string' ? linha.nome : '',

@@ -70,6 +70,8 @@ function normalizar(partial: Partial<Profissional>): Profissional | null {
     foto: partial.foto ?? '',
     ativo: typeof partial.ativo === 'boolean' ? partial.ativo : true,
     criadoEm: partial.criadoEm ?? new Date().toISOString(),
+    whatsappNotificacao: partial.whatsappNotificacao ?? '',
+    notificarAgendamentos: partial.notificarAgendamentos !== false,
   }
 }
 
@@ -134,6 +136,8 @@ function carregar(): Profissional[] {
     foto: '',
     ativo: true,
     criadoEm: agora,
+    whatsappNotificacao: '',
+    notificarAgendamentos: true,
   }))
 }
 
@@ -149,6 +153,8 @@ function assinatura(p: Profissional): string {
     p.email,
     p.foto,
     p.ativo,
+    p.whatsappNotificacao,
+    p.notificarAgendamentos,
   ])
 }
 
@@ -405,6 +411,8 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
         foto: input.foto,
         ativo: true,
         criadoEm: new Date().toISOString(),
+        whatsappNotificacao: input.whatsappNotificacao?.trim() ?? '',
+        notificarAgendamentos: input.notificarAgendamentos !== false,
       }
       alterados.current.add(novo.id)
       setProfissionais((atual) => ordenar([...atual, novo]))
@@ -449,6 +457,8 @@ export function ProfissionaisProvider({ children }: { children: ReactNode }) {
                   telefone: input.telefone.trim(),
                   email: input.email.trim(),
                   foto: input.foto,
+                  whatsappNotificacao: input.whatsappNotificacao?.trim() ?? '',
+                  notificarAgendamentos: input.notificarAgendamentos !== false,
                 }
               : p,
           ),

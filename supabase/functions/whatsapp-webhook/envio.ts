@@ -20,9 +20,17 @@
 //   não geram envio nesta etapa;
 // - Mensagem limitada a 4096 caracteres (mesmo teto do whatsapp-enviar).
 
+export type BotaoEnvio = { id: string; texto: string }
+
 export type PedidoEnvio = {
   telefone: string
   mensagem: string
+  /**
+   * Botões interativos (item 10) — OPCIONAL. Quando presentes, o
+   * `whatsapp-enviar` tenta o envio interativo e cai para texto numerado
+   * se a Evolution recusar. Ausentes = comportamento idêntico ao anterior.
+   */
+  botoes?: BotaoEnvio[]
 }
 
 export type EnvioMontado = {
@@ -126,12 +134,41 @@ export function lerChaveSecreta(ler: (nome: string) => string | undefined): stri
   return chave
 }
 
+/** Até 3 botões, id curto, rótulo curto — mesmos limites do WhatsApp. */
+const MAX_BOTOES = 3
+const MAX_TEXTO_BOTAO = 20
+
+/**
+ * Botões utilizáveis de um pedido, ou null. Descarta o que estiver fora do
+ * formato em vez de recusar o envio: um botão ruim não pode impedir a
+ * mensagem de sair.
+ */
+export function botoesUtilizaveis(botoes: unknown): BotaoEnvio[] | null {
+  if (!Array.isArray(botoes) || !botoes.length) return null
+  const saida: BotaoEnvio[] = []
+  for (const bruto of botoes) {
+    if (saida.length >= MAX_BOTOES) break
+    if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) continue
+    const item = bruto as Record<string, unknown>
+    const texto = typeof item.texto === 'string' ? item.texto.trim().slice(0, MAX_TEXTO_BOTAO) : ''
+    if (!texto) continue
+    saida.push({
+      id: String(saida.length + 1),
+      texto,
+    })
+  }
+  return saida.length ? saida : null
+}
+
 /**
  * Monta a chamada à função `whatsapp-enviar`: modo `secret` do withSupabase,
  * que lê o header `apikey` (o `Authorization: Bearer` com credencial legada
  * era rejeitado como INVALID_JWT). A chave vai SOMENTE neste header — nunca
  * no corpo, nunca na URL, nunca em log. Lança com mensagem própria (sem
  * conter a chave) quando a configuração é inválida.
+ *
+ * O corpo leva `botoes` apenas quando o pedido os traz: sem eles, o corpo é
+ * byte a byte o que já era antes (`{ telefone, mensagem }`).
  */
 export function montarPedidoEnvio(
   base: string,
@@ -151,6 +188,7 @@ export function montarPedidoEnvio(
   const mensagem = typeof pedido.mensagem === 'string' ? pedido.mensagem.trim() : ''
   if (!mensagem) throw new Error('Mensagem vazia.')
   if (mensagem.length > 4096) throw new Error('Mensagem acima de 4096 caracteres.')
+  const botoes = botoesUtilizaveis(pedido.botoes)
   return {
     url: `${urlBase}/functions/v1/whatsapp-enviar`,
     init: {
@@ -159,7 +197,7 @@ export function montarPedidoEnvio(
         'Content-Type': 'application/json',
         apikey: chave,
       },
-      body: JSON.stringify({ telefone, mensagem }),
+      body: JSON.stringify(botoes ? { telefone, mensagem, botoes } : { telefone, mensagem }),
     },
   }
 }

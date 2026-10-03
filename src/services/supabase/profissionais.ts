@@ -18,6 +18,9 @@ type ProfissionalRow = {
   foto: string
   ativo: boolean
   criado_em: string
+  /** migration 024 — podem não existir em bases ainda não migradas */
+  whatsapp_notificacao?: string | null
+  notificar_agendamentos?: boolean | null
 }
 
 function paraProfissional(row: ProfissionalRow): Profissional {
@@ -29,6 +32,8 @@ function paraProfissional(row: ProfissionalRow): Profissional {
     foto: row.foto,
     ativo: row.ativo,
     criadoEm: row.criado_em,
+    whatsappNotificacao: row.whatsapp_notificacao ?? '',
+    notificarAgendamentos: row.notificar_agendamentos !== false,
   }
 }
 
@@ -69,6 +74,8 @@ export async function criarProfissional(
       telefone: input.telefone,
       email: input.email,
       foto: input.foto,
+      whatsapp_notificacao: input.whatsappNotificacao ?? '',
+      notificar_agendamentos: input.notificarAgendamentos !== false,
     })
     .select()
     .maybeSingle()
@@ -90,6 +97,8 @@ export async function atualizarProfissional(
       telefone: input.telefone,
       email: input.email,
       foto: input.foto,
+      whatsapp_notificacao: input.whatsappNotificacao ?? '',
+      notificar_agendamentos: input.notificarAgendamentos !== false,
     })
     .eq('id', id)
     .select()
@@ -142,6 +151,8 @@ export async function importarProfissionais(
       foto: p.foto,
       ativo: p.ativo,
       criado_em: p.criadoEm,
+      whatsapp_notificacao: p.whatsappNotificacao ?? '',
+      notificar_agendamentos: p.notificarAgendamentos !== false,
     })),
     { onConflict: 'id' },
   )

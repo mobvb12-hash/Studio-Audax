@@ -13,6 +13,14 @@ export type Profissional = {
    */
   ativo: boolean
   criadoEm: string
+  /**
+   * WhatsApp de NOTIFICAÇÃO de novo agendamento (migration 024). Vazio =
+   * o profissional não recebe aviso — o agendamento segue normal de todo
+   * modo. É um canal oficial do cadastro, nunca um número fixo no código.
+   */
+  whatsappNotificacao: string
+  /** Se false, o profissional não é notificado de novos agendamentos. */
+  notificarAgendamentos: boolean
 }
 
 export type NovoProfissionalInput = {
@@ -20,4 +28,7 @@ export type NovoProfissionalInput = {
   telefone: string
   email: string
   foto: string
+  /** Opcional ao criar: sem valor, o profissional nasce sem notificação. */
+  whatsappNotificacao?: string
+  notificarAgendamentos?: boolean
 }

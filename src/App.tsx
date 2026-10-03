@@ -47,6 +47,7 @@ const PDVLazy = lazy(() => import('@/pages/PDV'))
 const ProdutosLazy = lazy(() => import('@/pages/Produtos'))
 const ClubeLazy = lazy(() => import('@/pages/Clube'))
 const IaLazy = lazy(() => import('@/pages/Ia'))
+const ConfiguracoesLazy = lazy(() => import('@/pages/Configuracoes'))
 
 const ROTULOS: Record<PaginaId, string> = {
   painel: 'Painel',
@@ -102,6 +103,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'estoque',
   'clube',
   'ia',
+  'configuracoes',
 ]
 
 import type { PapelPerfil } from '@/modules/auth/tipos'
@@ -257,6 +259,13 @@ function Conteudo() {
           <PaginaProtegida pagina="ia" papel={papel} onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando IA…</div>}>
               <IaLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'configuracoes' && (
+          <PaginaProtegida pagina="configuracoes" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Configurações…</div>}>
+              <ConfiguracoesLazy />
             </Suspense>
           </PaginaProtegida>
         )}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import {
   detectarAcao,
   ehAfirmacao,
@@ -316,6 +316,7 @@ describe('extrairProfissional', () => {
   it('"com <nome> não cadastrado" é sinalizado', () => {
     const r = extrairProfissional('com Fernando', ['Ítalo', 'Cleiton'])
     expect(r.profissional).toBeNull()
+    // o extrator devolve o token normalizado; a CAPITALIZAÇÃO é da mensagem
     expect(r.desconhecido).toBe('fernando')
   })
   it('sem menção → nada', () => {
@@ -500,7 +501,7 @@ describe('processarConversa — cenários completos', () => {
 
   it('cenário 4 — profissional inexistente: mostra os ativos', async () => {
     const { saida, chamadas } = await rodar('agendar Corte Degradê amanhã com Fernando')
-    expect(saida.resposta).toContain('"fernando"')
+    expect(saida.resposta).toContain('"Fernando"')
     expect(saida.resposta).toContain('Ítalo')
     expect(saida.resposta).toContain('Cleiton')
     expect(chamadas.criar).toHaveLength(0)
