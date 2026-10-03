@@ -11,6 +11,7 @@ import { EstoqueProvider } from '@/modules/estoque/store'
 import { ProdutosProvider, useProdutos } from '@/modules/produtos/store'
 import { ProfissionaisProvider } from '@/modules/profissionais/store'
 import PDV from './PDV'
+import { escolherCliente } from '@/test-utils/escolherCliente'
 
 let ctxCaixa: ReturnType<typeof useCaixa>
 let ctxProdutos: ReturnType<typeof useProdutos>
@@ -119,7 +120,7 @@ beforeEach(() => {
 })
 
 describe('PDV — venda completa', () => {
-  it('finaliza venda com cliente, profissional, desconto e forma de pagamento', () => {
+  it('finaliza venda com cliente, profissional, desconto e forma de pagamento', async () => {
     montar()
     semearVendaBasica()
     const id = criarProduto('Creme capilar', 30)
@@ -132,9 +133,7 @@ describe('PDV — venda completa', () => {
     })
     expect(screen.getByText('R$ 50,00')).toBeTruthy()
 
-    fireEvent.change(screen.getByLabelText('Cliente (opcional)'), {
-      target: { value: ctxClientes.clientes[0].id },
-    })
+    await escolherCliente('Lucas')
     fireEvent.change(screen.getByLabelText('Profissional (opcional)'), {
       target: { value: 'Ítalo Santos' },
     })

@@ -24,7 +24,7 @@ export function Campo({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-[13px] font-medium text-[#4A4436]">
+      <label htmlFor={id} className="block text-[13px] font-medium text-noir-700">
         {label}
       </label>
       <input
@@ -35,9 +35,9 @@ export function Campo({
         placeholder={placeholder}
         value={valor}
         onChange={(evento) => aoMudar(evento.target.value)}
-        className="mt-1 w-full rounded-lg border border-[#E5DCC3] px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+        className="mt-1 w-full rounded-lg border border-cream-300 px-3 py-2 text-sm text-noir-900 outline-none focus:border-gold-700"
       />
-      {dica && <p className="mt-1 text-[12px] text-[#8A8171]">{dica}</p>}
+      {dica && <p className="mt-1 text-[12px] text-noir-500">{dica}</p>}
     </div>
   )
 }
@@ -81,7 +81,7 @@ export function BotaoPrimario({
     <button
       type={type}
       disabled={processando}
-      className="w-full rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+      className="w-full rounded-lg bg-gold-700 px-4 py-2.5 text-sm font-semibold text-cream-50 hover:bg-gold-800 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {processando ? processandoRotulo : rotulo}
     </button>
@@ -99,15 +99,15 @@ export function CartaoPainel({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] px-4 py-10">
-      <div className="w-full max-w-sm rounded-xl border border-[#E5DCC3] bg-white p-8">
-        <h1 className="text-center text-xl font-bold text-[#1C1A15]">{titulo}</h1>
+    <div className="flex min-h-screen items-center justify-center bg-cream-50 px-4 py-10">
+      <div className="w-full max-w-sm rounded-xl border border-cream-300 bg-white p-8">
+        <h1 className="text-center text-xl font-bold text-noir-900">{titulo}</h1>
         <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
+          className="mx-auto mt-3 h-px w-16 bg-gold-700"
           aria-hidden="true"
         />
         {subtitulo && (
-          <p className="mt-4 text-center text-sm text-[#8A8171]">{subtitulo}</p>
+          <p className="mt-4 text-center text-sm text-noir-500">{subtitulo}</p>
         )}
         {children}
       </div>
@@ -126,7 +126,7 @@ export function LinkPainel({
     <button
       type="button"
       onClick={aoClicar}
-      className="w-full text-center text-[13px] font-medium text-[#8A6A14] hover:underline"
+      className="w-full text-center text-[13px] font-medium text-gold-700 hover:underline"
     >
       {children}
     </button>

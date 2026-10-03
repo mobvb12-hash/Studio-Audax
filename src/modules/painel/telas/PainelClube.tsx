@@ -33,10 +33,10 @@ function rotuloForma(forma: string): string {
 function LinhaPagamento({ pagamento }: { pagamento: ClubePagamentoPainel }) {
   return (
     <li className="flex items-center justify-between gap-3 py-2 text-[13px]">
-      <span className="text-[#4A4436]">
+      <span className="text-noir-700">
         {formatarDataBR(pagamento.data)} · {rotuloForma(pagamento.formaPagamento)}
       </span>
-      <span className="font-medium text-[#1C1A15]">
+      <span className="font-medium text-noir-900">
         {formatarBRL(pagamento.valor)}
       </span>
     </li>
@@ -79,7 +79,7 @@ export default function PainelClube() {
 
   if (estado?.fase === 'erro') {
     return (
-      <div className="rounded-xl border border-[#E5DCC3] bg-white p-6 text-center">
+      <div className="rounded-xl border border-cream-300 bg-white p-6 text-center">
         <p role="alert" className="text-sm text-red-700">
           {estado.mensagem}
         </p>
@@ -89,7 +89,7 @@ export default function PainelClube() {
             setEstado({ fase: 'carregando' })
             setTentativa((atual) => atual + 1)
           }}
-          className="mt-4 rounded-lg border border-[#E5DCC3] px-4 py-2 text-sm font-medium text-[#4A4436] hover:border-[#8A6A14]"
+          className="mt-4 rounded-lg border border-cream-300 px-4 py-2 text-sm font-medium text-noir-700 hover:border-gold-700"
         >
           Tentar de novo
         </button>
@@ -99,7 +99,7 @@ export default function PainelClube() {
 
   if (estado !== null) {
     return (
-      <p className="py-10 text-center text-sm text-[#8A8171]">
+      <p className="py-10 text-center text-sm text-noir-500">
         Carregando seu Clube…
       </p>
     )
@@ -109,19 +109,19 @@ export default function PainelClube() {
     return (
       <div className="space-y-6">
         <header className="text-center">
-          <h1 className="text-[22px] font-bold text-[#1C1A15]">
+          <h1 className="text-[22px] font-bold text-noir-900">
             Clube Audax
           </h1>
           <div
-            className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
+            className="mx-auto mt-3 h-px w-16 bg-gold-700"
             aria-hidden="true"
           />
         </header>
-        <div className="rounded-xl border border-dashed border-[#E5DCC3] bg-white p-6 text-center">
-          <p className="text-sm text-[#8A8171]">
+        <div className="rounded-xl border border-dashed border-cream-300 bg-white p-6 text-center">
+          <p className="text-sm text-noir-500">
             Você ainda não tem uma assinatura do Clube Audax.
           </p>
-          <p className="mt-2 text-sm text-[#8A8171]">
+          <p className="mt-2 text-sm text-noir-500">
             As assinaturas são feitas direto no Studio — fale com a equipe
             para fazer parte.
           </p>
@@ -136,22 +136,22 @@ export default function PainelClube() {
   return (
     <div className="space-y-6">
       <header className="text-center">
-        <h1 className="text-[22px] font-bold text-[#1C1A15]">
+        <h1 className="text-[22px] font-bold text-noir-900">
           Clube Audax
         </h1>
         <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
+          className="mx-auto mt-3 h-px w-16 bg-gold-700"
           aria-hidden="true"
         />
       </header>
 
-      <section className="rounded-xl border border-[#E5DCC3] bg-white p-5">
+      <section className="rounded-xl border border-cream-300 bg-white p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[15px] font-semibold text-[#1C1A15]">
+            <p className="text-[15px] font-semibold text-noir-900">
               {clube.planoRotulo}
             </p>
-            <p className="mt-0.5 text-[13px] text-[#8A8171]">
+            <p className="mt-0.5 text-[13px] text-noir-500">
               Mensalidade de {formatarBRL(assinatura.valorMensal)}
             </p>
           </div>
@@ -164,21 +164,21 @@ export default function PainelClube() {
 
         <dl className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
           <div>
-            <dt className="text-[#8A8171]">Assinante desde</dt>
-            <dd className="mt-0.5 font-medium text-[#1C1A15]">
+            <dt className="text-noir-500">Assinante desde</dt>
+            <dd className="mt-0.5 font-medium text-noir-900">
               {formatarDataBR(assinatura.dataAssinatura)}
             </dd>
           </div>
           <div>
-            <dt className="text-[#8A8171]">Próximo vencimento</dt>
-            <dd className="mt-0.5 font-medium text-[#1C1A15]">
+            <dt className="text-noir-500">Próximo vencimento</dt>
+            <dd className="mt-0.5 font-medium text-noir-900">
               {formatarDataBR(assinatura.proximoVencimento)}
             </dd>
           </div>
         </dl>
 
         {assinatura.cancelada && (
-          <p className="mt-4 rounded-lg bg-[#FDFBF3] px-3 py-2 text-[13px] text-[#4A4436]">
+          <p className="mt-4 rounded-lg bg-cream-50 px-3 py-2 text-[13px] text-noir-700">
             Cancelada em {formatarDataBR(assinatura.canceladaEm ?? '')}
             {assinatura.motivoCancelamento
               ? ` — ${assinatura.motivoCancelamento}`
@@ -189,15 +189,15 @@ export default function PainelClube() {
       </section>
 
       <section>
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[#8A6A14]">
+        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gold-700">
           Últimos pagamentos
         </h2>
         {clube.pagamentos.length === 0 ? (
-          <p className="mt-2 text-sm text-[#8A8171]">
+          <p className="mt-2 text-sm text-noir-500">
             Nenhum pagamento registrado até agora.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-[#E5DCC3] rounded-xl border border-[#E5DCC3] bg-white px-4">
+          <ul className="mt-2 divide-y divide-cream-300 rounded-xl border border-cream-300 bg-white px-4">
             {clube.pagamentos.map((pagamento) => (
               <LinhaPagamento
                 key={`${pagamento.data}-${pagamento.valor}-${pagamento.formaPagamento}`}

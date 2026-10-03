@@ -9,6 +9,7 @@ import type {
 } from '@/services/supabase/painel'
 import { separarAgendamentos } from '../dashboard'
 import { navegarPainel } from '../regras'
+import { Botao, Carregando, EstadoVazio } from '../ui'
 import CartaoAgendamento from './CartaoAgendamento'
 
 type Carregando = { fase: 'carregando' } | { fase: 'erro'; mensagem: string }
@@ -20,9 +21,21 @@ function hojeISO(): string {
   return `${agora.getFullYear()}-${mes}-${dia}`
 }
 
+function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+        {titulo}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
 /**
- * Dashboard do cliente: saudação, próximo agendamento em destaque e os
- * últimos do histórico — tudo lido das linhas próprias (RLS de posse 018).
+ * Início do painel do cliente: saudação, próximo horário em destaque e o
+ * histórico recente. Tudo lido das linhas próprias (RLS de posse 018) —
+ * nenhuma função administrativa aparece aqui.
  */
 export default function PainelDashboard() {
   const [carregando, setCarregando] = useState<Carregando | null>({
@@ -60,27 +73,20 @@ export default function PainelDashboard() {
   }, [tentativa])
 
   if (carregando?.fase === 'carregando') {
-    return (
-      <p className="py-10 text-center text-sm text-[#8A8171]">
-        Carregando seu painel…
-      </p>
-    )
+    return <Carregando texto="Carregando seu painel…" />
   }
 
   if (carregando?.fase === 'erro') {
     return (
-      <div className="rounded-xl border border-[#E5DCC3] bg-white p-6 text-center">
-        <p role="alert" className="text-sm text-red-700">
-          {carregando.mensagem}
-        </p>
-        <button
-          type="button"
-          onClick={() => setTentativa((atual) => atual + 1)}
-          className="mt-4 rounded-lg border border-[#E5DCC3] px-4 py-2 text-sm font-medium text-[#4A4436] hover:border-[#8A6A14]"
-        >
+      <EstadoVazio
+        alerta
+        titulo="Não foi possível carregar"
+        texto={carregando.mensagem}
+      >
+        <Botao aoClicar={() => setTentativa((atual) => atual + 1)}>
           Tentar de novo
-        </button>
-      </div>
+        </Botao>
+      </EstadoVazio>
     )
   }
 
@@ -90,59 +96,50 @@ export default function PainelDashboard() {
   const primeiroNome = cadastro?.nome?.trim().split(/\s+/)[0] ?? ''
 
   return (
-    <div className="space-y-6">
-      <section>
-        <h1 className="text-[22px] font-bold text-[#1C1A15]">
+    <div className="flex flex-col gap-6">
+      <header>
+        <h1 className="font-serif-display text-[24px] leading-tight font-semibold text-noir-900">
           {primeiroNome ? `Olá, ${primeiroNome}` : 'Seu painel'}
         </h1>
-        <p className="mt-1 text-sm text-[#8A8171]">
+        <p className="mt-1.5 text-[14px] leading-relaxed text-noir-500">
           Acompanhe seus horários e faça novos agendamentos.
         </p>
-      </section>
+      </header>
 
-      <section>
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[#8A6A14]">
-          Próximo agendamento
-        </h2>
-        <div className="mt-2">
-          {proximo ? (
-            <CartaoAgendamento agendamento={proximo} />
-          ) : (
-            <div className="rounded-xl border border-dashed border-[#E5DCC3] bg-white p-6 text-center">
-              <p className="text-sm text-[#8A8171]">
-                Você ainda não tem um agendamento marcado.
-              </p>
+      <Secao titulo="Próximo agendamento">
+        {proximo ? (
+          <>
+            <CartaoAgendamento agendamento={proximo} destaque />
+            {proximos.length > 1 && (
               <button
                 type="button"
-                onClick={() => navegarPainel('agendar')}
-                className="mt-4 rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+                onClick={() => navegarPainel('agendamentos')}
+                className="mt-3 text-[13px] font-medium text-noir-500 hover:text-noir-900"
               >
-                Agendar horário
+                + {proximos.length - 1}{' '}
+                {proximos.length - 1 === 1
+                  ? 'outro agendamento futuro'
+                  : 'outros agendamentos futuros'}
               </button>
-            </div>
-          )}
-        </div>
-        {proximos.length > 1 && (
-          <p className="mt-2 text-[13px] text-[#8A8171]">
-            + {proximos.length - 1}{' '}
-            {proximos.length - 1 === 1
-              ? 'outro agendamento futuro'
-              : 'outros agendamentos futuros'}
-          </p>
+            )}
+          </>
+        ) : (
+          <EstadoVazio titulo="Você ainda não tem um agendamento marcado.">
+            <Botao aoClicar={() => navegarPainel('agendar')}>
+              Agendar horário
+            </Botao>
+          </EstadoVazio>
         )}
-      </section>
+      </Secao>
 
       {ultimos.length > 0 && (
-        <section>
-          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[#8A6A14]">
-            Últimos atendimentos
-          </h2>
-          <div className="mt-2 space-y-3">
+        <Secao titulo="Últimos atendimentos">
+          <div className="flex flex-col gap-3">
             {ultimos.map((agendamento) => (
               <CartaoAgendamento key={agendamento.id} agendamento={agendamento} />
             ))}
           </div>
-        </section>
+        </Secao>
       )}
     </div>
   )

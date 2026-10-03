@@ -27,18 +27,18 @@ function BotoesAcao({ agendamento, aoRemarcar, aoCancelar }: AcoesProps) {
       <button
         type="button"
         onClick={aoRemarcar}
-        className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-[13px] font-medium text-[#4A4436] hover:border-[#8A6A14]"
+        className="rounded-lg border border-cream-300 bg-white px-3 py-1.5 text-[13px] font-medium text-noir-700 hover:border-gold-700"
       >
         Remarcar
       </button>
       <button
         type="button"
         onClick={aoCancelar}
-        className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-[13px] font-medium text-red-700 hover:border-red-300"
+        className="rounded-lg border border-cream-300 bg-white px-3 py-1.5 text-[13px] font-medium text-red-700 hover:border-red-300"
       >
         Cancelar
       </button>
-      <span className="self-center text-[12px] text-[#A99E85]">
+      <span className="self-center text-[12px] text-noir-400">
         {agendamento.status === 'pendente'
           ? 'aguardando confirmação'
           : 'confirmado'}
@@ -132,15 +132,15 @@ function PainelRemarcacao({
   }
 
   return (
-    <div className="mt-2 rounded-xl border border-[#E5DCC3] bg-[#FAF6EB]/60 p-4">
-      <p className="text-[13px] font-semibold text-[#1C1A15]">
+    <div className="mt-2 rounded-xl border border-cream-300 bg-cream-50/60 p-4">
+      <p className="text-[13px] font-semibold text-noir-900">
         Remarcar {agendamento.servico}
       </p>
-      <p className="mt-0.5 text-[12px] text-[#8A8171]">
+      <p className="mt-0.5 text-[12px] text-noir-500">
         Atual: {formatarDataBR(agendamento.data)} · {agendamento.horario} ·{' '}
         {agendamento.profissional}
       </p>
-      <label className="mt-3 block text-[13px] font-medium text-[#4A4436]" htmlFor="rem-data">
+      <label className="mt-3 block text-[13px] font-medium text-noir-700" htmlFor="rem-data">
         Nova data
       </label>
       <input
@@ -153,15 +153,15 @@ function PainelRemarcacao({
       />
       {data && (
         <div className="mt-3">
-          <p className="text-[13px] font-medium text-[#4A4436]">
+          <p className="text-[13px] font-medium text-noir-700">
             Novo horário
           </p>
           {carregandoHorarios ? (
-            <p className="mt-1 text-xs text-[#8A8171]">
+            <p className="mt-1 text-xs text-noir-500">
               Verificando horários…
             </p>
           ) : horarios.length === 0 ? (
-            <p className="mt-1 rounded-lg border border-dashed border-[#DCCFAF] bg-white px-3 py-2 text-xs text-[#A99E85]">
+            <p className="mt-1 rounded-lg border border-dashed border-gold-300 bg-white px-3 py-2 text-xs text-noir-400">
               Nenhum horário livre nesta data. Escolha outro dia.
             </p>
           ) : (
@@ -174,8 +174,8 @@ function PainelRemarcacao({
                   aria-pressed={horario === h}
                   className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
                     horario === h
-                      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-                      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]'
+                      ? 'border-gold-700 bg-gold-700 text-cream-50'
+                      : 'border-cream-300 bg-white text-noir-700 hover:bg-gold-200'
                   }`}
                 >
                   {h}
@@ -190,14 +190,14 @@ function PainelRemarcacao({
           type="button"
           onClick={() => void confirmar()}
           disabled={enviando || !horario}
-          className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg bg-gold-700 px-4 py-2 text-sm font-semibold text-cream-50 hover:bg-gold-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {enviando ? 'Remarcando…' : 'Confirmar remarcação'}
         </button>
         <button
           type="button"
           onClick={aoConcluir}
-          className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+          className="rounded-lg border border-cream-300 bg-white px-4 py-2 text-sm font-medium text-noir-700 hover:bg-gold-200"
         >
           Voltar
         </button>
@@ -215,11 +215,11 @@ type SecaoProps = {
 function Secao({ titulo, vazio, itens }: SecaoProps) {
   return (
     <section>
-      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[#8A6A14]">
+      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gold-700">
         {titulo}
       </h2>
       {itens.length === 0 ? (
-        <p className="mt-2 text-sm text-[#8A8171]">{vazio}</p>
+        <p className="mt-2 text-sm text-noir-500">{vazio}</p>
       ) : (
         <div className="mt-2 space-y-3">
           {itens.map((agendamento) => (
@@ -299,14 +299,14 @@ export default function PainelAgendamentos() {
 
   if (estado?.fase === 'erro') {
     return (
-      <div className="rounded-xl border border-[#E5DCC3] bg-white p-6 text-center">
+      <div className="rounded-xl border border-cream-300 bg-white p-6 text-center">
         <p role="alert" className="text-sm text-red-700">
           {estado.mensagem}
         </p>
         <button
           type="button"
           onClick={() => setTentativa((atual) => atual + 1)}
-          className="mt-4 rounded-lg border border-[#E5DCC3] px-4 py-2 text-sm font-medium text-[#4A4436] hover:border-[#8A6A14]"
+          className="mt-4 rounded-lg border border-cream-300 px-4 py-2 text-sm font-medium text-noir-700 hover:border-gold-700"
         >
           Tentar de novo
         </button>
@@ -321,13 +321,13 @@ export default function PainelAgendamentos() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-[22px] font-bold text-[#1C1A15]">
+          <h1 className="text-[22px] font-bold text-noir-900">
             Meus agendamentos
           </h1>
           <button
             type="button"
             onClick={() => navegarPainel('agendar')}
-            className="rounded-lg bg-[#8A6A14] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-gold-700 px-3 py-2 text-[13px] font-semibold text-cream-50 hover:bg-gold-800"
           >
             Agendar
           </button>
@@ -343,14 +343,14 @@ export default function PainelAgendamentos() {
         )}
 
         {proximos.length === 0 && historico.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#E5DCC3] bg-white p-6 text-center">
-            <p className="text-sm text-[#8A8171]">
+          <div className="rounded-xl border border-dashed border-cream-300 bg-white p-6 text-center">
+            <p className="text-sm text-noir-500">
               Você ainda não tem um agendamento marcado.
             </p>
             <button
               type="button"
               onClick={() => navegarPainel('agendar')}
-              className="mt-4 rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+              className="mt-4 rounded-lg bg-gold-700 px-4 py-2 text-sm font-semibold text-cream-50 hover:bg-gold-800"
             >
               Agendar horário
             </button>
@@ -358,11 +358,11 @@ export default function PainelAgendamentos() {
         ) : (
           <>
             <section>
-              <h2 className="text-[13px] font-semibold uppercase tracking-wide text-[#8A6A14]">
+              <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gold-700">
                 Próximos
               </h2>
               {proximos.length === 0 ? (
-                <p className="mt-2 text-sm text-[#8A8171]">
+                <p className="mt-2 text-sm text-noir-500">
                   Nenhum horário marcado para os próximos dias.
                 </p>
               ) : (
@@ -421,7 +421,7 @@ export default function PainelAgendamentos() {
   }
 
   return (
-    <p className="py-10 text-center text-sm text-[#8A8171]">
+    <p className="py-10 text-center text-sm text-noir-500">
       Carregando seus agendamentos…
     </p>
   )

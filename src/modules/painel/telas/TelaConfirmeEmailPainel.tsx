@@ -19,7 +19,7 @@ export default function TelaConfirmeEmailPainel() {
       subtitulo={AVISO_CONFIRME_EMAIL}
     >
       {email && (
-        <p className="mt-4 text-center text-sm font-medium text-[#1C1A15]">
+        <p className="mt-4 text-center text-sm font-medium text-noir-900">
           {email}
         </p>
       )}
@@ -28,7 +28,7 @@ export default function TelaConfirmeEmailPainel() {
           type="button"
           disabled={processando}
           onClick={() => void aoConfirmarEmail()}
-          className="w-full rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-lg bg-gold-700 px-4 py-2.5 text-sm font-semibold text-cream-50 hover:bg-gold-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {processando ? 'Verificando…' : 'Já confirmei — continuar'}
         </button>

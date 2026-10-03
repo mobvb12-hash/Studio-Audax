@@ -22,6 +22,33 @@
   --color-ink-400: #a99e85;
 
   --color-leaf-600: #6b8e5a;
+
+  /* ------------------------------------------------------------------ */
+  /* Paleta do ÁREA DO CLIENTE (Painel e agendamento público)           */
+  /* Creme / preto / branco / dourado — minimalista e premium.          */
+  /* Tokens próprios para não mexer no visual do painel administrativo.*/
+  /* ------------------------------------------------------------------ */
+  --color-cream-50: #ffffff;
+  --color-cream-100: #f7f6f3;
+  --color-cream-200: #efede7;
+  --color-cream-300: #e2ded2;
+  --color-cream-400: #cdc8b9;
+
+  --color-gold-200: #efe2c6;
+  --color-gold-300: #ddc79b;
+  --color-gold-400: #d3b478;
+  --color-gold-500: #c6a15b;
+  --color-gold-600: #a9843f;
+  --color-gold-700: #8a6a2c;
+  --color-gold-800: #6b5122;
+
+  --color-noir-900: #12110e;
+  --color-noir-800: #1c1a16;
+  --color-noir-700: #2c2924;
+  --color-noir-600: #46413a;
+  --color-noir-500: #6b665c;
+  --color-noir-400: #8e887c;
+  --color-noir-300: #b3ada0;
 }
 
 html {

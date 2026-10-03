@@ -9,12 +9,14 @@
 //   • seção de complementos sugeridos pelo serviço escolhido (config da
 //     coluna `servicos.complementos`), NUNCA pré-marcados;
 //   • a criação vai pela RPC `painel_agendamento_criar` (019).
+//
+// Nada aqui inventa preço ou horário: o valor total é a soma dos serviços do
+// catálogo oficial e as vagas vêm da Agenda.
 // ============================================================================
-import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
-import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
+import { useEffect, useMemo, useState } from 'react'
 import { formatarBRL } from '@/lib/moeda'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import { dataLocal } from '@/lib/apresentacao'
 import {
   carregarCatalogo,
   horariosPublicos,
@@ -28,13 +30,45 @@ import {
   type ServicoComComplementos,
 } from '@/services/supabase/painel'
 import { navegarPainel } from '../regras'
+import {
+  Aviso,
+  Bloco,
+  Botao,
+  BotaoHorario,
+  Cabecalho,
+  Carregando,
+  Confirmacao,
+  EstadoVazio,
+  GradeOpcoes,
+  LinhaResumo,
+  Opcao,
+  Passos,
+  Resumo,
+} from '../ui'
 
-type Confirmacao = {
+const ETAPAS = ['Serviço', 'Profissional', 'Data', 'Horário', 'Resumo']
+
+type Confirmado = {
   servico: string
   complementos: string[]
   profissional: string
   data: string
   horario: string
+  valor: number
+}
+
+function proximosDias(quantidade = 10): { iso: string; curto: string; dia: string }[] {
+  const dias: { iso: string; curto: string; dia: string }[] = []
+  const base = new Date()
+  for (let passo = 0; passo < 30 && dias.length < quantidade; passo += 1) {
+    const d = new Date(base.getTime() + passo * 86400000)
+    dias.push({
+      iso: dataLocal(d.toISOString()),
+      curto: d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
+      dia: String(d.getDate()).padStart(2, '0'),
+    })
+  }
+  return dias
 }
 
 export default function TelaAgendarPainel() {
@@ -45,39 +79,40 @@ export default function TelaAgendarPainel() {
   const [cadastro, setCadastro] = useState<CadastroPainel | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState('')
-  const [tentativaCarga, setTentativaCarga] = useState(0)
+  const [tentativa, setTentativa] = useState(0)
 
   const [servicoNome, setServicoNome] = useState('')
   const [profissionalNome, setProfissionalNome] = useState('')
   const [data, setData] = useState('')
   const [horario, setHorario] = useState('')
   const [observacao, setObservacao] = useState('')
-  const [complementosEscolhidos, setComplementosEscolhidos] = useState<
-    string[]
-  >([])
+  const [complementosEscolhidos, setComplementosEscolhidos] = useState<string[]>([])
 
   const [horarios, setHorarios] = useState<string[]>([])
   const [carregandoHorarios, setCarregandoHorarios] = useState(false)
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null)
+  const [confirmado, setConfirmado] = useState<Confirmado | null>(null)
 
-  const servicoCatalogo = catalogo?.servicos.find(
-    (s) => s.nome === servicoNome,
-  )
+  const servicoCatalogo = catalogo?.servicos.find((s) => s.nome === servicoNome) ?? null
   const servicoComComplementos = servicosComComplementos.find(
     (s) =>
-      (servicoCatalogo?.id && s.id === servicoCatalogo.id) ||
-      s.nome === servicoNome,
+      (servicoCatalogo?.id && s.id === servicoCatalogo.id) || s.nome === servicoNome,
   )
   const complementos = servicoComComplementos?.complementos ?? []
   const complementosAtivos = complementos.filter((c) =>
     complementosEscolhidos.includes(c.id),
   )
-  const duracaoTotal = (servicoCatalogo?.duracaoMin ?? 0)
-  + complementosAtivos.reduce((soma, c) => soma + c.duracaoMin, 0)
+  const duracaoTotal =
+    (servicoCatalogo?.duracaoMin ?? 0) +
+    complementosAtivos.reduce((soma, c) => soma + c.duracaoMin, 0)
+  const valorTotal =
+    (servicoCatalogo?.preco ?? 0) +
+    complementosAtivos.reduce((soma, c) => soma + c.preco, 0)
 
-  useEffect(() => {
+  const dias = useMemo(() => proximosDias(), [])
+
+useEffect(() => {
     let vivo = true
     Promise.all([
       carregarCatalogo(),
@@ -100,9 +135,7 @@ export default function TelaAgendarPainel() {
       .catch((e: unknown) => {
         if (!vivo) return
         setErroCarga(
-          e instanceof Error
-            ? e.message
-            : 'Não foi possível carregar os serviços.',
+          e instanceof Error ? e.message : 'Não foi possível carregar os serviços.',
         )
       })
       .finally(() => {
@@ -111,25 +144,19 @@ export default function TelaAgendarPainel() {
     return () => {
       vivo = false
     }
-  }, [tentativaCarga])
+  }, [tentativa])
 
-  // Horários livres do dia/profissional com a duração TOTAL (base +
-  // complementos) — a mesma folga que a criação exige no servidor.
+  // Horários livres com a duração TOTAL (base + complementos) — a mesma folga
+  // que a criação exige no servidor.
   useEffect(() => {
     if (!data || !profissionalNome || !servicoCatalogo || !duracaoTotal) return
-    let vivo = true
+let vivo = true
     horariosPublicos(data, profissionalNome, duracaoTotal)
       .then((lista) => {
         if (vivo) setHorarios(lista)
       })
-      .catch((e: unknown) => {
-        if (vivo) {
-          setErroCarga(
-            e instanceof Error
-              ? e.message
-              : 'Não foi possível carregar os horários.',
-          )
-        }
+      .catch(() => {
+        if (vivo) setHorarios([])
       })
       .finally(() => {
         if (vivo) setCarregandoHorarios(false)
@@ -139,6 +166,21 @@ export default function TelaAgendarPainel() {
     }
   }, [data, profissionalNome, servicoCatalogo, duracaoTotal])
 
+  const etapaAtual = !servicoNome
+    ? 0
+    : !profissionalNome
+      ? 1
+      : !data
+        ? 2
+        : !horario
+          ? 3
+          : 4
+
+/**
+   * Trocar de serviço/profissional/data/complemento invalida o horário. O
+   * estado "carregando" é ligado aqui (no evento), não dentro do efeito —
+   * é o que evita o render em cascata que o lint penaliza.
+   */
   function limparHorario() {
     setHorario('')
     setHorarios([])
@@ -149,14 +191,11 @@ export default function TelaAgendarPainel() {
   function alternarComplemento(id: string) {
     setErro('')
     setComplementosEscolhidos((atual) =>
-      atual.includes(id)
-        ? atual.filter((item) => item !== id)
-        : [...atual, id],
+      atual.includes(id) ? atual.filter((item) => item !== id) : [...atual, id],
     )
   }
 
-  async function enviar(e: FormEvent) {
-    e.preventDefault()
+  async function confirmar() {
     if (enviando) return
     setErro('')
     setEnviando(true)
@@ -171,24 +210,22 @@ export default function TelaAgendarPainel() {
       })
       if (!resultado.ok) {
         setErro(resultado.erro)
-        // Horário tomado por outra pessoa: lista os livres de novo
         if (/ocupado|conflito/i.test(resultado.erro) && servicoCatalogo) {
           try {
-            setHorarios(
-              await horariosPublicos(data, profissionalNome, duracaoTotal),
-            )
+            setHorarios(await horariosPublicos(data, profissionalNome, duracaoTotal))
           } catch {
-            // falha ao recarregar: a mensagem do servidor já foi exibida
+            /* a mensagem do servidor já está na tela */
           }
         }
         return
       }
-      setConfirmacao({
+      setConfirmado({
         servico: servicoNome,
         complementos: complementosAtivos.map((c) => c.nome),
         profissional: profissionalNome,
         data,
         horario,
+        valor: valorTotal,
       })
     } finally {
       setEnviando(false)
@@ -196,7 +233,7 @@ export default function TelaAgendarPainel() {
   }
 
   function recomecar() {
-    setConfirmacao(null)
+    setConfirmado(null)
     setServicoNome('')
     setProfissionalNome('')
     setData('')
@@ -204,318 +241,353 @@ export default function TelaAgendarPainel() {
     setObservacao('')
     setComplementosEscolhidos([])
     setHorarios([])
-    setCarregandoHorarios(false)
     setErro('')
   }
 
-  if (confirmacao) {
+  if (confirmado) {
     return (
-      <div className="rounded-xl border border-[#E5DCC3] bg-white p-6 shadow-sm">
-        <p className="text-center text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
-          Studio Audax
-        </p>
-        <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
-          aria-hidden="true"
-        />
-        <h1 className="mt-4 text-center text-xl font-bold text-[#1C1A15]">
-          Pedido de agendamento enviado!
-        </h1>
-        <p className="mt-3 text-center text-sm text-[#4A4436]">
-          Recebemos seu pedido. A equipe vai confirmar o horário com você.
-        </p>
-        <dl className="mt-5 flex flex-col gap-2 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB]/60 p-4 text-sm">
-          <div className="flex justify-between gap-3">
-            <dt className="text-[#8A8171]">Serviço</dt>
-            <dd className="text-right font-medium text-[#1C1A15]">
-              {confirmacao.servico}
-            </dd>
-          </div>
-          {confirmacao.complementos.length > 0 && (
-            <div className="flex justify-between gap-3">
-              <dt className="text-[#8A8171]">Complementos</dt>
-              <dd className="text-right font-medium text-[#1C1A15]">
-                {confirmacao.complementos.join(', ')}
-              </dd>
-            </div>
+      <Confirmacao
+        titulo="Agendamento confirmado!"
+        frase="Seu horário foi registrado na agenda do Studio Audax."
+        acoes={
+          <>
+            <Botao aoClicar={() => navegarPainel('')}>Voltar ao painel</Botao>
+            <Botao variante="secundario" aoClicar={recomecar}>
+              Agendar outro horário
+            </Botao>
+          </>
+        }
+      >
+        <Resumo>
+          <LinhaResumo rotulo="Serviço" valor={confirmado.servico} />
+          {confirmado.complementos.length > 0 && (
+            <LinhaResumo
+              rotulo="Complementos"
+              valor={confirmado.complementos.join(', ')}
+            />
           )}
-          <div className="flex justify-between gap-3">
-            <dt className="text-[#8A8171]">Profissional</dt>
-            <dd className="text-right font-medium text-[#1C1A15]">
-              {confirmacao.profissional}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-[#8A8171]">Data e hora</dt>
-            <dd className="text-right font-medium text-[#1C1A15]">
-              {formatarDataLonga(confirmacao.data)} · {confirmacao.horario}
-            </dd>
-          </div>
-        </dl>
-        <p className="mt-3 text-center text-xs text-[#8A8171]">
-          Status: <strong className="text-[#8A6A14]">Pendente</strong> — a
-          confirmação chega pelo telefone do seu cadastro.
+          <LinhaResumo rotulo="Profissional" valor={confirmado.profissional} />
+          <LinhaResumo rotulo="Data" valor={formatarDataLonga(confirmado.data)} />
+          <LinhaResumo rotulo="Horário" valor={confirmado.horario} />
+          <LinhaResumo
+            rotulo="Valor"
+            valor={formatarBRL(confirmado.valor)}
+            destaque
+          />
+        </Resumo>
+        <p className="mt-4 text-center text-[13px] leading-relaxed text-noir-500">
+          A equipe confirma o horário pelo telefone do seu cadastro. Para mudar ou
+          cancelar, é só usar a aba Agendamentos.
         </p>
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => navegarPainel('')}
-            className="flex-1 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
-          >
-            Voltar ao painel
-          </button>
-          <button
-            type="button"
-            onClick={recomecar}
-            className="flex-1 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2.5 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-          >
-            Agendar outro horário
-          </button>
-        </div>
-      </div>
+      </Confirmacao>
+    )
+  }
+
+  if (carregando) {
+    return (
+      <>
+        <Cabecalho titulo="Agende seu horário" />
+        <Carregando texto="Carregando serviços…" />
+      </>
+    )
+  }
+
+  if (erroCarga || !catalogo || !cadastro) {
+    return (
+      <EstadoVazio
+        titulo="Não foi possível carregar a agenda"
+        texto={erroCarga || 'Tente novamente em instantes.'}
+      >
+        <Botao
+          aoClicar={() => {
+            setErroCarga('')
+            setTentativa((n) => n + 1)
+          }}
+        >
+          Tentar de novo
+        </Botao>
+      </EstadoVazio>
     )
   }
 
   return (
     <div>
-      <header className="text-center">
-        <h1 className="text-2xl font-bold text-[#1C1A15]">
-          Agende seu horário
-        </h1>
-        <p className="mt-1 text-sm text-[#8A8171]">
-          Escolha o serviço, o profissional e o melhor horário para você.
-        </p>
-        <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
-          aria-hidden="true"
-        />
-      </header>
+      <Cabecalho
+        marca={false}
+        titulo="Agende seu horário"
+        subtitulo={`Agendando como ${cadastro.nome}. Escolha o serviço e o melhor horário.`}
+      />
+      <Passos etapas={ETAPAS} atual={etapaAtual} />
 
-      <form
-        onSubmit={enviar}
-        className="mt-6 rounded-xl border border-[#E5DCC3] bg-white p-6 shadow-sm"
-      >
-        {carregando && (
-          <p className="py-6 text-center text-sm text-[#8A8171]">
-            Carregando serviços…
-          </p>
-        )}
-
-        {!carregando && erroCarga && (
-          <div className="flex flex-col gap-3">
-            <p
-              role="alert"
-              className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-            >
-              {erroCarga}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setErroCarga('')
-                setCarregando(true)
-                setTentativaCarga((n) => n + 1)
-              }}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
-            >
-              Tentar de novo
-            </button>
-          </div>
-        )}
-
-        {!carregando && !erroCarga && catalogo && cadastro && (
-          <div className="flex flex-col gap-4">
-            <div className="rounded-lg border border-[#E5DCC3] bg-[#FAF6EB]/60 px-3 py-2 text-[13px] text-[#4A4436]">
-              Agendando como <strong>{cadastro.nome}</strong>
-              {cadastro.telefone ? ` · ${cadastro.telefone}` : ''}
-            </div>
-
-            <div>
-              <label className={rotulo} htmlFor="pn-servico">
-                Serviço *
-              </label>
-              <select
-                id="pn-servico"
-                className={campo}
-                value={servicoNome}
-                onChange={(e) => {
-                  setServicoNome(e.target.value)
+      <div className="flex flex-col gap-4">
+        {/* --------------------------------------------------- SERVIÇO */}
+        <Bloco numero={1} titulo="Serviço" descricao="Preço e duração do catálogo oficial.">
+          <div className="flex flex-col gap-2">
+            {catalogo.servicos.map((s) => (
+              <Opcao
+                key={s.id ?? s.nome}
+                item={{
+                  id: s.nome,
+                  titulo: s.nome,
+                  descricao: `${s.duracaoMin} min`,
+                  preco: formatarBRL(s.preco),
+                }}
+                selecionado={servicoNome === s.nome}
+                aoEscolher={() => {
+                  setServicoNome(s.nome)
                   setComplementosEscolhidos([])
-                  limparHorario()
-                }}
-              >
-                <option value="">Selecione um serviço...</option>
-                {catalogo.servicos.map((s) => (
-                  <option key={s.id ?? s.nome} value={s.nome}>
-                    {s.nome} · {formatarBRL(s.preco)} · {s.duracaoMin} min
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {complementos.length > 0 && (
-              <div>
-                <p className={rotulo}>Complementos (opcional)</p>
-                <p className="mb-2 text-xs text-[#A99E85]">
-                  Some tempo ao atendimento — nada é marcado automaticamente.
-                </p>
-                <div className="flex flex-col gap-2">
-                  {complementos.map((c) => {
-                    const marcado = complementosEscolhidos.includes(c.id)
-                    return (
-                      <label
-                        key={c.id}
-                        className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
-                          marcado
-                            ? 'border-[#8A6A14] bg-[#FAF6EB]'
-                            : 'border-[#E5DCC3] bg-white hover:bg-[#F3ECDA]'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={marcado}
-                          onChange={() => alternarComplemento(c.id)}
-                          className="h-4 w-4 accent-[#8A6A14]"
-                        />
-                        <span className="flex-1 text-[#1C1A15]">
-                          {c.nome}
-                        </span>
-                        <span className="text-xs text-[#8A8171]">
-                          +{formatarBRL(c.preco)} · {c.duracaoMin} min
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className={rotulo} htmlFor="pn-profissional">
-                Profissional *
-              </label>
-              <select
-                id="pn-profissional"
-                className={campo}
-                value={profissionalNome}
-                onChange={(e) => {
-                  setProfissionalNome(e.target.value)
-                  limparHorario()
-                }}
-              >
-                <option value="">Selecione o profissional...</option>
-                {catalogo.profissionais.map((p) => (
-                  <option key={p.id ?? p.nome} value={p.nome}>
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className={rotulo} htmlFor="pn-data">
-                Data *
-              </label>
-              <input
-                id="pn-data"
-                type="date"
-                className={campo}
-                min={hojeISO()}
-                value={data}
-                onChange={(e) => {
-                  setData(e.target.value)
+                  setProfissionalNome('')
+                  setData('')
                   limparHorario()
                 }}
               />
-            </div>
+            ))}
+          </div>
+        </Bloco>
 
-            <div>
-              <p className={rotulo}>Horário *</p>
-              {!data || !profissionalNome || !servicoCatalogo ? (
-                <p className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-3 py-2 text-xs text-[#A99E85]">
-                  Escolha serviço, profissional e data para ver os horários
-                  livres.
-                </p>
-              ) : carregandoHorarios ? (
-                <p className="text-xs text-[#8A8171]">
-                  Verificando horários…
-                </p>
-              ) : horarios.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-3 py-2 text-xs text-[#A99E85]">
-                  Nenhum horário livre nesta data. Escolha outro dia.
-                </p>
-              ) : (
-                <div className="mt-1 flex flex-wrap gap-2">
-                  {horarios.map((h) => (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => {
-                        setHorario(h)
-                        setErro('')
-                      }}
-                      aria-pressed={horario === h}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
-                        horario === h
-                          ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-                          : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]'
+        {/* ------------------------------------------------ COMPLEMENTOS */}
+        {complementos.length > 0 && (
+          <Bloco
+            numero={2}
+            titulo="Quer complementar seu atendimento?"
+            descricao="Sugestões do seu serviço. Nada é marcado automaticamente — é opcional."
+          >
+            <div className="flex flex-col gap-2">
+              {complementos.map((c) => {
+                const marcado = complementosEscolhidos.includes(c.id)
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+onClick={() => alternarComplemento(c.id)}
+                    aria-pressed={marcado}
+                    aria-label={[c.nome, `${c.duracaoMin} min`, `+${formatarBRL(c.preco)}`].join(' ')}
+                    className={`flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                      marcado
+                        ? 'border-gold-500 bg-gold-200/60 ring-1 ring-gold-500'
+                        : 'border-cream-300 bg-cream-50 hover:border-gold-400 hover:bg-cream-100'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-medium text-noir-900">
+                        {c.nome}
+                      </span>
+                      <span className="mt-0.5 block text-[12.5px] text-noir-500">
+                        {c.duracaoMin} min
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[14px] font-semibold tabular-nums text-noir-700">
+                      +{formatarBRL(c.preco)}
+                    </span>
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                        marcado ? 'border-gold-600 bg-gold-500' : 'border-cream-400'
                       }`}
+                      aria-hidden="true"
                     >
-                      {h}
-                    </button>
-                  ))}
-                </div>
-              )}
+                      {marcado && (
+                        <svg viewBox="0 0 12 12" className="h-3 w-3 text-noir-900" fill="none">
+                          <path
+                            d="M2.5 6.2 4.8 8.5 9.5 3.8"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
+          </Bloco>
+        )}
 
-            {servicoCatalogo && duracaoTotal > 0 && (
-              <p className="text-xs text-[#8A8171]">
-                Duração total: <strong>{duracaoTotal} min</strong>
-                {complementosAtivos.length > 0
-                  ? ` (${servicoCatalogo.duracaoMin} min + ${complementosAtivos
-                      .map((c) => c.nome)
-                      .join(', ')})`
-                  : ''}
+        {/* ---------------------------------------------- PROFISSIONAL */}
+        {servicoNome && (
+          <Bloco numero={3} titulo="Profissional" descricao="Atendido por quem você preferir.">
+            <div className="flex flex-col gap-2">
+              <Opcao
+                item={{
+                  id: '',
+                  titulo: 'Qualquer profissional',
+                  descricao: 'Escolhemos quem estiver livre',
+                }}
+                selecionado={!profissionalNome && !data}
+                aoEscolher={() => {
+                  setProfissionalNome('')
+                  setData('')
+                  limparHorario()
+                }}
+              />
+{catalogo.profissionais.map((p) => (
+                <Opcao
+                  key={p.id ?? p.nome}
+                  item={{ id: p.nome, titulo: p.nome }}
+                  selecionado={profissionalNome === p.nome}
+                  aoEscolher={() => {
+                    setProfissionalNome(p.nome)
+                    setData('')
+                    limparHorario()
+                  }}
+                />
+              ))}
+            </div>
+            {!profissionalNome && (
+              <p className="mt-2 rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-3 text-[13.5px] leading-relaxed text-noir-500">
+                Escolha um profissional para ver os horários livres. Sem profissional
+                definido, a Agenda oficial não tem como dizer quais vagas existem.
               </p>
             )}
+          </Bloco>
+        )}
 
-            <div>
-              <label className={rotulo} htmlFor="pn-obs">
+        {/* ------------------------------------------------------ DATA */}
+        {servicoNome && profissionalNome && (
+          <Bloco numero={4} titulo="Data" descricao="Escolha o dia da semana.">
+            <div className="flex flex-col gap-2">
+              <GradeOpcoes
+                colunas={3}
+                items={dias.map((d) => ({ id: d.iso, titulo: d.dia, descricao: d.curto }))}
+              >
+                {(item) => (
+                  <Opcao
+                    key={item.id}
+                    item={item}
+                    multilinha
+                    selecionado={data === item.id}
+                    aoEscolher={() => {
+                      setData(item.id)
+                      limparHorario()
+                    }}
+                  />
+                )}
+              </GradeOpcoes>
+              <details className="mt-1">
+                <summary className="cursor-pointer list-none text-[12.5px] font-medium text-noir-400 hover:text-noir-800">
+                  Escolher outra data
+                </summary>
+                <div className="mt-2">
+                  <input
+                    type="date"
+                    min={hojeISO()}
+                    value={data}
+                    onChange={(e) => {
+                      setData(e.target.value)
+                      limparHorario()
+                    }}
+                    className="min-h-[48px] w-full rounded-xl border border-cream-300 bg-cream-50 px-4 text-[14px] text-noir-900 outline-none focus:border-gold-500"
+                  />
+                </div>
+              </details>
+            </div>
+          </Bloco>
+        )}
+
+        {/* ---------------------------------------------------- HORÁRIO */}
+        {data && (
+          <Bloco
+            numero={5}
+            titulo="Horário"
+            descricao={
+              profissionalNome ? `Livres em ${formatarDataLonga(data)}.` : undefined
+            }
+            acao={
+              <button
+                type="button"
+                onClick={() => setData('')}
+                className="shrink-0 text-[12.5px] font-medium text-noir-400 hover:text-noir-800"
+              >
+                Trocar
+              </button>
+            }
+          >
+            {!profissionalNome ? (
+              <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
+                Escolha um profissional para ver a disponibilidade.
+              </p>
+            ) : carregandoHorarios ? (
+              <Carregando texto="Buscando horários livres…" />
+            ) : horarios.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
+                Nenhum horário livre neste dia. Escolha outra data.
+              </p>
+            ) : (
+              <GradeOpcoes
+                colunas={3}
+                items={horarios.map((h) => ({ id: h, titulo: h }))}
+              >
+                {(item) => (
+                  <BotaoHorario
+                    key={item.id}
+                    hora={item.titulo}
+                    selecionado={horario === item.id}
+                    aoEscolher={() => {
+                      setHorario(item.id)
+                      setErro('')
+                    }}
+                  />
+                )}
+              </GradeOpcoes>
+            )}
+          </Bloco>
+        )}
+
+        {/* ---------------------------------------------------- RESUMO */}
+        {servicoCatalogo && profissionalNome && data && horario && (
+          <Bloco numero={6} titulo="Resumo" descricao="Confira antes de confirmar.">
+            <Resumo>
+              <LinhaResumo rotulo="Cliente" valor={cadastro.nome} />
+              <LinhaResumo rotulo="Serviço" valor={servicoCatalogo.nome} />
+              {complementosAtivos.length > 0 && (
+                <LinhaResumo
+                  rotulo="Complementos"
+                  valor={complementosAtivos.map((c) => c.nome).join(', ')}
+                />
+              )}
+              <LinhaResumo rotulo="Profissional" valor={profissionalNome} />
+              <LinhaResumo rotulo="Data" valor={formatarDataLonga(data)} />
+              <LinhaResumo rotulo="Horário" valor={horario} />
+              <LinhaResumo rotulo="Duração" valor={`${duracaoTotal} min`} />
+              <LinhaResumo
+                rotulo="Valor"
+                valor={formatarBRL(valorTotal)}
+                destaque
+              />
+            </Resumo>
+            <div className="mt-4">
+              <label
+                htmlFor="pn-obs"
+                className="mb-1.5 block text-[12px] font-semibold tracking-[0.1em] text-noir-600 uppercase"
+              >
                 Observação (opcional)
               </label>
               <input
                 id="pn-obs"
-                className={campo}
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
                 placeholder="Alguma preferência? Ex.: máquina 2"
+                className="min-h-[52px] w-full rounded-xl border border-cream-300 bg-cream-50 px-4 text-[15px] text-noir-900 outline-none placeholder:text-noir-300 focus:border-gold-500"
               />
             </div>
+          </Bloco>
+        )}
 
-            {erro && (
-              <p
-                role="alert"
-                className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
-                {erro}
-              </p>
-            )}
+        {erro && <Aviso texto={erro} />}
 
-            <button
-              type="submit"
-              disabled={enviando}
-              className="rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+        {horario && (
+          <div className="sticky bottom-0 -mx-4 border-t border-cream-300 bg-cream-100/95 px-4 pt-3 pb-4 backdrop-blur sm:-mx-6 sm:px-6">
+            <Botao
+              tamanho="lg"
+              desabilitado={enviando}
+              aoClicar={() => void confirmar()}
             >
-              {enviando ? 'Enviando…' : 'Confirmar agendamento'}
-            </button>
-
-            <p className="text-center text-xs text-[#A99E85]">
-              O horário é confirmado pela equipe — você recebe a resposta no
-              telefone do seu cadastro.
-            </p>
+              {enviando ? 'Confirmando…' : 'Confirmar agendamento'}
+            </Botao>
           </div>
         )}
-      </form>
+      </div>
     </div>
   )
 }

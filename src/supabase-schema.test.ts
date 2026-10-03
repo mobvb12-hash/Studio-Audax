@@ -137,6 +137,7 @@ expect(nomes).toEqual([
       '../supabase/migrations/023_identidade_cliente_e_clube.sql',
       '../supabase/migrations/024_notificacoes_whatsapp.sql',
       '../supabase/migrations/025_catalogo_complementos.sql',
+      '../supabase/migrations/026_notificacao_agendamento_seguro.sql',
     ])
   })
 
@@ -723,3 +724,86 @@ describe('Supabase — lock de concorrência da Agenda (021)', () => {
   })
 })
 
+// ============================================================================
+// 026 — a falha que apagava agendamento válido
+//
+// Regressão do incidente de produção: `ia_notificacao_enfileirar` foi criada
+// com `p_ordem smallint`, mas o trigger chamava com o literal `1` (integer).
+// Como `int4 -> int2` é cast de ATRIBUIÇÃO, a resolução de funções não achava
+// candidata e o trigger AFTER INSERT subia a exceção — desfazendo o agendamento
+// que já tinha sido gravado.
+// ============================================================================
+describe('026 — notificação nunca pode derrubar o agendamento', () => {
+  const texto = sql(
+    '../supabase/migrations/026_notificacao_agendamento_seguro.sql',
+  )
+
+  it('usa `p_ordem integer`, a única assinatura compatível com o literal', () => {
+    // A assinatura antiga (smallint) precisa sair, senão sobraria sobrecarga.
+    expect(texto).toMatch(
+      /drop function if exists public\.ia_notificacao_enfileirar\(\s*text,\s*text,\s*text,\s*text,\s*text,\s*text,\s*smallint\s*\)/,
+    )
+expect(texto).toMatch(
+      /create or replace function public\.ia_notificacao_enfileirar\([\s\S]*?p_ordem integer default 1/,
+    )
+    // Sem comentários: o cabeçalho do arquivo CITA o `smallint` para explicar
+    // o incidente, e essa citação não pode ser confundida com código vivo.
+    expect(comandos(texto).join('\n')).not.toMatch(/p_ordem smallint/)
+  })
+
+  it('o trigger chama a porta segura, nunca a enfileiramento direto', () => {
+    const corpoTrigger = texto.slice(texto.indexOf('ia_notificar_agendamento()'))
+    expect(corpoTrigger).toMatch(/perform public\.ia_notificar_com_seguranca\(/)
+    expect(corpoTrigger).not.toMatch(
+      /perform public\.ia_notificacao_enfileirar\(/,
+    )
+  })
+
+  it('a porta segura tem barreira de exceção e devolve o registro', () => {
+    const corpo = texto.slice(
+      texto.indexOf('create or replace function public.ia_notificar_com_seguranca'),
+      texto.indexOf('-- 3) Trigger tolerante'),
+    )
+    // Enfileirar fica dentro de um `exception when others`…
+    expect(corpo).toMatch(/exception when others then/)
+    // …e a gravação da falha também tem a sua, para nunca propagar erro.
+    expect(corpo.match(/exception when others then/g)?.length).toBe(2)
+    // A falha é registrada para reprocessamento, com o motivo.
+    expect(corpo).toMatch(/'falha'/)
+    expect(corpo).toMatch(/ultimo_erro/)
+  })
+
+  it('idempotência: nada é duplicado quando o mesmo evento repete', () => {
+    expect(texto.match(/on conflict \(chave\) do nothing/g)?.length).toBe(2)
+  })
+
+  it('o trigger tem barreira final e devolve o agendamento, sem abortar', () => {
+    const corpo = texto.slice(
+      texto.indexOf('create or replace function public.ia_notificar_agendamento'),
+      texto.indexOf('-- 4) Privil'),
+    )
+    expect(corpo).toMatch(/exception when others then/)
+    // O registro volta em TODOS os caminhos: o AFTER trigger nunca derruba.
+    expect(corpo.match(/return v_ag;/g)?.length).toBe(2)
+    expect(corpo).not.toMatch(/raise exception/)
+  })
+
+  it('não altera regra comercial: nem policy, nem tabela, nem trigger', () => {
+    expect(texto).not.toMatch(/create policy/i)
+    expect(texto).not.toMatch(/alter table/i)
+    expect(texto).not.toMatch(/create trigger/i)
+    expect(texto).not.toMatch(/drop table/i)
+  })
+
+  it('as funções continuam restritas ao service_role', () => {
+    expect(texto).toMatch(
+      /revoke execute on function public\.ia_notificar_com_seguranca\(text, text, text, text, text, text, text, text, integer\) from public, anon, authenticated/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.ia_notificar_com_seguranca\(text, text, text, text, text, text, text, text, integer\) to service_role/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.ia_notificacao_enfileirar\(text, text, text, text, text, text, integer\) to service_role/,
+    )
+  })
+})

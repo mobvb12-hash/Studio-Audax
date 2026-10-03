@@ -17,6 +17,7 @@ import { periodoSemana } from '@/modules/relatorios/periodo'
 import { ServicosProvider } from '@/modules/servicos/store'
 import Dashboard from './Dashboard'
 import PDV from './PDV'
+import { escolherCliente } from '@/test-utils/escolherCliente'
 import Relatorios from './Relatorios'
 
 let ctxCaixa: ReturnType<typeof useCaixa>
@@ -143,7 +144,7 @@ beforeEach(() => {
 })
 
 describe('PDV ↔ Caixa — auditoria numérica', () => {
-  it('venda via interface: 2×30 + 1×50 − 10 = R$100 em um único lançamento', () => {
+  it('venda via interface: 2×30 + 1×50 − 10 = R$100 em um único lançamento', async () => {
     env(<PDV />)
     act(() => {
       ctxClientes.adicionar({
@@ -168,9 +169,7 @@ describe('PDV ↔ Caixa — auditoria numérica', () => {
     fireEvent.change(screen.getByLabelText('Desconto (R$)'), {
       target: { value: '10' },
     })
-    fireEvent.change(screen.getByLabelText('Cliente (opcional)'), {
-      target: { value: ctxClientes.clientes[0].id },
-    })
+await escolherCliente('Lucas')
     fireEvent.change(screen.getByLabelText('Profissional (opcional)'), {
       target: { value: 'Ítalo Santos' },
     })

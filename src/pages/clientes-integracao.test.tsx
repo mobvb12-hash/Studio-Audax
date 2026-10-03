@@ -94,7 +94,7 @@ beforeEach(() => {
 })
 
 describe('Clientes — integração com PDV, Clube e Relatórios', () => {
-  it('PDV não oferece cliente inativo no select de cliente', () => {
+it('PDV não oferece cliente inativo no seletor de cliente', () => {
     env(<PDV />)
     criar('Lucas Mendes', '(11) 98888-7777')
     const anaId = criar('Ana Souza', '(11) 97777-6666')
@@ -102,14 +102,14 @@ describe('Clientes — integração com PDV, Clube e Relatórios', () => {
       ctxClientes.alternarAtivo(anaId)
     })
 
-    const select = screen.getByLabelText('Cliente (opcional)') as HTMLSelectElement
+    // Abre a busca e confere a lista offered pelo cadastro oficial.
+    const campo = screen.getByRole('combobox', { name: 'Cliente' })
+    fireEvent.focus(campo)
+    const lista = screen.getByRole('listbox')
     expect(
-      within(select).getByRole('option', { name: 'Lucas Mendes' }),
+      within(lista).getByRole('option', { name: /^Lucas Mendes/ }),
     ).toBeTruthy()
-    expect(
-      within(select).queryByRole('option', { name: 'Ana Souza' }),
-    ).toBeNull()
-    expect(within(select).getByRole('option', { name: 'Sem cliente' })).toBeTruthy()
+    expect(within(lista).queryByRole('option', { name: /^Ana Souza/ })).toBeNull()
   })
 
   it('nova assinatura não oferece cliente inativo', () => {

@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { chipClasse } from '@/lib/apresentacao'
+import SeletorCliente from '@/components/cliente/SeletorCliente'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import { formatarDataCurta } from '@/modules/agenda/catalogo'
@@ -210,25 +211,13 @@ export default function Espera() {
         </h2>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <label
-              htmlFor="espera-cliente"
-              className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase"
-            >
-              Cliente
-            </label>
-            <select
+            <SeletorCliente
               id="espera-cliente"
-              className={`mt-1 w-full ${CLASSE_ENTRADA}`}
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-            >
-              <option value="">Selecione o cliente...</option>
-              {opcoesClientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </select>
+              clientes={opcoesClientes}
+              valor={clienteId}
+              aoEscolher={setClienteId}
+              vazioRotulo="Selecione o cliente..."
+            />
           </div>
           <div>
             <label

@@ -13,25 +13,16 @@ type Aba = {
   rotulo: string
 }
 
+/**
+ * Abas do painel. O "Agendar" é uma AÇÃO, não uma aba de navegação — por isso
+ * vira o botão dourado da barra, que é onde o cliente procura por ele.
+ */
 const ABAS: Aba[] = [
   { rota: 'inicio', rotulo: 'Início' },
   { rota: 'agendamentos', rotulo: 'Agendamentos' },
   { rota: 'perfil', rotulo: 'Perfil' },
   { rota: 'clube', rotulo: 'Clube' },
 ]
-
-/** Conteúdo honesto para as abas que ainda não têm tela nesta etapa. */
-function EmBreve({ rotulo }: { rotulo: string }) {
-  return (
-    <div className="rounded-xl border border-[#E5DCC3] bg-white p-8 text-center">
-      <h1 className="text-[22px] font-bold text-[#1C1A15]">{rotulo}</h1>
-      <div className="mx-auto mt-4 h-px w-16 bg-[#8A6A14]" aria-hidden="true" />
-      <p className="mx-auto mt-4 max-w-md text-sm text-[#8A8171]">
-        Esta tela entra na próxima etapa do painel do cliente.
-      </p>
-    </div>
-  )
-}
 
 function conteudoDaRota(rota: string): ReactNode {
   if (rota === 'inicio') return <PainelDashboard />
@@ -40,13 +31,31 @@ function conteudoDaRota(rota: string): ReactNode {
   if (rota === 'perfil') return <TelaPerfilPainel />
   if (rota === 'clube') return <PainelClube />
   const aba = ABAS.find((item) => item.rota === rota)
-  if (aba) return <EmBreve rotulo={aba.rotulo} />
-  return <EmBreve rotulo="Painel" />
+  if (aba) {
+    return (
+      <div className="rounded-2xl border border-cream-300 bg-cream-50 p-8 text-center">
+        <h1 className="font-serif-display text-[20px] font-semibold text-noir-900">
+          {aba.rotulo}
+        </h1>
+        <p className="mx-auto mt-3 max-w-sm text-[13.5px] leading-relaxed text-noir-500">
+          Esta área entra na próxima etapa do painel do cliente.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-2xl border border-cream-300 bg-cream-50 p-8 text-center">
+      <h1 className="font-serif-display text-[20px] font-semibold text-noir-900">
+        Painel
+      </h1>
+    </div>
+  )
 }
 
 /**
- * Estrutura do painel logado: cabeçalho com sair, abas de navegação e o
- * conteúdo da rota `#/painel/...`.
+ * Estrutura do painel logado: cabeçalho discreto, ação principal em destaque e
+ * navegação por abas. Mobile-first — a barra de abas rola sem arrastar a
+ * página e o botão de agendar fica sempre visível no topo.
  */
 export default function PainelShell() {
   const { sair } = usePainelAuth()
@@ -58,45 +67,71 @@ export default function PainelShell() {
     return () => window.removeEventListener('hashchange', aoMudar)
   }, [])
 
+  const naAgendar = rota === 'agendar'
+
   return (
-    <div className="min-h-screen bg-[#FDFBF3]">
-      <header className="border-b border-[#E5DCC3] bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <div>
-            <p className="text-[15px] font-bold text-[#1C1A15]">Studio Audax</p>
-            <p className="text-[12px] text-[#8A8171]">Seu painel</p>
+    <div className="min-h-screen bg-cream-100 text-noir-900">
+      <header className="border-b border-cream-300 bg-cream-50">
+        <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3 px-4 pt-4 pb-3 sm:px-6">
+          <div className="min-w-0">
+            <p className="font-serif-display text-[11px] leading-none font-semibold tracking-[0.34em] text-gold-600 uppercase">
+              Studio
+            </p>
+            <p className="font-serif-display text-[19px] leading-tight font-semibold tracking-[0.16em] text-noir-900 uppercase">
+              Audax
+            </p>
           </div>
           <button
             type="button"
             onClick={() => void sair()}
-            className="rounded-lg border border-[#E5DCC3] px-3 py-1.5 text-[13px] font-medium text-[#4A4436] hover:border-[#8A6A14]"
+            className="min-h-[40px] shrink-0 rounded-xl border border-cream-300 px-3.5 text-[13px] font-medium text-noir-600 hover:border-gold-400 hover:text-noir-900"
           >
             Sair
           </button>
         </div>
-        <nav className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-4 pb-2">
-          {ABAS.map((aba) => {
-            const ativa = rota === aba.rota
-            return (
-              <button
-                key={aba.rota}
-                type="button"
-                onClick={() => navegarPainel(aba.rota === 'inicio' ? '' : aba.rota)}
-                className={
-                  ativa
-                    ? 'shrink-0 rounded-lg bg-[#8A6A14] px-3 py-1.5 text-[13px] font-semibold text-white'
-                    : 'shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#4A4436] hover:bg-[#FDFBF3]'
-                }
-              >
-                {aba.rotulo}
-              </button>
-            )
-          })}
-        </nav>
+
+        {!naAgendar && (
+          <nav className="mx-auto flex w-full max-w-xl gap-1 overflow-x-auto px-4 pb-3 sm:px-6">
+            {ABAS.map((aba) => {
+              const ativa = rota === aba.rota
+              return (
+                <button
+                  key={aba.rota}
+                  type="button"
+                  onClick={() => navegarPainel(aba.rota === 'inicio' ? '' : aba.rota)}
+                  aria-current={ativa ? 'page' : undefined}
+                  className={`min-h-[42px] shrink-0 rounded-xl px-3.5 text-[13.5px] font-medium transition-colors ${
+                    ativa
+                      ? 'bg-noir-900 text-cream-50'
+                      : 'text-noir-600 hover:bg-cream-200'
+                  }`}
+                >
+                  {aba.rotulo}
+                </button>
+              )
+            })}
+          </nav>
+        )}
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-6">
+
+      <main className="mx-auto w-full max-w-xl px-4 py-6 pb-28 sm:px-6">
         {conteudoDaRota(rota)}
       </main>
+
+      {/* Ação principal sempre ao alcance do polegar */}
+      {!naAgendar && (
+        <div className="fixed inset-x-0 bottom-0 border-t border-cream-300 bg-cream-100/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur">
+          <div className="mx-auto w-full max-w-xl">
+            <button
+              type="button"
+              onClick={() => navegarPainel('agendar')}
+              className="min-h-[52px] w-full rounded-xl bg-gold-500 text-[15px] font-semibold text-noir-900 transition-colors hover:bg-gold-400"
+            >
+              Agendar novo horário
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

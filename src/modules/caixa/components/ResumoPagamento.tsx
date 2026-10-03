@@ -1,4 +1,5 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
+import SeletorCliente from '@/components/cliente/SeletorCliente'
 import { formatarBRL } from '@/lib/moeda'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO, type FormaPagamento } from '@/modules/caixa/types'
 import type { Cliente } from '@/modules/clientes/types'
@@ -99,24 +100,13 @@ export default function ResumoPagamento({
 
       <div className="mt-4 grid grid-cols-1 gap-3">
         <div>
-          <label className={rotulo} htmlFor="pdv-cliente">
-            Cliente (opcional)
-          </label>
-          <select
+          <SeletorCliente
             id="pdv-cliente"
-            className={campo}
-            value={clienteId}
-            onChange={(e) => aoCliente(e.target.value)}
-          >
-            <option value="">Sem cliente</option>
-            {clientes
-              .filter((c) => c.ativo)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-          </select>
+            clientes={clientes}
+            valor={clienteId}
+            aoEscolher={aoCliente}
+            vazioRotulo="Sem cliente"
+          />
           {assinatura && assinanteVigente && (
             <p className="mt-1.5 text-xs font-medium text-[#3F6B33]">
               ✓ Assinante {STATUS_ROTULO[statusAssinatura(assinatura, hoje)]}{' '}

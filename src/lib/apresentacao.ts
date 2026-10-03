@@ -106,3 +106,14 @@ export const CAMPO_SELECT =
 /** Classe padrão dos rótulos (labels) dos formulários/modais. */
 export const ROTULO_FORM =
   'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
+
+/**
+ * Classes base da ÁREA DO CLIENTE (creme / preto / dourado).
+ *
+ * Vivem aqui, e não no kit de componentes, para que aquele arquivo exporte
+ * apenas componentes — o que mantém o Fast Refresh do Vite funcionando.
+ */
+export const CX_CLIENTE = {
+  tela: 'min-h-screen bg-cream-100 text-noir-900',
+  conteudo: 'mx-auto w-full max-w-xl px-4 pt-6 pb-24 sm:px-6 sm:pt-10',
+} as const

@@ -82,7 +82,7 @@ export default function TelaPerfilPainel() {
 
   if (carregando) {
     return (
-      <p className="py-10 text-center text-sm text-[#8A8171]">
+      <p className="py-10 text-center text-sm text-noir-500">
         Carregando seu cadastro…
       </p>
     )
@@ -90,7 +90,7 @@ export default function TelaPerfilPainel() {
 
   if (erroCarga) {
     return (
-      <div className="rounded-xl border border-[#E5DCC3] bg-white p-6 text-center">
+      <div className="rounded-xl border border-cream-300 bg-white p-6 text-center">
         <p role="alert" className="text-sm text-red-700">
           {erroCarga}
         </p>
@@ -100,7 +100,7 @@ export default function TelaPerfilPainel() {
             setErroCarga('')
             setTentativa((atual) => atual + 1)
           }}
-          className="mt-4 rounded-lg border border-[#E5DCC3] px-4 py-2 text-sm font-medium text-[#4A4436] hover:border-[#8A6A14]"
+          className="mt-4 rounded-lg border border-cream-300 px-4 py-2 text-sm font-medium text-noir-700 hover:border-gold-700"
         >
           Tentar de novo
         </button>
@@ -111,26 +111,26 @@ export default function TelaPerfilPainel() {
   return (
     <div className="mx-auto max-w-md space-y-6">
       <header className="text-center">
-        <h1 className="text-[22px] font-bold text-[#1C1A15]">Seu perfil</h1>
+        <h1 className="text-[22px] font-bold text-noir-900">Seu perfil</h1>
         <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
+          className="mx-auto mt-3 h-px w-16 bg-gold-700"
           aria-hidden="true"
         />
-        <p className="mt-3 text-sm text-[#8A8171]">
+        <p className="mt-3 text-sm text-noir-500">
           Mantenha seus dados de contato sempre atualizados.
         </p>
       </header>
 
       <form
         onSubmit={enviar}
-        className="space-y-4 rounded-xl border border-[#E5DCC3] bg-white p-5"
+        className="space-y-4 rounded-xl border border-cream-300 bg-white p-5"
       >
-        <div className="rounded-lg border border-[#E5DCC3] bg-[#FDFBF3] px-3 py-2">
-          <p className="text-[13px] font-medium text-[#4A4436]">
+        <div className="rounded-lg border border-cream-300 bg-cream-50 px-3 py-2">
+          <p className="text-[13px] font-medium text-noir-700">
             E-mail de acesso
           </p>
-          <p className="mt-0.5 text-sm text-[#1C1A15]">{cadastro?.email}</p>
-          <p className="mt-1 text-[12px] text-[#8A8171]">
+          <p className="mt-0.5 text-sm text-noir-900">{cadastro?.email}</p>
+          <p className="mt-1 text-[12px] text-noir-500">
             Para trocar o e-mail, fale com o Studio Audax.
           </p>
         </div>
@@ -164,7 +164,7 @@ export default function TelaPerfilPainel() {
         <div>
           <label
             htmlFor="perfil-genero"
-            className="block text-[13px] font-medium text-[#4A4436]"
+            className="block text-[13px] font-medium text-noir-700"
           >
             Gênero
           </label>
@@ -172,7 +172,7 @@ export default function TelaPerfilPainel() {
             id="perfil-genero"
             value={genero}
             onChange={(evento) => setGenero(evento.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+            className="mt-1 w-full rounded-lg border border-cream-300 bg-white px-3 py-2 text-sm text-noir-900 outline-none focus:border-gold-700"
           >
             {GENEROS.map((opcao) => (
               <option key={opcao.valor} value={opcao.valor}>

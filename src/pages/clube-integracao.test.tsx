@@ -18,6 +18,7 @@ import { ServicosProvider } from '@/modules/servicos/store'
 import Dashboard from './Dashboard'
 import PDV from './PDV'
 import Relatorios from './Relatorios'
+import { escolherCliente } from '@/test-utils/escolherCliente'
 
 const DIA = hojeISO()
 
@@ -104,10 +105,14 @@ function addItem(id: string, qtd: string) {
   fireEvent.click(screen.getByText('Adicionar ao carrinho'))
 }
 
-function selecionarCliente(id: string) {
-  fireEvent.change(screen.getByLabelText('Cliente (opcional)'), {
-    target: { value: id },
-  })
+/**
+ * O seletor de cliente do PDV agora É um campo de busca: escolhe-se pelo nome
+ * digitado, e o id continua vindo do cadastro oficial.
+ */
+async function selecionarCliente(id: string) {
+  const nome = ctxClientes.clientes.find((c) => c.id === id)?.nome
+  if (!nome) throw new Error(`cliente sem nome: ${id}`)
+  await escolherCliente(nome.split(' ')[0])
 }
 
 function finalizar() {
@@ -152,7 +157,7 @@ beforeEach(() => {
 })
 
 describe('Audax Club ↔ PDV — desconto do assinante', () => {
-  it('assinante vigente ganha 10% no subtotal e o desconto entra na venda', () => {
+  it('assinante vigente ganha 10% no subtotal e o desconto entra na venda', async () => {
     env(<PDV />)
     const clienteId = semear()
     addItem(produtoId(), '1')
@@ -163,7 +168,7 @@ describe('Audax Club ↔ PDV — desconto do assinante', () => {
     ).toBeNull()
     expect(linha('Total da venda')).toContain('R$ 100,00')
 
-    selecionarCliente(clienteId)
+    await selecionarCliente(clienteId)
     expect(screen.getByText('Desconto assinante Audax Club (10%)')).toBeTruthy()
     expect(
       (screen.getByText('Desconto assinante Audax Club (10%)')
@@ -189,12 +194,12 @@ describe('Audax Club ↔ PDV — desconto do assinante', () => {
     expect(ctxProdutos.produtos[0].estoque).toBe(9)
   })
 
-  it('assinatura atrasada não ganha desconto e avisa na tela', () => {
+  it('assinatura atrasada não ganha desconto e avisa na tela', async () => {
     env(<PDV />)
     // vencimento há 5 dias → atrasada (não vigente)
     const clienteId = semear(addMonthsISO(somarDias(DIA, -5), -1))
     addItem(produtoId(), '1')
-    selecionarCliente(clienteId)
+    await selecionarCliente(clienteId)
 
     expect(
       screen.queryByText('Desconto assinante Audax Club (10%)'),
@@ -210,11 +215,11 @@ describe('Audax Club ↔ PDV — desconto do assinante', () => {
     expect(ctxCaixa.resumoDoDia(DIA).receitasProdutos).toBe(100)
   })
 
-  it('desconto manual é limitado ao restante do subtotal do assinante', () => {
+  it('desconto manual é limitado ao restante do subtotal do assinante', async () => {
     env(<PDV />)
     const clienteId = semear()
     addItem(produtoId(), '1')
-    selecionarCliente(clienteId)
+    await selecionarCliente(clienteId)
 
     // subtotal 100 − 10 (assinante) = limite de 90
     fireEvent.change(screen.getByLabelText('Desconto (R$)'), {

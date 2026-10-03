@@ -15,6 +15,7 @@ import { ServicosProvider } from '@/modules/servicos/store'
 import { WhatsProvider } from '@/modules/whatsapp/store'
 import Dashboard from './Dashboard'
 import Espera from './Espera'
+import { escolherCliente } from '@/test-utils/escolherCliente'
 
 const HOJE = hojeISO()
 
@@ -67,11 +68,7 @@ function semearClientes() {
   })
 }
 
-function idDe(nome: string): string {
-  return ctxClientes.clientes.find((c) => c.nome === nome)!.id
-}
-
-/** Card li do pedido na lista (ignora as <option> do formulário). */
+/** Card li do pedido na lista (ignora as opções do seletor de cliente). */
 function pedidoDe(nome: string): HTMLElement | null {
   const alvo = screen
     .queryAllByText(nome)
@@ -81,10 +78,8 @@ function pedidoDe(nome: string): HTMLElement | null {
 
 type Opcoes = { periodo?: 'Manhã' | 'Tarde'; profissional?: string }
 
-function adicionarPedido(nome: string, servico: string, opcoes: Opcoes = {}) {
-  fireEvent.change(screen.getByLabelText('Cliente'), {
-    target: { value: idDe(nome) },
-  })
+async function adicionarPedido(nome: string, servico: string, opcoes: Opcoes = {}) {
+  await escolherCliente(nome.split(' ')[0])
   fireEvent.change(screen.getByLabelText('Serviço desejado'), {
     target: { value: servico },
   })
@@ -115,10 +110,10 @@ describe('Fila de Espera — cadastro e validação', () => {
     expect(screen.getByText(/0 aguardando/)).toBeTruthy()
   })
 
-  it('adiciona pedido pelo formulário com período e posição #1', () => {
+  it('adiciona pedido pelo formulário com período e posição #1', async () => {
     env(<Espera />)
     semearClientes()
-    adicionarPedido('Ana Souza', 'Corte Degradê', { periodo: 'Tarde' })
+    await adicionarPedido('Ana Souza', 'Corte Degradê', { periodo: 'Tarde' })
 
     const li = pedidoDe('Ana Souza')
     expect(li).not.toBeNull()
@@ -127,22 +122,23 @@ describe('Fila de Espera — cadastro e validação', () => {
     expect(within(li!).getByText(/Corte Degradê/)).toBeTruthy()
     expect(within(li!).getByText(/Tarde/)).toBeTruthy()
     expect(screen.getByText(/1 aguardando/)).toBeTruthy()
+    // Depois de adicionar, o seletor volta limpo para o próximo pedido.
     expect(
-      (screen.getByLabelText('Cliente') as HTMLSelectElement).value,
+      (screen.getByRole('combobox', { name: 'Cliente' }) as HTMLInputElement).value,
     ).toBe('')
   })
 
-  it('valida seleção obrigatória e bloqueia cliente duplicado na fila', () => {
+  it('valida seleção obrigatória e bloqueia cliente duplicado na fila', async () => {
     env(<Espera />)
     semearClientes()
 
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar à fila' }))
     expect(screen.getByText('Selecione o cliente.')).toBeTruthy()
 
-    adicionarPedido('Ana Souza', 'Corte Degradê')
+    await adicionarPedido('Ana Souza', 'Corte Degradê')
     expect(pedidoDe('Ana Souza')).not.toBeNull()
 
-    adicionarPedido('Ana Souza', 'Barba')
+    await adicionarPedido('Ana Souza', 'Barba')
     expect(
       screen.getByText('Este cliente já está na lista de espera.'),
     ).toBeTruthy()
@@ -152,10 +148,10 @@ describe('Fila de Espera — cadastro e validação', () => {
 })
 
 describe('Fila de Espera — edição, status e filtros', () => {
-  it('edita o pedido e pode cancelar a edição', () => {
+  it('edita o pedido e pode cancelar a edição', async () => {
     env(<Espera />)
     semearClientes()
-    adicionarPedido('Ana Souza', 'Corte Degradê')
+    await adicionarPedido('Ana Souza', 'Corte Degradê')
 
     fireEvent.click(within(pedidoDe('Ana Souza')!).getByText('Editar'))
     expect(screen.getByText('Editar pedido da fila')).toBeTruthy()
@@ -178,11 +174,11 @@ describe('Fila de Espera — edição, status e filtros', () => {
     ).toBe('')
   })
 
-  it('marca atendido e filtra por status sem perder posições', () => {
+  it('marca atendido e filtra por status sem perder posições', async () => {
     env(<Espera />)
     semearClientes()
-    adicionarPedido('Ana Souza', 'Corte Degradê')
-    adicionarPedido('Bruno Lima', 'Barba')
+    await adicionarPedido('Ana Souza', 'Corte Degradê')
+    await adicionarPedido('Bruno Lima', 'Barba')
 
     fireEvent.click(
       within(pedidoDe('Ana Souza')!).getByRole('button', {
@@ -210,10 +206,10 @@ describe('Fila de Espera — edição, status e filtros', () => {
     expect(pedidoDe('Bruno Lima')).not.toBeNull()
   })
 
-  it('remove da lista só depois de confirmar', () => {
+  it('remove da lista só depois de confirmar', async () => {
     env(<Espera />)
     semearClientes()
-    adicionarPedido('Ana Souza', 'Corte Degradê')
+    await adicionarPedido('Ana Souza', 'Corte Degradê')
 
     fireEvent.click(
       within(pedidoDe('Ana Souza')!).getByRole('button', { name: 'Remover' }),
@@ -230,7 +226,7 @@ describe('Fila de Espera — edição, status e filtros', () => {
 })
 
 describe('Fila de Espera — encaixes compatíveis com a Agenda', () => {
-  it('mostra horários livres, libera ao cancelar e abre modal preenchido', () => {
+  it('mostra horários livres, libera ao cancelar e abre modal preenchido', async () => {
     env(<Espera />)
     semearClientes()
 
@@ -247,7 +243,7 @@ describe('Fila de Espera — encaixes compatíveis com a Agenda', () => {
       }).id
     })
 
-    adicionarPedido('Bruno Lima', 'Corte Degradê', {
+    await adicionarPedido('Bruno Lima', 'Corte Degradê', {
       periodo: 'Manhã',
       profissional: 'Cleiton Silva',
     })
