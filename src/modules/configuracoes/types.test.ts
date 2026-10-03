@@ -18,7 +18,14 @@ import {
 
 describe('chaves de configuração', () => {
   it('cobre exatamente as chaves que o servidor valida', () => {
-    expect(CHAVES_CONFIG).toEqual(['links', 'avaliacao', 'notificacoes', 'clube', 'ia'])
+    expect(CHAVES_CONFIG).toEqual([
+      'links',
+      'avaliacao',
+      'notificacoes',
+      'clube',
+      'ia',
+      'barbearia',
+    ])
   })
 
   it('toda chave tem rótulo e descrição', () => {
@@ -148,7 +155,14 @@ describe('valorDaChave', () => {
 
 describe('tipos', () => {
   it('toda chave de ChaveConfig está em CHAVES_CONFIG', () => {
-    const chaves: ChaveConfig[] = ['links', 'avaliacao', 'notificacoes', 'clube', 'ia']
+    const chaves: ChaveConfig[] = [
+      'links',
+      'avaliacao',
+      'notificacoes',
+      'clube',
+      'ia',
+      'barbearia',
+    ]
     expect(chaves).toEqual(CHAVES_CONFIG)
   })
 })

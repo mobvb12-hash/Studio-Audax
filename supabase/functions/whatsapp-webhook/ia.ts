@@ -53,7 +53,7 @@ export type FontesOficiais = {
   servicos: FonteServico[]
   profissionais: FonteProfissional[]
   expediente: FonteExpediente | null
-  /** Somente fonte oficial do sistema; null nesta etapa (não existe) */
+  /** Endereço/Instagram oficiais (027). null = ainda não configurado. */
   endereco: string | null
 }
 
@@ -355,6 +355,17 @@ export function mapearFontes(catalogoBruto: unknown, slotsBruto: unknown): Fonte
     expedienteBruto !== null && typeof expedienteBruto === 'object' && !Array.isArray(expedienteBruto)
       ? (expedienteBruto as Record<string, unknown>)
       : null
+  // 027: os dados da casa vêm no MESMO retorno do catálogo público.
+  const barbearia =
+    catalogo.barbearia !== null &&
+    typeof catalogo.barbearia === 'object' &&
+    !Array.isArray(catalogo.barbearia)
+      ? (catalogo.barbearia as Record<string, unknown>)
+      : null
+  const partesBarbearia = [
+    barbearia && typeof barbearia.endereco === 'string' ? barbearia.endereco.trim() : '',
+    barbearia && typeof barbearia.instagram === 'string' ? barbearia.instagram.trim() : '',
+  ].filter(Boolean)
 
   return {
     servicos: lista(catalogo.servicos).map((linha) => ({
@@ -385,7 +396,7 @@ export function mapearFontes(catalogoBruto: unknown, slotsBruto: unknown): Fonte
           almocoFim: typeof expediente.almocoFim === 'string' ? expediente.almocoFim : null,
         }
       : null,
-    endereco: null,
+    endereco: partesBarbearia.length ? partesBarbearia.join(' | ') : null,
   }
 }
 

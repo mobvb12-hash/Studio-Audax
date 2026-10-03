@@ -20,14 +20,11 @@ import {
 } from '@/modules/agenda/persistencia'
 import {
   EXPEDIENTE_PADRAO,
-  bloqueioCobre,
   duracaoBase,
-  emAlmoco,
-  formatarMinutos,
-  paraMinutos,
-  slotsDoExpediente,
+  horariosLivresPorProfissional,
   validarProposta,
 } from '@/modules/agenda/regras'
+import type { OcupacaoAgenda, SlotLivre } from '@/modules/agenda/regras'
 import type { Agendamento, Bloqueio, Expediente } from '@/modules/agenda/types'
 
 export type ServicoPublico = {
@@ -35,13 +32,24 @@ export type ServicoPublico = {
   nome: string
   preco: number
   duracaoMin: number
+  /** ids de complemento sugeridos pela própria casa (nunca pré-marcados) */
+  complementos?: string[]
 }
 
 export type ProfissionalPublico = { id?: string; nome: string }
 
+/** Dados oficiais da casa — vêm da configuração, nunca são digitados no código. */
+export type BarbeariaPublica = {
+  endereco: string
+  telefone: string
+  instagram: string
+  mapa: string
+}
+
 export type CatalogoPublico = {
   servicos: ServicoPublico[]
   profissionais: ProfissionalPublico[]
+  barbearia: BarbeariaPublica
 }
 
 export type PropostaPublica = {
@@ -52,6 +60,8 @@ export type PropostaPublica = {
   data: string
   horario: string
   observacao?: string
+  /** ids de complemento do catálogo oficial (opcional) */
+  complementos?: string[]
 }
 
 export type ResultadoPublico =
@@ -61,14 +71,11 @@ export type ResultadoPublico =
 const CHAVE_SERVICOS = 'studio-audax:servicos:v1'
 const CHAVE_PROFISSIONAIS = 'studio-audax:profissionais:v1'
 
-/** Ocupação de um dia — sem dados pessoais (cliente nunca aparece aqui). */
-type Ocupacao = {
-  profissional: string
-  horario: string
-  servico?: string
-  duracaoMin?: number
-  status?: string
-}
+/**
+ * Ocupação de um dia — sem dados pessoais (cliente nunca aparece aqui).
+ * É exatamente o formato estrutural que a regra da Agenda consome.
+ */
+type Ocupacao = OcupacaoAgenda
 
 type BaseDoDia = {
   expediente: Expediente
@@ -100,15 +107,46 @@ function gerarId(): string {
 }
 
 function duracaoServicoLocal(nome: string): number {
-  const servicos = lerJSON<{ nome: string; duracaoMin?: number }[]>(
+  const achado = lerJSON<{ nome: string; duracaoMin?: number }[]>(
     CHAVE_SERVICOS,
     [],
-  )
-  const achado = servicos.find((s) => s.nome === nome)
+  ).find((s) => s.nome === nome)
   return achado?.duracaoMin || duracaoBase(nome)
 }
 
-/** Catálogo público: serviços/ativos e profissionais/ativos, sem dados internos. */
+/** Serviço local por id — usado para somar a duração dos complementos. */
+function servicosPorIdLocal(id: string): { nome: string } {
+  return (
+    lerJSON<{ id?: string; nome: string; duracaoMin?: number }[]>(
+      CHAVE_SERVICOS,
+      [],
+    ).find((s) => s.id === id) ?? { nome: '' }
+  )
+}
+
+/** Barbearia vazia: o catálogo público sempre devolve o objeto. */
+const BARBEARIA_VAZIA: BarbeariaPublica = {
+  endereco: '',
+  telefone: '',
+  instagram: '',
+  mapa: '',
+}
+
+function normalizarBarbearia(bruto: unknown): BarbeariaPublica {
+  const obj = (bruto ?? {}) as Record<string, unknown>
+  const texto = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+  return {
+    endereco: texto(obj.endereco),
+    telefone: texto(obj.telefone),
+    instagram: texto(obj.instagram),
+    mapa: texto(obj.mapa),
+  }
+}
+
+/**
+ * Catálogo público: serviços/ativos (com complementos), profissionais/ativos
+ * e os dados oficiais da casa. Sem dados internos nem telefone de cliente.
+ */
 export async function carregarCatalogo(): Promise<CatalogoPublico> {
   const db = supabase()
   if (db) {
@@ -121,6 +159,7 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
     const obj = (data ?? {}) as {
       servicos?: unknown
       profissionais?: unknown
+      barbearia?: unknown
     }
     return {
       servicos: Array.isArray(obj.servicos)
@@ -129,6 +168,7 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
       profissionais: Array.isArray(obj.profissionais)
         ? (obj.profissionais as ProfissionalPublico[])
         : [],
+      barbearia: normalizarBarbearia(obj.barbearia),
     }
   }
 
@@ -137,6 +177,7 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
     preco?: number
     duracaoMin?: number
     ativo?: boolean
+    complementos?: string[]
   }
   type ProfissionalLocal = { nome: string; ativo?: boolean }
   const servicosLocal = lerJSON<ServicoLocal[]>(CHAVE_SERVICOS, [])
@@ -151,10 +192,12 @@ export async function carregarCatalogo(): Promise<CatalogoPublico> {
         nome: s.nome,
         preco: Number(s.preco) || 0,
         duracaoMin: Number(s.duracaoMin) || 30,
+        complementos: Array.isArray(s.complementos) ? s.complementos : [],
       })),
     profissionais: profissionaisLocal
       .filter((p) => p.ativo !== false && p.nome)
       .map((p) => ({ nome: p.nome })),
+    barbearia: BARBEARIA_VAZIA,
   }
 }
 
@@ -197,6 +240,40 @@ async function baseDoDia(data: string): Promise<BaseDoDia> {
 }
 
 /**
+ * Horários livres de um dia para TODOS os profissionais de uma vez.
+ *
+ * Este é o ponto que resolve "escolher Cleiton → ver só o Cleiton": a
+ * disponibilidade vem da MESMA regra da Agenda interna
+ * (`horariosLivresPorProfissional`, que também trata expediente, almoço,
+ * bloqueio e sobreposição por duração) aplicada sobre o pacote oficial de
+ * ocupações — e devolve, para cada horário, a lista de quem está livre.
+ *
+ * `08:00 → [Cleiton, Ítalo]` vira duas opções clicáveis na tela. O cliente
+ * não precisa escolher profissional antes de descobrir os horários, e escolher
+ * um horário já define o profissional.
+ *
+ * Não há aqui nenhuma regra nova: é a regra da Agenda, chamada uma vez para
+ * todos os profissionais.
+ */
+export async function horariosPublicosPorProfissional(
+  data: string,
+  duracaoMin: number,
+  profissionais: string[],
+): Promise<SlotLivre[]> {
+  if (!data || profissionais.length === 0) return []
+  const base = await baseDoDia(data)
+  return horariosLivresPorProfissional(
+    data,
+    base.expediente,
+    base.bloqueios,
+    base.ocupacoes,
+    profissionais,
+    duracaoServicoLocal,
+    Math.max(5, duracaoMin || 30),
+  )
+}
+
+/**
  * Horários livres de um dia para o serviço/profissional escolhidos:
  * slots do expediente fora do almoço, sem ocupação e sem bloqueio,
  * com folga para a duração REAL do serviço.
@@ -207,41 +284,10 @@ export async function horariosPublicos(
   duracaoMin: number,
 ): Promise<string[]> {
   if (!data || !profissional) return []
-  const duracao = Math.max(5, duracaoMin || 30)
-  const base = await baseDoDia(data)
-  const expediente = base.expediente
-  const duracaoDo = (servico?: string): number =>
-    servico ? duracaoServicoLocal(servico) : 30
-
-  const livres: string[] = []
-  for (const slot of slotsDoExpediente(expediente)) {
-    if (slot.intervalo) continue
-    const inicio = paraMinutos(slot.hora)
-    const fim = inicio + duracao
-    if (fim > paraMinutos(expediente.fim)) continue
-    if (emAlmoco(slot.hora, duracao, expediente)) continue
-    const ocupado = base.ocupacoes.some((o) => {
-      if (o.profissional !== profissional) return false
-      if (o.status === 'cancelado' || o.status === 'nao_compareceu') return false
-      const ini = paraMinutos(o.horario)
-      const fimExistente =
-        ini + Math.max(5, o.duracaoMin ?? duracaoDo(o.servico))
-      return ini < fim && inicio < fimExistente
-    })
-    if (ocupado) continue
-    if (
-      bloqueioCobre(base.bloqueios, {
-        data,
-        horario: slot.hora,
-        duracaoMin: duracao,
-        profissional,
-      })
-    ) {
-      continue
-    }
-    livres.push(formatarMinutos(inicio))
-  }
-  return livres
+  const slots = await horariosPublicosPorProfissional(data, duracaoMin, [
+    profissional,
+  ])
+  return slots.map((slot) => slot.horario)
 }
 
 /**
@@ -269,7 +315,14 @@ export async function criarAgendamentoPublico(
 
   const db = supabase()
   if (db) {
-    const { data, error } = await db.rpc('agendamento_publico_criar', {
+    const complementos = (p.complementos ?? []).map((id) => id.trim()).filter(Boolean)
+    // Com complemento entra pela RPC nova (027), que valida os ids contra a
+    // coluna oficial `servicos.complementos` e delega a MESMA criação de
+    // baixo nível. Sem complemento, segue o caminho de sempre.
+    const rpc = complementos.length
+      ? 'agendamento_publico_criar_complementos'
+      : 'agendamento_publico_criar'
+    const { data, error } = await db.rpc(rpc, {
       p_cliente: nome,
       p_telefone: p.telefone.trim(),
       p_servico: p.servico,
@@ -277,6 +330,7 @@ export async function criarAgendamentoPublico(
       p_data: p.data,
       p_horario: p.horario,
       p_observacao: (p.observacao ?? '').trim(),
+      ...(complementos.length ? { p_complementos: complementos } : {}),
     })
     if (error) {
       return {
@@ -289,7 +343,12 @@ export async function criarAgendamentoPublico(
   }
 
   // Local: valida com a regra consolidada da Agenda e grava na mesma lista
-  const duracaoMin = duracaoServicoLocal(p.servico)
+  const duracaoBaseMin = duracaoServicoLocal(p.servico)
+  const duracaoComplementos = (p.complementos ?? []).reduce(
+    (soma, id) => soma + duracaoServicoLocal(servicosPorIdLocal(id).nome),
+    0,
+  )
+  const duracaoMin = duracaoBaseMin + duracaoComplementos
   const validacao = validarProposta({
     agendamentos: carregarAgendamentos(),
     bloqueios: carregarBloqueios(),

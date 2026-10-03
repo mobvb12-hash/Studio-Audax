@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   detectarAcao,
   ehAfirmacao,
@@ -447,16 +447,25 @@ describe('horariosLivres — mesma regra da página pública', () => {
 })
 
 describe('paraOpcoes e profissionaisLivresNaHora', () => {
-  it('limite e preferência', () => {
+  it('limite conta HORÁRIOS; cada horário vira uma opção por profissional livre', () => {
     const grade = horariosLivres(pacoteVazio, {
       data: AMANHA,
       duracaoMin: 30,
       profissional: null,
       profissionais: ['Ítalo', 'Cleiton'],
     }, duracaoDo)
-    expect(paraOpcoes(grade)).toHaveLength(6)
+    // 6 HORÁRIOS → 12 opções (2 profissionais livres em cada um).
+    const opcoes = paraOpcoes(grade)
+    expect(opcoes).toHaveLength(12)
+    expect([...new Set(opcoes.map((o) => o.horario))]).toHaveLength(6)
+
+    // Cleiton e Ítalo aparecem JUNTOS no mesmo horário.
+    expect(opcoes[0]).toEqual({ horario: '08:00', profissional: 'Ítalo' })
+    expect(opcoes[1]).toEqual({ horario: '08:00', profissional: 'Cleiton' })
+
     const comPreferencia = paraOpcoes(grade, { preferir: 'Cleiton' })
-    expect(comPreferencia[0].profissional).toBe('Cleiton')
+    expect(comPreferencia[0]).toEqual({ horario: '08:00', profissional: 'Cleiton' })
+
     expect(profissionaisLivresNaHora(grade, '08:00')).toEqual(['Ítalo', 'Cleiton'])
     expect(profissionaisLivresNaHora(grade, '03:00')).toEqual([])
   })
@@ -539,10 +548,15 @@ describe('processarConversa — cenários completos', () => {
 
   it('cenário 8 — faltando horário: oferece os livres do dia', async () => {
     const { saida } = await rodar('agendar Corte Degradê amanhã')
-    expect(saida.resposta).toContain('horários livres')
+    expect(saida.resposta).toContain('Horários disponíveis')
     expect(saida.resposta).toContain('sexta-feira, 2 de outubro de 2026')
-    expect(saida.resposta).toContain('com Ítalo')
-    expect(saida.contexto.rascunho?.opcoes.length).toBe(6)
+    expect(saida.resposta).toContain('• Ítalo')
+    expect(saida.resposta).toContain('• Cleiton')
+    // 6 HORÁRIOS oferecidos; cada um traz os 2 profissionais livres.
+    expect(saida.contexto.rascunho?.opcoes.length).toBe(12)
+    expect(
+      new Set(saida.contexto.rascunho?.opcoes.map((o) => o.horario)).size,
+    ).toBe(6)
     expect(saida.contexto.rascunho?.etapa).toBe('coletando')
   })
 
@@ -604,7 +618,7 @@ describe('processarConversa — cenários completos', () => {
     })
     expect(t2.saida.executada).toBe(false)
     expect(t2.saida.resposta).toContain('acabou de ser ocupado')
-    expect(t2.saida.resposta).toContain('horários livres')
+    expect(t2.saida.resposta).toContain('Horários disponíveis')
     expect(t2.saida.contexto.rascunho?.horario).toBeNull()
     expect(t2.chamadas.criar).toHaveLength(1)
     // sem retry automático: o usuário escolhe da lista reoferecida e
@@ -665,7 +679,7 @@ describe('processarConversa — cenários completos', () => {
 
   it('cenário 15 — remarcação completa: alvo, nova data, novo horário, sim', async () => {
     const t1 = await rodar('remarcar Corte Degradê para sexta', { listar: [AG1] })
-    expect(t1.saida.resposta).toContain('horários livres')
+    expect(t1.saida.resposta).toContain('Horários disponíveis')
     expect(t1.saida.contexto.rascunho?.alvo?.id).toBe('ag-001')
     expect(t1.saida.contexto.rascunho?.data).toBe(AMANHA)
     const t2 = await rodar('às 15h', { contexto: t1.saida.contexto, listar: [AG1] })
@@ -688,7 +702,7 @@ describe('processarConversa — cenários completos', () => {
     const t2 = await rodar('Corte Degradê', { contexto: t1.saida.contexto, cliente: null })
     expect(t2.saida.resposta).toContain('Para qual dia')
     const t3 = await rodar('amanhã', { contexto: t2.saida.contexto, cliente: null })
-    expect(t3.saida.resposta).toContain('horários livres')
+    expect(t3.saida.resposta).toContain('Horários disponíveis')
     const t4 = await rodar('2', { contexto: t3.saida.contexto, cliente: null })
     expect(t4.saida.resposta).toContain('me diga seu nome')
     const t5 = await rodar('João Silva', { contexto: t4.saida.contexto, cliente: null })
@@ -836,7 +850,9 @@ describe('§15 A–E · BUG 1: período do dia filtra a grade real', () => {
     expect(saida.resposta).toContain('1. 13h')
     expect(saida.resposta).not.toMatch(/\b(8h|9h|10h|11h)\b/)
     const linhas = saida.resposta.match(/^\d+\. /gm) ?? []
-    expect(linhas.length).toBe(6)
+    // 6 HORÁRIOS × 2 profissionais livres = 12 linhas.
+    expect(linhas.length).toBe(12)
+    expect(new Set(saida.contexto.rascunho?.opcoes.map((o) => o.horario)).size).toBe(6)
   })
 
   it('A · "de manhã" também filtra (nunca aparece 14h/15h de tarde)', async () => {
@@ -861,7 +877,7 @@ describe('§15 A–E · BUG 1: período do dia filtra a grade real', () => {
 
   it('C · período no meio do fluxo revalida a lista já mostrada', async () => {
     const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
-    expect(t1.saida.resposta).toContain('horários livres')
+    expect(t1.saida.resposta).toContain('Horários disponíveis')
     const t2 = await rodar('de tarde', { contexto: t1.saida.contexto, cliente: null })
     expect(t2.saida.contexto.rascunho?.periodo).toBe('tarde')
     expect(t2.saida.resposta).toContain('1. 13h')
@@ -890,7 +906,7 @@ describe('§15 A–E · BUG 1: período do dia filtra a grade real', () => {
     const t3 = await rodar('à noite', { contexto: t2.saida.contexto, cliente: null })
     expect(t3.saida.contexto.rascunho?.periodo).toBe('noite')
     expect(t3.saida.contexto.rascunho?.horario).toBeNull()
-    expect(t3.saida.resposta).toContain('horários livres')
+    expect(t3.saida.resposta).toContain('Horários disponíveis')
     expect(t3.saida.resposta).not.toMatch(/\b(8h|9h|10h|11h|13h|14h|15h|16h|17h)\b/)
   })
 
@@ -971,7 +987,7 @@ describe('§15 F–K · BUG 2: nome do cliente tem prioridade na coleta', () => 
     })
     expect(t3.saida.contexto.rascunho?.cliente).toBeNull()
     expect(t3.saida.contexto.rascunho?.horario).toBeNull()
-    expect(t3.saida.resposta).toContain('horários livres')
+    expect(t3.saida.resposta).toContain('Horários disponíveis')
   })
 
   it('K · "quero outro profissional" limpa o profissional escolhido', async () => {
@@ -1015,8 +1031,14 @@ describe('§15 L–O · linguagem natural e hora solta', () => {
 
   it('O · número dentro da lista continua sendo índice (regressão)', async () => {
     const t1 = await rodar('agendar Corte Degradê amanhã', { cliente: null })
+    const opcoes = t1.saida.contexto.rascunho?.opcoes ?? []
+    // Número = posição EXATA na lista, e cada posição carrega hora + profissional.
+    const terceira = opcoes[2]
+    expect(terceira).toBeTruthy()
     const t2 = await rodar('3', { contexto: t1.saida.contexto, cliente: null })
-    expect(t2.saida.contexto.rascunho?.horario).toBe('09:00')
+    expect(t2.saida.contexto.rascunho?.horario).toBe(terceira.horario)
+    // Escolher a opção já define o profissional: nada de perguntar de novo.
+    expect(t2.saida.contexto.rascunho?.profissional).toBe(terceira.profissional)
     expect(t2.saida.resposta).toContain('me diga seu nome')
   })
 })

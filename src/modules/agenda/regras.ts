@@ -266,11 +266,100 @@ export type Disponibilidade = {
   vagas: number
 }
 
+export type SlotLivre = {
+  /** Horário de início, HH:MM */
+  horario: string
+  /** Profissionais LIVRES nesse horário, na ordem em que foram informados */
+  profissionais: string[]
+}
+
+/**
+ * O que a regra de disponibilidade precisa saber de um agendamento.
+ *
+ * Deliberadamente estrutural: a Agenda interna passa `Agendamento`, e a
+ * página pública passa o pacote enxuto da RPC `agendamento_publico_slots`
+ * (que não traz nome nem telefone, por privacidade). Os dois são a MESMA
+ * informação de ocupação, então a regra é escrita uma única vez.
+ */
+export type OcupacaoAgenda = {
+  profissional: string
+  horario: string
+  servico?: string
+  duracaoMin?: number
+  status?: string
+}
+
+/**
+ * Disponibilidade por horário E por profissional — a regra oficial, em um
+ * único lugar.
+ *
+ * É esta função que "consulta todos os profissionais de uma vez": para cada
+ * slot do expediente (fora do almoço) devolve QUAIS profissionais estão
+ * livres. A Agenda interna usa para pintar a grade, a página pública usa para
+ * listar "08:00 • Cleiton" e "08:00 • Ítalo", e o WhatsApp usa para montar os
+ * botões. Nenhum consumidor reimplementa a checagem — todos leem daqui.
+ *
+ * A folga testada é a `duracaoMin` REAL do serviço (base + complementos), e
+ * não a grade de 30 minutos: o horário só entra na lista se o atendimento
+ * inteiro couber no expediente e não cair sobre um bloqueio.
+ *
+ * Cancelados e não comparecidos não ocupam — o horário não foi usado.
+ */
+export function horariosLivresPorProfissional(
+  data: string,
+  expediente: Expediente,
+  bloqueios: Bloqueio[],
+  ocupacoes: OcupacaoAgenda[],
+  profissionais: string[],
+  duracaoDo: (servico: string) => number,
+  duracaoMin = 30,
+): SlotLivre[] {
+  const duracao = Math.max(5, duracaoMin || 30)
+  if (profissionais.length === 0) return []
+
+  const slots: SlotLivre[] = []
+  for (const slot of slotsDoExpediente(expediente)) {
+    if (slot.intervalo) continue
+    const inicio = paraMinutos(slot.hora)
+    const fim = inicio + duracao
+
+    // O atendimento inteiro precisa caber no expediente.
+    if (fim > paraMinutos(expediente.fim)) continue
+    // ...e não pode invadir o almoço.
+    if (emAlmoco(slot.hora, duracao, expediente)) continue
+
+    const livres = profissionais.filter((profissional) => {
+      const ocupado = ocupacoes.some((ag) => {
+        if (ag.profissional !== profissional) return false
+        if (ag.status === 'cancelado' || ag.status === 'nao_compareceu')
+          return false
+        const inicioExistente = paraMinutos(ag.horario)
+        const fimExistente =
+          inicioExistente + Math.max(5, ag.duracaoMin ?? duracaoDo(ag.servico ?? ''))
+        return inicioExistente < fim && inicio < fimExistente
+      })
+      if (ocupado) return false
+      return !bloqueioCobre(bloqueios, {
+        data,
+        horario: slot.hora,
+        duracaoMin: duracao,
+        profissional,
+      })
+    })
+
+    if (livres.length > 0) slots.push({ horario: slot.hora, profissionais: livres })
+  }
+  return slots
+}
+
 /**
  * Horários disponíveis de um dia: slots do expediente sem almoço onde
  * pelo menos um profissional está livre (sem agendamento que ocupe o slot
  * e sem bloqueio cobrindo). Cancelados e não comparecidos não ocupam.
  * Só usa dados reais — sem metas ou estimativas.
+ *
+ * Casca em `horariosLivresPorProfissional` (a regra única) e achata para a
+ * forma antiga: lista de horários + total de vagas.
  */
 export function horariosDisponiveis(
   data: string,
@@ -280,40 +369,19 @@ export function horariosDisponiveis(
   profissionais: string[],
   duracaoDo: (servico: string) => number,
 ): Disponibilidade {
-  const horarios: string[] = []
-  let vagas = 0
-  if (profissionais.length === 0) return { horarios, vagas }
-
-  for (const slot of slotsDoExpediente(expediente)) {
-    if (slot.intervalo) continue
-    const slotInicio = paraMinutos(slot.hora)
-    const slotFim = slotInicio + 30
-
-    const livres = profissionais.filter((profissional) => {
-      const ocupado = agendamentosDoDia.some((ag) => {
-        if (ag.profissional !== profissional) return false
-        if (ag.status === 'cancelado' || ag.status === 'nao_compareceu')
-          return false
-        const inicio = paraMinutos(ag.horario)
-        const fim =
-          inicio + Math.max(5, ag.duracaoMin ?? duracaoDo(ag.servico))
-        return inicio < slotFim && slotInicio < fim
-      })
-      if (ocupado) return false
-      return !bloqueioCobre(bloqueios, {
-        data,
-        horario: slot.hora,
-        duracaoMin: 30,
-        profissional,
-      })
-    })
-
-    if (livres.length > 0) {
-      horarios.push(slot.hora)
-      vagas += livres.length
-    }
+  const slots = horariosLivresPorProfissional(
+    data,
+    expediente,
+    bloqueios,
+    agendamentosDoDia,
+    profissionais,
+    duracaoDo,
+    30,
+  )
+  return {
+    horarios: slots.map((slot) => slot.horario),
+    vagas: slots.reduce((total, slot) => total + slot.profissionais.length, 0),
   }
-  return { horarios, vagas }
 }
 
 /** HH:MM + minutos → HH:MM (vira no dia seguinte). */

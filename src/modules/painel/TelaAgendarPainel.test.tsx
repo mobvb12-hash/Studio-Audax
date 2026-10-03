@@ -1,9 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  carregarCatalogo,
-  horariosPublicos,
-} from '@/services/supabase/agendaPublica'
+import { carregarCatalogo, horariosPublicosPorProfissional } from '@/services/supabase/agendaPublica'
 import type { CatalogoPublico } from '@/services/supabase/agendaPublica'
 import {
   criarAgendamentoPainel,
@@ -21,6 +18,7 @@ vi.mock('@/services/supabase/painel', () => ({
 
 vi.mock('@/services/supabase/agendaPublica', () => ({
   carregarCatalogo: vi.fn(),
+  horariosPublicosPorProfissional: vi.fn(),
   horariosPublicos: vi.fn(),
 }))
 
@@ -29,23 +27,27 @@ vi.mock('./regras', () => ({
 }))
 
 const catalogo = vi.mocked(carregarCatalogo)
-const horarios = vi.mocked(horariosPublicos)
+const slots = vi.mocked(horariosPublicosPorProfissional)
 const cadastro = vi.mocked(obterMeuCadastro)
 const servicosComComplementos = vi.mocked(listarServicosComComplementos)
 const criar = vi.mocked(criarAgendamentoPainel)
 
 const CATALOGO: CatalogoPublico = {
   servicos: [
-    { id: 'srv-corte', nome: 'Corte', preco: 70, duracaoMin: 40 },
-    { id: 'srv-barba', nome: 'Barba', preco: 35, duracaoMin: 15 },
+    { id: 'srv-corte', nome: 'Corte Audax', preco: 70, duracaoMin: 40, complementos: ['srv-barba'] },
+    { id: 'srv-barba', nome: 'Barba', preco: 35, duracaoMin: 15, complementos: [] },
   ],
-  profissionais: [{ id: 'pf-rafael', nome: 'Rafael' }],
+  profissionais: [
+    { id: 'pf-cleiton', nome: 'Cleiton' },
+    { id: 'pf-italo', nome: 'Ítalo' },
+  ],
+  barbearia: { endereco: '', telefone: '', instagram: '', mapa: '' },
 }
 
 const COMPLEMENTOS: ServicoComComplementos[] = [
   {
     id: 'srv-corte',
-    nome: 'Corte',
+    nome: 'Corte Audax',
     preco: 70,
     duracaoMin: 40,
     complementos: [{ id: 'srv-barba', nome: 'Barba', preco: 35, duracaoMin: 15 }],
@@ -62,36 +64,41 @@ const MEU_CADASTRO: CadastroPainel = {
   genero: 'feminino',
 }
 
-/**
- * Escolhe serviço e profissional pelos tiles da nova UI. O tile de serviço
- * carrega o nome, a duração e o preço; o de profissional só o nome — por isso
- * a busca é feita com regex parcial, para não depender do texto exato.
- */
-async function escolherServicoEProfissional() {
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: /Corte/ })).toBeTruthy(),
-  )
-  fireEvent.click(screen.getByRole('button', { name: /^Corte/ }))
-  fireEvent.click(await screen.findByRole('button', { name: /^Rafael/ }))
+function diaFuturoIso(): string {
+  const d = new Date(Date.now() + 5 * 86400000)
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mes}-${dia}`
 }
 
-/** Preenche a data pelo atalho "Escolher outra data" (input type=date). */
-function escolherData(iso: string) {
+function escolherDataPeloAtalho(iso: string) {
   const atalho = screen.getByText('Escolher outra data')
   const details = atalho.closest('details')
   if (details && !details.open) fireEvent.click(atalho)
-  const input = screen.getByDisplayValue(/^\d{2}\/\d{2}\/\d{4}$|^$/) as HTMLInputElement
-  fireEvent.change(input, { target: { value: iso } })
+  fireEvent.change(screen.getByLabelText('Escolher data'), { target: { value: iso } })
+}
+
+/** Vai até a grade de horários sem escolher profissional. */
+async function irAteOsSlots() {
+  await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: /Corte Audax/ }))
+  escolherDataPeloAtalho(diaFuturoIso())
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /Horário 08:00 com Cleiton/ })).toBeTruthy(),
+  )
 }
 
 beforeEach(() => {
   catalogo.mockReset()
-  horarios.mockReset()
+  slots.mockReset()
   cadastro.mockReset()
   servicosComComplementos.mockReset()
   criar.mockReset()
   catalogo.mockResolvedValue(CATALOGO)
-  horarios.mockResolvedValue(['10:00', '11:00'])
+  slots.mockResolvedValue([
+    { horario: '08:00', profissionais: ['Cleiton', 'Ítalo'] },
+    { horario: '09:00', profissionais: ['Ítalo'] },
+  ])
   cadastro.mockResolvedValue(MEU_CADASTRO)
   servicosComComplementos.mockResolvedValue(COMPLEMENTOS)
   window.location.hash = ''
@@ -103,49 +110,58 @@ describe('TelaAgendarPainel', () => {
 
     await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
 
-    // Preço e duração vêm do catálogo oficial, sem preço inventado.
-    expect(screen.getByRole('button', { name: /Corte 40 min/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Corte 40 min R/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Corte Audax/ }))
 
-    fireEvent.click(screen.getByRole('button', { name: /^Corte/ }))
-
-    const complemento = screen.getByRole('button', { name: /^Barba 15 min \+\u0052/ })
-    // Sugestão, nunca pré-marcada.
+    const complemento = screen.getByRole('button', {
+      name: /^Barba — \d+ minutos — mais/,
+    })
     expect(complemento.getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByText(/Quer complementar seu atendimento/)).toBeTruthy()
+    expect(screen.getByText('Quer completar?')).toBeTruthy()
   })
 
-  it('soma a duração do complemento nos horários e envia os ids escolhidos', async () => {
+  it('consulta TODOS os profissionais de uma vez, sem perguntar profissional', async () => {
     render(<TelaAgendarPainel />)
     await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
 
-    fireEvent.click(screen.getByRole('button', { name: /^Corte/ }))
-    fireEvent.click(screen.getByRole('button', { name: /^Rafael/ }))
-    escolherData('2030-01-15')
+    fireEvent.click(screen.getByRole('button', { name: /Corte Audax/ }))
+    // Nenhuma etapa de profissional existe no fluxo.
+    expect(screen.queryByText('Profissional')).toBeNull()
 
+    escolherDataPeloAtalho(diaFuturoIso())
     await waitFor(() =>
-      expect(horarios).toHaveBeenCalledWith('2030-01-15', 'Rafael', 40),
+      expect(screen.getByRole('button', { name: /Horário 08:00 com Cleiton/ })).toBeTruthy(),
+    )
+    expect(screen.getByRole('button', { name: /Horário 08:00 com Ítalo/ })).toBeTruthy()
+    expect(slots).toHaveBeenCalledWith(diaFuturoIso(), 40, ['Cleiton', 'Ítalo'])
+  })
+
+  it('soma a duração do complemento na consulta e envia os ids escolhidos', async () => {
+    render(<TelaAgendarPainel />)
+    await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: /Corte Audax/ }))
+    escolherDataPeloAtalho(diaFuturoIso())
+    await waitFor(() => expect(slots).toHaveBeenCalledWith(diaFuturoIso(), 40, [
+      'Cleiton',
+      'Ítalo',
+    ]))
+
+    fireEvent.click(screen.getByRole('button', { name: /^Barba — \d+ minutos — mais/ }))
+    expect(screen.getByText(/Duração total do atendimento: 55 min/)).toBeTruthy()
+    await waitFor(() =>
+      expect(slots).toHaveBeenCalledWith(diaFuturoIso(), 55, ['Cleiton', 'Ítalo']),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /^Barba 15 min \+\u0052/ }))
-    expect(screen.getByRole('button', { name: /^Barba 15 min \+\u0052/ }).getAttribute('aria-pressed')).toBe('true')
-    await waitFor(() =>
-      expect(horarios).toHaveBeenCalledWith('2030-01-15', 'Rafael', 55),
-    )
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Horário 10:00' })).toBeTruthy(),
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Horário 08:00 com Ítalo' }))
     criar.mockResolvedValue({ ok: true, id: 'ag-1' })
-    fireEvent.click(screen.getByRole('button', { name: 'Horário 10:00' }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
 
     await waitFor(() => expect(screen.getByText('Agendamento confirmado!')).toBeTruthy())
     expect(criar).toHaveBeenCalledWith({
-      servico: 'Corte',
-      profissional: 'Rafael',
-      data: '2030-01-15',
-      horario: '10:00',
+      servico: 'Corte Audax',
+      profissional: 'Ítalo',
+      data: diaFuturoIso(),
+      horario: '08:00',
       observacao: '',
       complementos: ['srv-barba'],
     })
@@ -153,19 +169,13 @@ describe('TelaAgendarPainel', () => {
 
   it('erro do servidor vira aviso honesto (sem tela de confirmação)', async () => {
     render(<TelaAgendarPainel />)
-    await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
-
-    await escolherServicoEProfissional()
-    escolherData('2030-01-15')
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Horário 10:00' })).toBeTruthy(),
-    )
+    await irAteOsSlots()
+    fireEvent.click(screen.getByRole('button', { name: 'Horário 08:00 com Cleiton' }))
 
     criar.mockResolvedValue({
       ok: false,
       erro: 'Complemento indisponível para este serviço.',
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Horário 10:00' }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
 
     await waitFor(() =>
@@ -178,41 +188,23 @@ describe('TelaAgendarPainel', () => {
 
   it('horário tomado recarrega a lista de livres', async () => {
     render(<TelaAgendarPainel />)
-    await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
-
-    await escolherServicoEProfissional()
-    escolherData('2030-01-15')
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Horário 10:00' })).toBeTruthy(),
-    )
-    const chamadas = horarios.mock.calls.length
+    await irAteOsSlots()
+    fireEvent.click(screen.getByRole('button', { name: 'Horário 08:00 com Cleiton' }))
+    const chamadas = slots.mock.calls.length
 
     criar.mockResolvedValue({
       ok: false,
       erro: 'Este horário acabou de ser ocupado. Escolha outro.',
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Horário 10:00' }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
 
     await waitFor(() =>
-      expect(horarios.mock.calls.length).toBeGreaterThan(chamadas),
+      expect(screen.getByRole('alert').textContent).toMatch(/acabou de ser ocupado/),
+    )
+    await waitFor(() =>
+      expect(slots.mock.calls.length).toBeGreaterThan(chamadas),
     )
     expect(screen.queryByText('Agendamento confirmado!')).toBeNull()
-  })
-
-  it('"Qualquer profissional" não inventa vaga: pede um profissional escolhido', async () => {
-    render(<TelaAgendarPainel />)
-    await waitFor(() => expect(screen.getByText(/Agendando como Ana Silva/)).toBeTruthy())
-
-    fireEvent.click(screen.getByRole('button', { name: /^Corte/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Qualquer profissional/ }))
-
-    // Sem profissional definido não existe chamada de disponibilidade — a Agenda
-    // oficial é sempre quem diz quais horários existem.
-    expect(horarios).not.toHaveBeenCalled()
-    expect(
-      screen.getByText(/Escolha um profissional para ver os horários livres/),
-    ).toBeTruthy()
   })
 
   it('cadastro sem vínculo explica o caminho do Perfil em vez de quebrar', async () => {

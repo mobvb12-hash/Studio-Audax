@@ -276,6 +276,139 @@ export function BotaoHorario({
   )
 }
 
+/**
+ * Botão de SLOT: horário + profissional no mesmo toque.
+ *
+ * É o que resolve "Cleiton e Ítalo ao mesmo tempo": cada par
+ * horário × profissional vira um botão próprio e clicável. A hora é o dado
+ * grande (é o que o cliente procura) e o profissional vem embaixo, discreto.
+ * Escolher o slot já ESCOLHE o profissional — não existe passo separado.
+ */
+export function BotaoSlot({
+  hora,
+  profissional,
+  selecionado,
+  aoEscolher,
+}: {
+  hora: string
+  profissional: string
+  selecionado: boolean
+  aoEscolher: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={aoEscolher}
+      aria-pressed={selecionado}
+      aria-label={`Horário ${hora} com ${profissional}`}
+      className={`flex min-h-[62px] w-full flex-col items-center justify-center gap-0.5 rounded-xl border px-2 py-2 transition-colors ${
+        selecionado
+          ? 'border-gold-600 bg-gold-500 text-noir-900 shadow-[0_1px_0_rgba(18,17,14,0.12)]'
+          : 'border-cream-300 bg-cream-50 text-noir-800 hover:border-gold-400 hover:bg-cream-100'
+      }`}
+    >
+      <span className="text-[16px] leading-none font-semibold tabular-nums">
+        {hora}
+      </span>
+      <span
+        className={`max-w-full truncate text-[11.5px] leading-tight ${
+          selecionado ? 'text-noir-800' : 'text-noir-500'
+        }`}
+      >
+        {profissional}
+      </span>
+    </button>
+  )
+}
+
+/**
+ * Botão de serviço com o rótulo `[ ESCOLHER ]` explícito.
+ *
+ * Um cartão por serviço, do jeito que o cliente lê: nome em destaque, preço e
+ * duração logo abaixo e o verbo de ação escrito — nada de descobrir o que um
+ * botão faz só pelo formato.
+ */
+export function CartaoServico({
+  nome,
+  preco,
+  duracaoMin,
+  selecionado,
+  aoEscolher,
+}: {
+  nome: string
+  preco: string
+  duracaoMin: number
+  selecionado: boolean
+  aoEscolher: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={aoEscolher}
+      aria-pressed={selecionado}
+      aria-label={`${nome} — ${preco} — ${duracaoMin} minutos`}
+      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors ${
+        selecionado
+          ? 'border-gold-600 bg-gold-200/50 ring-1 ring-gold-600'
+          : 'border-cream-300 bg-cream-50 hover:border-gold-400 hover:bg-cream-100'
+      }`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[16px] leading-snug font-semibold text-noir-900">
+          {nome}
+        </span>
+        <span className="mt-0.5 block text-[12.5px] text-noir-500">
+          {duracaoMin} min
+        </span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <span
+          className={`text-[15px] font-semibold tabular-nums ${
+            selecionado ? 'text-gold-800' : 'text-noir-800'
+          }`}
+        >
+          {preco}
+        </span>
+        <span
+          className={`rounded-md border px-2 py-0.5 text-[10.5px] font-bold tracking-[0.1em] uppercase ${
+            selecionado
+              ? 'border-gold-600 bg-gold-500 text-noir-900'
+              : 'border-cream-400 text-noir-500'
+          }`}
+        >
+          {selecionado ? 'Escolhido' : 'Escolher'}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** Botão que abre um link externo (maps, WhatsApp, Instagram). */
+export function BotaoLink({
+  children,
+  href,
+  variante = 'secundario',
+}: {
+  children: ReactNode
+  href: string
+  variante?: 'primario' | 'secundario'
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-3 text-center text-[13.5px] font-semibold transition-colors ${
+        variante === 'primario'
+          ? 'bg-gold-500 text-noir-900 hover:bg-gold-400'
+          : 'border border-cream-300 bg-cream-50 text-noir-800 hover:border-gold-400 hover:bg-cream-100'
+      }`}
+    >
+      {children}
+    </a>
+  )
+}
+
 export function Botao({
   children,
   aoClicar,

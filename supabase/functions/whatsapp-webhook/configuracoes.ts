@@ -27,18 +27,33 @@ export type ConfigIa = {
   nomeAtendente: string
 }
 
+/**
+ * Dados oficiais da casa (migration 027).
+ *
+ * `telefone` nasce VAZIO porque o número oficial da barbearia não está em
+ * nenhuma migration nem config deste repositório — ele vive atrás do secret
+ * EVOLUTION_INSTANCE. Vazio = a IA não fala telefone; ninguém inventa número.
+ */
+export type ConfigBarbearia = {
+  endereco: string
+  telefone: string
+  instagram: string
+  mapa: string
+}
+
 export type Configuracoes = {
   links: ConfigLinks
   avaliacao: ConfigAvaliacao
   notificacoes: ConfigNotificacoes
   clube: ConfigClube
   ia: ConfigIa
+  barbearia: ConfigBarbearia
 }
 
 /**
- * Padrão = o comportamento de referência do sistema. `clube.beneficios` vazio
- * e `avaliacao.link` vazio são intencionais: sem configuração a IA não afirma
- * benefício nem envia link.
+ * Padrão = o comportamento de referência do sistema. `clube.beneficios` vazio,
+ * `avaliacao.link` vazio e `barbearia.telefone` vazio são intencionais: sem
+ * configuração a IA não afirma benefício, não envia link e não dá telefone.
  */
 export const CONFIG_PADRAO: Configuracoes = {
   links: { painel: '', avaliacao: '' },
@@ -51,6 +66,7 @@ export const CONFIG_PADRAO: Configuracoes = {
   },
   clube: { beneficios: {} },
   ia: { maxSugestoes: 2, botoesInterativos: false, nomeAtendente: 'Audax' },
+  barbearia: { endereco: '', telefone: '', instagram: '', mapa: '' },
 }
 
 function objeto(valor: unknown): Record<string, unknown> {
@@ -119,6 +135,7 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
   const blocoNotificacoes = objeto(raiz.notificacoes)
   const blocoClube = objeto(raiz.clube)
   const blocoIa = objeto(raiz.ia)
+  const blocoBarbearia = objeto(raiz.barbearia)
 
   return {
     links: {
@@ -154,7 +171,22 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       ),
       nomeAtendente: texto(blocoIa.nomeAtendente, CONFIG_PADRAO.ia.nomeAtendente, 40),
     },
+    barbearia: {
+      endereco: texto(blocoBarbearia.endereco, '', 300),
+      // Só dígitos e sinal: o número que o dono digita nunca vira comando.
+      telefone: telefoneBarbearia(blocoBarbearia.telefone),
+      instagram: texto(blocoBarbearia.instagram, '', 300),
+      mapa: link(blocoBarbearia.mapa),
+    },
   }
+}
+
+/** Telefone da casa: só `+` e dígitos, até 15 (mesmo limite do cliente). */
+function telefoneBarbearia(valor: unknown): string {
+  const bruto = texto(valor, '', 40)
+  const digitos = bruto.replace(/\D/g, '')
+  if (!digitos || digitos.length > 15) return ''
+  return digitos
 }
 
 export type ConfiguracoesLidas = {

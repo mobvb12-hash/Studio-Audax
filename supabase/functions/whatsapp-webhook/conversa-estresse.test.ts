@@ -274,8 +274,11 @@ describe('§16.6 · jornada longa com período, troca e nome', () => {
     const t2 = await rodar('mudou, quero de manhã', { contexto: t1.saida.contexto })
     expect(t2.saida.contexto.rascunho?.periodo).toBe('manha')
     expect(t2.saida.resposta).toContain('1. 8h')
+    // "4" é a 4ª opção da LISTA (hora + profissional), não o 4º horário.
+    const quarta = (t2.saida.contexto.rascunho?.opcoes ?? [])[3]
     const t3 = await rodar('4', { contexto: t2.saida.contexto })
-    expect(t3.saida.contexto.rascunho?.horario).toBe('09:30')
+    expect(t3.saida.contexto.rascunho?.horario).toBe(quarta.horario)
+    expect(t3.saida.contexto.rascunho?.profissional).toBe(quarta.profissional)
     const t4 = await rodar('Cleiton Pedro da Silva', { contexto: t3.saida.contexto })
     expect(t4.saida.contexto.rascunho?.cliente).toBe('Cleiton Pedro da Silva')
     expect(t4.saida.resposta).toContain('Confirma o agendamento')
@@ -350,7 +353,7 @@ describe('§16.7 · robustez: qualquer texto não quebra e não vaza', () => {
     const t2 = await rodar('de manhã', { contexto: t1.saida.contexto })
     expect(t2.saida.contexto.rascunho?.periodo).toBe('manha')
     expect(t2.saida.contexto.rascunho?.horario).toBeNull()
-    expect(t2.saida.resposta).toContain('horários livres')
+    expect(t2.saida.resposta).toContain('Horários disponíveis')
     expect(t2.saida.resposta).toContain('1. 8h')
   })
 })

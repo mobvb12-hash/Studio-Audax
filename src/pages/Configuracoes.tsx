@@ -184,6 +184,14 @@ export default function Configuracoes() {
     }))
   const definirIa = <K extends keyof Configuracoes['ia']>(campo: K, valor: Configuracoes['ia'][K]) =>
     setDados((atual) => ({ ...atual, ia: { ...atual.ia, [campo]: valor } }))
+  const definirBarbearia = <K extends keyof Configuracoes['barbearia']>(
+    campo: K,
+    valor: Configuracoes['barbearia'][K],
+  ) =>
+    setDados((atual) => ({
+      ...atual,
+      barbearia: { ...atual.barbearia, [campo]: valor },
+    }))
 
   const listaPlanos = useMemo(() => Object.keys(dados.clube.beneficios), [dados.clube.beneficios])
 
@@ -240,6 +248,53 @@ export default function Configuracoes() {
             onChange={(e) => definirLinks('avaliacao', e.target.value)}
           />
         </Campo>
+      </Caixa>
+
+      <Caixa
+        titulo={ROTULO_CHAVE.barbearia}
+        descricao={DESCRICAO_CHAVE.barbearia}
+        aoSalvar={() => void salvar('barbearia')}
+        salvando={salvando === 'barbearia'}
+        erro={erro.barbearia || null}
+        aviso={aviso.barbearia || null}
+      >
+        <Campo rotulo="Endereço">
+          <input
+            className={CAMPO_FORM}
+            placeholder="Rua, número - bairro - cidade/UF"
+            value={dados.barbearia.endereco}
+            onChange={(e) => definirBarbearia('endereco', e.target.value)}
+          />
+        </Campo>
+        <Campo rotulo="Telefone / WhatsApp">
+          <input
+            className={CAMPO_FORM}
+            placeholder="(81) 90000-0000"
+            value={dados.barbearia.telefone}
+            onChange={(e) => definirBarbearia('telefone', e.target.value)}
+          />
+        </Campo>
+        <Campo rotulo="Instagram">
+          <input
+            className={CAMPO_FORM}
+            placeholder="@perfil"
+            value={dados.barbearia.instagram}
+            onChange={(e) => definirBarbearia('instagram', e.target.value)}
+          />
+        </Campo>
+        <Campo rotulo="Link do mapa (opcional)">
+          <input
+            className={CAMPO_FORM}
+            placeholder="Sem isso, o botão usa o endereço acima"
+            value={dados.barbearia.mapa}
+            onChange={(e) => definirBarbearia('mapa', e.target.value)}
+          />
+        </Campo>
+        <p className="text-xs text-[#8A8171]">
+          O telefone é o botão de WhatsApp da página pública e a resposta da IA.
+          Enquanto estiver vazio, nenhum dos dois mostra número — o sistema não
+          inventa telefone. O mapa, se vazio, é montado a partir do endereço.
+        </p>
       </Caixa>
 
       <Caixa

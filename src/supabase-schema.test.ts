@@ -138,6 +138,7 @@ expect(nomes).toEqual([
       '../supabase/migrations/024_notificacoes_whatsapp.sql',
       '../supabase/migrations/025_catalogo_complementos.sql',
       '../supabase/migrations/026_notificacao_agendamento_seguro.sql',
+      '../supabase/migrations/027_barbearia_e_complementos_publicos.sql',
     ])
   })
 
@@ -805,5 +806,90 @@ expect(texto).toMatch(
     expect(texto).toMatch(
       /grant execute on function public\.ia_notificacao_enfileirar\(text, text, text, text, text, text, integer\) to service_role/,
     )
+  })
+})
+
+// ============================================================================
+// 027 — barbearia oficial e agendamento público com complementos
+//
+// Duas garantias que a tela e a IA dependem:
+//   1. os dados da casa (endereço/telefone/Instagram) são CONFIGURAÇÃO, não
+//      texto no código — e o telefone nasce vazio, porque o número oficial
+//      não existe em nenhuma migration deste repositório;
+//   2. agendar com complemento NÃO abre uma segunda regra de agenda: a
+//      função nova valida os ids contra `servicos.complementos` e delega a
+//      criação para `agendamento_publico_criar`, que continua sendo a
+//      autoridade sobre expediente, almoço, bloqueio, lock e conflito.
+// ============================================================================
+describe('027 — barbearia oficial e complementos públicos', () => {
+  const texto = sql('../supabase/migrations/027_barbearia_e_complementos_publicos.sql')
+  const comandosSemComentario = comandos(texto).join('\n')
+
+  it('os dados da casa são configuração editável, com `on conflict do nothing`', () => {
+    expect(texto).toMatch(
+      /insert into public\.configuracoes_sistema \(chave, grupo, valor, descricao\)/,
+    )
+    expect(comandosSemComentario).toMatch(
+      /insert into public\.configuracoes_sistema[\s\S]*'barbearia'[\s\S]*on conflict \(chave\) do nothing/,
+    )
+    // Endereço e Instagram vêm da tarefa; o TELEFONE nasce vazio — inventar
+    // número publicaria um telefone falso em nome da casa.
+    expect(texto).toMatch(/"endereco":"Rua Ecoporanga, 60/)
+    expect(texto).toMatch(/"instagram":"@studioaudax__"/)
+    expect(texto).toMatch(/"telefone":""/)
+  })
+
+  it('a chave entra na lista branca do validador e da porta do servidor', () => {
+    expect(texto).toMatch(
+      /v_chave not in \('links', 'avaliacao', 'notificacoes', 'clube', 'ia', 'barbearia'\)/,
+    )
+    expect(texto).toMatch(
+      /ia_configuracoes_ler[\s\S]*where c\.chave in \('links', 'avaliacao', 'notificacoes', 'clube', 'ia', 'barbearia'\)/,
+    )
+    // Telefone é validado só pelos dígitos (10–15), como o do cliente.
+    expect(texto).toMatch(/regexp_replace\(coalesce\(p_valor ->> 'telefone', ''\), '\\D', '', 'g'\)/)
+  })
+
+  it('o catálogo público devolve a barbearia no MESMO retorno (sem RPC nova)', () => {
+    expect(texto).toMatch(/create or replace function public\.agendamento_publico_catalogo\(\)/)
+    expect(texto).toMatch(/'barbearia', coalesce\(\(/)
+    // Continua expondo os complementos por id (025) — nada foi perdido.
+    expect(texto).toMatch(/'complementos', \(/)
+    expect(texto).toMatch(/'profissionais', coalesce\(\(/)
+  })
+
+  it('agendar com complemento delega à criação oficial, sem reescrever a regra', () => {
+    expect(texto).toMatch(
+      /create or replace function public\.agendamento_publico_criar_complementos\(/,
+    )
+    // Complemento fora da lista oficial da casa é RECUSADO.
+    expect(texto).toMatch(
+      /if not \(trim\(v_item\) = any \(coalesce\(v_base\.complementos, '\{\}'::text\[\]\)\)\) then/,
+    )
+    // A criação continua vindo da função que já existe.
+    expect(texto).toMatch(
+      /select public\.agendamento_publico_criar\([\s\S]*?\) ->> 'id'/,
+    )
+    // E a duração total é gravada depois, como o painel já fazia.
+    expect(texto).toMatch(/update public\.agendamentos\s+set duracao_min = v_dur/)
+    // Nenhuma regra nova de disponibilidade: nenhuma verificação de
+    // expediente/almoço/bloqueio/conflito foi reescrita aqui.
+    expect(comandosSemComentario).not.toMatch(/agenda_lock_slot/)
+    expect(comandosSemComentario).not.toMatch(/audax_minutos/)
+    expect(comandosSemComentario).not.toMatch(/raise exception 'Horário fora do expediente/)
+  })
+
+  it('a página pública pode chamar a criação com complementos', () => {
+    expect(texto).toMatch(
+      /grant execute on function public\.agendamento_publico_criar_complementos\(\s*text, text, text, text, date, text, text, text\[\]\s*\) to anon, authenticated, service_role/,
+    )
+  })
+
+  it('não mexe em policy, trigger, tabela da agenda nem migration anterior', () => {
+    expect(texto).not.toMatch(/create policy/i)
+    expect(texto).not.toMatch(/alter table/i)
+    expect(texto).not.toMatch(/create trigger/i)
+    expect(texto).not.toMatch(/drop table/i)
+    expect(texto).not.toMatch(/revoke .* from public, anon, authenticated/)
   })
 })

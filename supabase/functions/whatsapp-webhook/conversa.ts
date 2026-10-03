@@ -1121,19 +1121,31 @@ export function horariosLivres(
   return grade
 }
 
-/** Até `limite` opções para a mensagem (1ª profissional livre por horário). */
+/**
+ * Opções de horário para a mensagem: cada par horário × profissional é uma
+ * opção PRÓPRIA (`08:00 • Cleiton` e `08:00 • Ítalo` lado a lado), como na
+ * página pública. Antes o horário vinha com um único nome e o cliente era
+ * perguntado depois — uma ida e volta desnecessária.
+ */
 export function paraOpcoes(
   grade: DisponibilidadeSlot[],
   opcao: { limite?: number; preferir?: string | null } = {},
 ): OpcaoSlot[] {
-  const limite = opcao.limite ?? 6
-  return grade.slice(0, limite).map((slot) => ({
-    horario: slot.horario,
-    profissional:
+  // O limite conta HORÁRIOS, não pares: "08:00 • Cleiton" e "08:00 • Ítalo" são
+  // duas escolhas para o MESMO horário, e cortar a lista ali jogaria fora
+  // horários mais tarde que o cliente de fato podia ter.
+  const horas = grade.slice(0, opcao.limite ?? 6)
+  const opcoes: OpcaoSlot[] = []
+  for (const slot of horas) {
+    const lista =
       opcao.preferir && slot.livres.includes(opcao.preferir)
-        ? opcao.preferir
-        : slot.livres[0],
-  }))
+        ? [opcao.preferir, ...slot.livres.filter((p) => p !== opcao.preferir)]
+        : slot.livres
+    for (const profissional of lista) {
+      opcoes.push({ horario: slot.horario, profissional })
+    }
+  }
+  return opcoes
 }
 
 /** Profissionais livres em um horário exato da grade (null se fora dela). */
@@ -1193,7 +1205,7 @@ function listaServicosMsg(nomes: string[]): string {
   const mostrados = nomes.slice(0, 8)
   const resto = nomes.length > mostrados.length ? `\n…e mais ${nomes.length - mostrados.length}.` : ''
   return `Qual serviço você quer? Nossos serviços ativos:\n${mostrados
-    .map((nome) => `• ${nome}`)
+    .map((nome, i) => `${i + 1}. ${nome}`)
     .join('\n')}${resto}\nMe responda só o nome do serviço.`
 }
 
@@ -1213,11 +1225,11 @@ function listaProfissionaisMsg(nomes: string[]): string {
 
 function listaHorariosMsg(dataIso: string, opcoes: OpcaoSlot[]): string {
   const linhas = opcoes.map(
-    (o, i) => `${i + 1}. ${horaLegivel(o.horario)} com ${o.profissional}`,
+    (o, i) => `${i + 1}. ${horaLegivel(o.horario)} • ${o.profissional}`,
   )
-  return `Tenho estes horários livres em ${formatarDataBR(dataIso)}:\n${linhas.join(
+  return `Horários disponíveis em ${formatarDataBR(dataIso)}:\n${linhas.join(
     '\n',
-  )}\nQual fica melhor? Pode responder o número ou a hora (ex.: ${horaLegivel(opcoes[0].horario)}).`
+  )}\nEscolha um: responda o número ou a hora (ex.: ${horaLegivel(opcoes[0].horario)}).`
 }
 
 function semHorariosMsg(dataIso: string, servico: string): string {
@@ -1519,6 +1531,19 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
   const botoesDeHorarios = (opcoes: OpcaoSlot[]): { id: string; texto: string }[] | undefined => {
     if (!config.ia.botoesInterativos || !opcoes.length) return undefined
     return opcoes.slice(0, 3).map((o, i) => ({ id: String(i + 1), texto: horaLegivel(o.horario) }))
+  }
+
+  /**
+   * Botões de SERVIÇO. O id é o índice (1, 2, 3…) — exatamente o número que o
+   * texto lista, então responder o número e tocar no botão chegam no mesmo
+   * caminho de seleção (`n <= listaServicos.length`).
+   *
+   * Quando o provedor não aceita botões, o `whatsapp-enviar` reenvia a mesma
+   * mensagem como texto numerado: nada se perde.
+   */
+  const botoesDeServicos = (nomes: string[]): { id: string; texto: string }[] | undefined => {
+    if (!config.ia.botoesInterativos || !nomes.length) return undefined
+    return nomes.slice(0, 3).map((nome, i) => ({ id: String(i + 1), texto: nome.slice(0, 20) }))
   }
 
   /* ------------------------------------------------------------------ */
@@ -2133,7 +2158,13 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
         rascunhoAtual.etapa = 'coletando'
         rascunhoAtual.listaServicos = servicosAtivos
         rascunhoAtual.esperandoNome = false
-        return { resposta: listaServicosMsg(servicosAtivos), rascunho: rascunhoAtual, executada: false, motivo: null }
+        return {
+          resposta: listaServicosMsg(servicosAtivos),
+          rascunho: rascunhoAtual,
+          executada: false,
+          motivo: null,
+          botoes: botoesDeServicos(servicosAtivos),
+        }
       }
       if (!rascunhoAtual.data) {
         rascunhoAtual.etapa = 'coletando'

@@ -1,14 +1,14 @@
 // ============================================================================
-// Agendar pelo painel (FASE F) — cliente logado escolhe serviço/profissional/
-// horário na MESMA base da Agenda oficial.
+// Agendar pelo painel do cliente — a MESMA experiência da página pública.
 //
-// Espelha a página pública `#/agendar` (catálogo/horários das RPCs 012), com
-// três diferenças:
+// Espelha `#/agendar`, com três diferenças:
 //   • nome e telefone vêm do CADASTRO vinculado (identidade da sessão) —
 //     nunca são editados aqui;
-//   • seção de complementos sugeridos pelo serviço escolhido (config da
-//     coluna `servicos.complementos`), NUNCA pré-marcados;
-//   • a criação vai pela RPC `painel_agendamento_criar` (019).
+//   • a criação vai pela RPC `painel_agendamento_criar` (019), que valida os
+//     complementos contra a coluna oficial e delega a `agendamento_publico_criar`;
+//   • a disponibilidade é a MESMA função da página pública
+//     (`horariosPublicosPorProfissional`), que consulta TODOS os profissionais
+//     de uma vez a partir das regras da Agenda.
 //
 // Nada aqui inventa preço ou horário: o valor total é a soma dos serviços do
 // catálogo oficial e as vagas vêm da Agenda.
@@ -16,10 +16,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatarBRL } from '@/lib/moeda'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import type { SlotLivre } from '@/modules/agenda/regras'
 import { dataLocal } from '@/lib/apresentacao'
 import {
   carregarCatalogo,
-  horariosPublicos,
+  horariosPublicosPorProfissional,
   type CatalogoPublico,
 } from '@/services/supabase/agendaPublica'
 import {
@@ -34,9 +35,10 @@ import {
   Aviso,
   Bloco,
   Botao,
-  BotaoHorario,
+  BotaoSlot,
   Cabecalho,
   Carregando,
+  CartaoServico,
   Confirmacao,
   EstadoVazio,
   GradeOpcoes,
@@ -46,7 +48,10 @@ import {
   Resumo,
 } from '../ui'
 
-const ETAPAS = ['Serviço', 'Profissional', 'Data', 'Horário', 'Resumo']
+const ETAPAS = ['Serviço', 'Data', 'Horário', 'Confirmação']
+
+/** Um par horário × profissional — é isso que o cliente vê e toca. */
+type SlotEscolhido = { horario: string; profissional: string }
 
 type Confirmado = {
   servico: string
@@ -57,7 +62,7 @@ type Confirmado = {
   valor: number
 }
 
-function proximosDias(quantidade = 10): { iso: string; curto: string; dia: string }[] {
+function proximosDias(quantidade = 14): { iso: string; curto: string; dia: string }[] {
   const dias: { iso: string; curto: string; dia: string }[] = []
   const base = new Date()
   for (let passo = 0; passo < 30 && dias.length < quantidade; passo += 1) {
@@ -82,13 +87,12 @@ export default function TelaAgendarPainel() {
   const [tentativa, setTentativa] = useState(0)
 
   const [servicoNome, setServicoNome] = useState('')
-  const [profissionalNome, setProfissionalNome] = useState('')
   const [data, setData] = useState('')
-  const [horario, setHorario] = useState('')
+  const [slot, setSlot] = useState<SlotEscolhido | null>(null)
   const [observacao, setObservacao] = useState('')
   const [complementosEscolhidos, setComplementosEscolhidos] = useState<string[]>([])
 
-  const [horarios, setHorarios] = useState<string[]>([])
+  const [slots, setSlots] = useState<SlotLivre[]>([])
   const [carregandoHorarios, setCarregandoHorarios] = useState(false)
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -111,8 +115,12 @@ export default function TelaAgendarPainel() {
     complementosAtivos.reduce((soma, c) => soma + c.preco, 0)
 
   const dias = useMemo(() => proximosDias(), [])
+  const nomesProfissionais = useMemo(
+    () => (catalogo?.profissionais ?? []).map((p) => p.nome),
+    [catalogo],
+  )
 
-useEffect(() => {
+  useEffect(() => {
     let vivo = true
     Promise.all([
       carregarCatalogo(),
@@ -146,17 +154,18 @@ useEffect(() => {
     }
   }, [tentativa])
 
-  // Horários livres com a duração TOTAL (base + complementos) — a mesma folga
-  // que a criação exige no servidor.
+  // Disponibilidade de TODOS os profissionais para serviço + data, com a
+  // duração TOTAL (base + complementos) — a mesma folga que a criação exige
+  // no servidor.
   useEffect(() => {
-    if (!data || !profissionalNome || !servicoCatalogo || !duracaoTotal) return
-let vivo = true
-    horariosPublicos(data, profissionalNome, duracaoTotal)
+    if (!data || !servicoCatalogo || !duracaoTotal) return
+    let vivo = true
+    horariosPublicosPorProfissional(data, duracaoTotal, nomesProfissionais)
       .then((lista) => {
-        if (vivo) setHorarios(lista)
+        if (vivo) setSlots(lista)
       })
       .catch(() => {
-        if (vivo) setHorarios([])
+        if (vivo) setSlots([])
       })
       .finally(() => {
         if (vivo) setCarregandoHorarios(false)
@@ -164,26 +173,18 @@ let vivo = true
     return () => {
       vivo = false
     }
-  }, [data, profissionalNome, servicoCatalogo, duracaoTotal])
+  }, [data, servicoCatalogo, duracaoTotal, nomesProfissionais])
 
-  const etapaAtual = !servicoNome
-    ? 0
-    : !profissionalNome
-      ? 1
-      : !data
-        ? 2
-        : !horario
-          ? 3
-          : 4
+  const etapaAtual = !servicoNome ? 0 : !data ? 1 : !slot ? 2 : 3
 
-/**
-   * Trocar de serviço/profissional/data/complemento invalida o horário. O
-   * estado "carregando" é ligado aqui (no evento), não dentro do efeito —
-   * é o que evita o render em cascata que o lint penaliza.
+  /**
+   * Trocar de serviço/data/complemento invalida o horário. O estado
+   * "carregando" é ligado aqui (no evento), não dentro do efeito — é o que
+   * evita o render em cascata que o lint penaliza.
    */
-  function limparHorario() {
-    setHorario('')
-    setHorarios([])
+  function limparSlot() {
+    setSlot(null)
+    setSlots([])
     setCarregandoHorarios(true)
     setErro('')
   }
@@ -196,23 +197,31 @@ let vivo = true
   }
 
   async function confirmar() {
-    if (enviando) return
+    if (enviando || !slot) return
     setErro('')
     setEnviando(true)
     try {
       const resultado = await criarAgendamentoPainel({
         servico: servicoNome,
-        profissional: profissionalNome,
+        profissional: slot.profissional,
         data,
-        horario,
+        horario: slot.horario,
         observacao,
         complementos: complementosEscolhidos,
       })
       if (!resultado.ok) {
         setErro(resultado.erro)
-        if (/ocupado|conflito/i.test(resultado.erro) && servicoCatalogo) {
+        // Horário tomado entre a lista e o envio: mostramos os livres de novo
+        // sem perder o que a pessoa já escolheu.
+        if (/ocupado|conflito/i.test(resultado.erro)) {
           try {
-            setHorarios(await horariosPublicos(data, profissionalNome, duracaoTotal))
+            setSlots(
+              await horariosPublicosPorProfissional(
+                data,
+                duracaoTotal,
+                nomesProfissionais,
+              ),
+            )
           } catch {
             /* a mensagem do servidor já está na tela */
           }
@@ -222,9 +231,9 @@ let vivo = true
       setConfirmado({
         servico: servicoNome,
         complementos: complementosAtivos.map((c) => c.nome),
-        profissional: profissionalNome,
+        profissional: slot.profissional,
         data,
-        horario,
+        horario: slot.horario,
         valor: valorTotal,
       })
     } finally {
@@ -235,12 +244,11 @@ let vivo = true
   function recomecar() {
     setConfirmado(null)
     setServicoNome('')
-    setProfissionalNome('')
     setData('')
-    setHorario('')
+    setSlot(null)
     setObservacao('')
     setComplementosEscolhidos([])
-    setHorarios([])
+    setSlots([])
     setErro('')
   }
 
@@ -248,10 +256,12 @@ let vivo = true
     return (
       <Confirmacao
         titulo="Agendamento confirmado!"
-        frase="Seu horário foi registrado na agenda do Studio Audax."
+        frase={`Seu horário com ${confirmado.profissional} está reservado.`}
         acoes={
           <>
-            <Botao aoClicar={() => navegarPainel('')}>Voltar ao painel</Botao>
+            <Botao aoClicar={() => navegarPainel('agendamentos')}>
+              Ver meus agendamentos
+            </Botao>
             <Botao variante="secundario" aoClicar={recomecar}>
               Agendar outro horário
             </Botao>
@@ -295,6 +305,7 @@ let vivo = true
   if (erroCarga || !catalogo || !cadastro) {
     return (
       <EstadoVazio
+        alerta={Boolean(erroCarga)}
         titulo="Não foi possível carregar a agenda"
         texto={erroCarga || 'Tente novamente em instantes.'}
       >
@@ -324,21 +335,18 @@ let vivo = true
         <Bloco numero={1} titulo="Serviço" descricao="Preço e duração do catálogo oficial.">
           <div className="flex flex-col gap-2">
             {catalogo.servicos.map((s) => (
-              <Opcao
+              <CartaoServico
                 key={s.id ?? s.nome}
-                item={{
-                  id: s.nome,
-                  titulo: s.nome,
-                  descricao: `${s.duracaoMin} min`,
-                  preco: formatarBRL(s.preco),
-                }}
+                nome={s.nome}
+                preco={formatarBRL(s.preco)}
+                duracaoMin={s.duracaoMin}
                 selecionado={servicoNome === s.nome}
                 aoEscolher={() => {
+                  if (servicoNome === s.nome) return
                   setServicoNome(s.nome)
                   setComplementosEscolhidos([])
-                  setProfissionalNome('')
                   setData('')
-                  limparHorario()
+                  limparSlot()
                 }}
               />
             ))}
@@ -349,8 +357,8 @@ let vivo = true
         {complementos.length > 0 && (
           <Bloco
             numero={2}
-            titulo="Quer complementar seu atendimento?"
-            descricao="Sugestões do seu serviço. Nada é marcado automaticamente — é opcional."
+            titulo="Quer completar?"
+            descricao="Sugestões da casa para o seu serviço. Tudo opcional."
           >
             <div className="flex flex-col gap-2">
               {complementos.map((c) => {
@@ -359,93 +367,46 @@ let vivo = true
                   <button
                     key={c.id}
                     type="button"
-onClick={() => alternarComplemento(c.id)}
+                    onClick={() => alternarComplemento(c.id)}
                     aria-pressed={marcado}
-                    aria-label={[c.nome, `${c.duracaoMin} min`, `+${formatarBRL(c.preco)}`].join(' ')}
-                    className={`flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                    aria-label={`${c.nome} — ${c.duracaoMin} minutos — mais ${formatarBRL(c.preco)}`}
+                    className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
                       marcado
-                        ? 'border-gold-500 bg-gold-200/60 ring-1 ring-gold-500'
+                        ? 'border-gold-600 bg-gold-200/60 ring-1 ring-gold-600'
                         : 'border-cream-300 bg-cream-50 hover:border-gold-400 hover:bg-cream-100'
                     }`}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] font-medium text-noir-900">
-                        {c.nome}
+                        + {c.nome}
                       </span>
                       <span className="mt-0.5 block text-[12.5px] text-noir-500">
                         {c.duracaoMin} min
                       </span>
                     </span>
                     <span className="shrink-0 text-[14px] font-semibold tabular-nums text-noir-700">
-                      +{formatarBRL(c.preco)}
-                    </span>
-                    <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        marcado ? 'border-gold-600 bg-gold-500' : 'border-cream-400'
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {marcado && (
-                        <svg viewBox="0 0 12 12" className="h-3 w-3 text-noir-900" fill="none">
-                          <path
-                            d="M2.5 6.2 4.8 8.5 9.5 3.8"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
+                      {formatarBRL(c.preco)}
                     </span>
                   </button>
                 )
               })}
             </div>
-          </Bloco>
-        )}
-
-        {/* ---------------------------------------------- PROFISSIONAL */}
-        {servicoNome && (
-          <Bloco numero={3} titulo="Profissional" descricao="Atendido por quem você preferir.">
-            <div className="flex flex-col gap-2">
-              <Opcao
-                item={{
-                  id: '',
-                  titulo: 'Qualquer profissional',
-                  descricao: 'Escolhemos quem estiver livre',
-                }}
-                selecionado={!profissionalNome && !data}
-                aoEscolher={() => {
-                  setProfissionalNome('')
-                  setData('')
-                  limparHorario()
-                }}
-              />
-{catalogo.profissionais.map((p) => (
-                <Opcao
-                  key={p.id ?? p.nome}
-                  item={{ id: p.nome, titulo: p.nome }}
-                  selecionado={profissionalNome === p.nome}
-                  aoEscolher={() => {
-                    setProfissionalNome(p.nome)
-                    setData('')
-                    limparHorario()
-                  }}
-                />
-              ))}
-            </div>
-            {!profissionalNome && (
-              <p className="mt-2 rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-3 text-[13.5px] leading-relaxed text-noir-500">
-                Escolha um profissional para ver os horários livres. Sem profissional
-                definido, a Agenda oficial não tem como dizer quais vagas existem.
+            {complementosAtivos.length > 0 && (
+              <p className="mt-3 text-[12.5px] text-noir-500">
+                Duração total do atendimento: {duracaoTotal} min ·{' '}
+                {formatarBRL(valorTotal)}
               </p>
             )}
           </Bloco>
         )}
 
         {/* ------------------------------------------------------ DATA */}
-        {servicoNome && profissionalNome && (
-          <Bloco numero={4} titulo="Data" descricao="Escolha o dia da semana.">
+        <Bloco numero={3} titulo="Data" descricao="Escolha o dia da semana.">
+          {!servicoNome ? (
+            <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
+              Escolha um serviço para ver as datas.
+            </p>
+          ) : (
             <div className="flex flex-col gap-2">
               <GradeOpcoes
                 colunas={3}
@@ -459,7 +420,7 @@ onClick={() => alternarComplemento(c.id)}
                     selecionado={data === item.id}
                     aoEscolher={() => {
                       setData(item.id)
-                      limparHorario()
+                      limparSlot()
                     }}
                   />
                 )}
@@ -471,72 +432,87 @@ onClick={() => alternarComplemento(c.id)}
                 <div className="mt-2">
                   <input
                     type="date"
+                    aria-label="Escolher data"
                     min={hojeISO()}
                     value={data}
                     onChange={(e) => {
                       setData(e.target.value)
-                      limparHorario()
+                      limparSlot()
                     }}
                     className="min-h-[48px] w-full rounded-xl border border-cream-300 bg-cream-50 px-4 text-[14px] text-noir-900 outline-none focus:border-gold-500"
                   />
                 </div>
               </details>
             </div>
-          </Bloco>
-        )}
+          )}
+        </Bloco>
 
-        {/* ---------------------------------------------------- HORÁRIO */}
-        {data && (
-          <Bloco
-            numero={5}
-            titulo="Horário"
-            descricao={
-              profissionalNome ? `Livres em ${formatarDataLonga(data)}.` : undefined
-            }
-            acao={
+        {/* ------------------------- HORÁRIO (TODOS OS PROFISSIONAIS) --- */}
+        <Bloco
+          numero={4}
+          titulo="Horário"
+          descricao={
+            data
+              ? `Livres em ${formatarDataLonga(data)} — todos os profissionais ao mesmo tempo.`
+              : 'Escolha a data para ver os horários.'
+          }
+          acao={
+            data ? (
               <button
                 type="button"
-                onClick={() => setData('')}
+                onClick={() => {
+                  setData('')
+                  limparSlot()
+                }}
                 className="shrink-0 text-[12.5px] font-medium text-noir-400 hover:text-noir-800"
               >
                 Trocar
               </button>
-            }
-          >
-            {!profissionalNome ? (
-              <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
-                Escolha um profissional para ver a disponibilidade.
-              </p>
-            ) : carregandoHorarios ? (
-              <Carregando texto="Buscando horários livres…" />
-            ) : horarios.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
-                Nenhum horário livre neste dia. Escolha outra data.
-              </p>
-            ) : (
-              <GradeOpcoes
-                colunas={3}
-                items={horarios.map((h) => ({ id: h, titulo: h }))}
-              >
-                {(item) => (
-                  <BotaoHorario
-                    key={item.id}
-                    hora={item.titulo}
-                    selecionado={horario === item.id}
-                    aoEscolher={() => {
-                      setHorario(item.id)
-                      setErro('')
-                    }}
-                  />
-                )}
-              </GradeOpcoes>
-            )}
-          </Bloco>
-        )}
+            ) : undefined
+          }
+        >
+          {!data ? (
+            <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
+              Escolha a data para ver os horários livres.
+            </p>
+          ) : carregandoHorarios ? (
+            <Carregando texto="Buscando horários livres…" />
+          ) : slots.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-cream-400 bg-cream-100 px-4 py-4 text-[13.5px] text-noir-500">
+              Nenhum horário livre neste dia. Escolha outra data.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {slots.map((s) => (
+                <div key={s.horario}>
+                  <p className="mb-1.5 text-[11px] font-semibold tracking-[0.12em] text-noir-400 uppercase">
+                    {s.horario}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {s.profissionais.map((nome) => (
+                      <BotaoSlot
+                        key={`${s.horario}-${nome}`}
+                        hora={s.horario}
+                        profissional={nome}
+                        selecionado={
+                          slot?.horario === s.horario && slot?.profissional === nome
+                        }
+                        aoEscolher={() => {
+                          setSlot({ horario: s.horario, profissional: nome })
+                          setErro('')
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Bloco>
 
         {/* ---------------------------------------------------- RESUMO */}
-        {servicoCatalogo && profissionalNome && data && horario && (
-          <Bloco numero={6} titulo="Resumo" descricao="Confira antes de confirmar.">
+        {servicoCatalogo && slot && (
+          <Bloco numero={5} titulo="Resumo" descricao="Confira antes de confirmar.">
             <Resumo>
               <LinhaResumo rotulo="Cliente" valor={cadastro.nome} />
               <LinhaResumo rotulo="Serviço" valor={servicoCatalogo.nome} />
@@ -546,9 +522,9 @@ onClick={() => alternarComplemento(c.id)}
                   valor={complementosAtivos.map((c) => c.nome).join(', ')}
                 />
               )}
-              <LinhaResumo rotulo="Profissional" valor={profissionalNome} />
+              <LinhaResumo rotulo="Profissional" valor={slot.profissional} />
               <LinhaResumo rotulo="Data" valor={formatarDataLonga(data)} />
-              <LinhaResumo rotulo="Horário" valor={horario} />
+              <LinhaResumo rotulo="Horário" valor={slot.horario} />
               <LinhaResumo rotulo="Duração" valor={`${duracaoTotal} min`} />
               <LinhaResumo
                 rotulo="Valor"
@@ -576,13 +552,9 @@ onClick={() => alternarComplemento(c.id)}
 
         {erro && <Aviso texto={erro} />}
 
-        {horario && (
+        {slot && (
           <div className="sticky bottom-0 -mx-4 border-t border-cream-300 bg-cream-100/95 px-4 pt-3 pb-4 backdrop-blur sm:-mx-6 sm:px-6">
-            <Botao
-              tamanho="lg"
-              desabilitado={enviando}
-              aoClicar={() => void confirmar()}
-            >
+            <Botao tamanho="lg" desabilitado={enviando} aoClicar={() => void confirmar()}>
               {enviando ? 'Confirmando…' : 'Confirmar agendamento'}
             </Botao>
           </div>
