@@ -706,6 +706,46 @@ export default {
                   } as ClubeCliente
                 }
               : undefined,
+            /**
+             * Benefício do Audax Club (migration 028): o SERVIDOR decide.
+             *
+             * `audax_clube_beneficio` revalida a assinatura e devolve só o que
+             * o bot precisa dizer. Se a chamada falhar, volta `null` e o bot
+             * fica em silêncio sobre o Club — nunca anuncia benefício que
+             * ninguém checou.
+             */
+            beneficioDoServico: chaveSecreta
+              ? async ({ clienteId, telefone, servico, data }) => {
+                  const resultado = await chamarRpcInterna(
+                    segredos,
+                    chaveSecreta,
+                    'audax_clube_beneficio',
+                    {
+                      p_cliente_id: clienteId,
+                      p_telefone: telefone,
+                      p_servico: servico,
+                      p_data: data,
+                    },
+                  )
+                  if (!resultado.ok) return null
+                  const bruto = resultado.dados as Record<string, unknown> | null
+                  if (!bruto || bruto.ok !== true) return null
+                  return {
+                    usarBeneficio: bruto.usarBeneficio === true,
+                    beneficioLiberado: bruto.beneficioLiberado === true,
+                    statusAssinatura:
+                      typeof bruto.statusAssinatura === 'string'
+                        ? bruto.statusAssinatura
+                        : null,
+                    tipoBeneficio:
+                      bruto.tipoBeneficio === 'ilimitado' ||
+                        bruto.tipoBeneficio === 'desconto'
+                        ? bruto.tipoBeneficio
+                        : ('avulso' as const),
+                    motivo: typeof bruto.motivo === 'string' ? bruto.motivo : null,
+                  }
+                }
+              : undefined,
             carregarCatalogo: async () => {
               const { data, error } = await ctx.supabase.rpc(
                 'agendamento_publico_catalogo',

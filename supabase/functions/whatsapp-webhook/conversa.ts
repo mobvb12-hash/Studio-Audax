@@ -22,7 +22,11 @@ import type { FonteServico, FontesOficiais, Turno } from './ia.ts'
 import { normalizar } from './texto.ts'
 // Só TIPOS: ./identidade.ts e ./configuracoes.ts usam VALUES de outros módulos,
 // então a importação precisa ser apagada na compilação para não criar ciclo.
-import type { ClubeCliente, ResultadoIdentidade } from './identidade.ts'
+import type {
+  BeneficioServico,
+  ClubeCliente,
+  ResultadoIdentidade,
+} from './identidade.ts'
 import type { Configuracoes } from './configuracoes.ts'
 import {
   cadastroNecessarioMsg,
@@ -200,6 +204,19 @@ export type DependenciasConversa = {
   }) => Promise<ResultadoIdentidade | null>
   /** Clube do cliente já identificado (§8) — dados oficiais, nada inventado. */
   clubeDoCliente?: (clienteId: string) => Promise<ClubeCliente | null>
+  /**
+   * Benefício do Audax Club, decidido pelo SERVIDOR (migration 028).
+   *
+   * O bot NUNCA decide cobertura, desconto nem preço: pergunta ao
+   * `audax_clube_beneficio` e traduz a resposta. Sem essa dependência o
+   * agendamento segue normal — nunca inventa benefício.
+   */
+  beneficioDoServico?: (p: {
+    clienteId: string
+    telefone: string
+    servico: string
+    data: string
+  }) => Promise<BeneficioServico | null>
   /** Configuração centralizada (022) — ausente = CONFIG_PADRAO. */
   config?: Configuracoes
   criar: (p: {
@@ -1315,6 +1332,36 @@ function confirmarCriarMsg(r: Rascunho): string {
   ].join('\n')
 }
 
+/**
+ * Linha do Audax Club na confirmação do agendamento (itens 3 e 4).
+ *
+ * Três desfechos, e só três:
+ *   • coberto  → o serviço sai pelo plano, sem cobrança adicional;
+ *   • irregular → o BENEFÍCIO está indisponível, com o motivo que o servidor
+ *     devolveu, e o agendamento segue pelo preço normal (o bloqueio é do
+ *     benefício, nunca do cadastro: o cliente continua cliente da casa);
+ *   • sem assinatura → nada é dito sobre plano.
+ *
+ * Se o servidor não estiver disponível, não se menciona Club: silêncio é
+ * melhor do que prometer benefício que ninguém checou.
+ */
+function linhaBeneficio(beneficio: BeneficioServico | null): string | null {
+  if (!beneficio) return null
+  if (beneficio.usarBeneficio && beneficio.tipoBeneficio === 'ilimitado') {
+    return 'Audax Club: este serviço entra pelo seu plano, sem cobrança adicional.'
+  }
+  if (beneficio.usarBeneficio && beneficio.tipoBeneficio === 'desconto') {
+    return 'Audax Club: o seu plano dá desconto neste procedimento.'
+  }
+  if (!beneficio.beneficioLiberado && beneficio.motivo) {
+    return [
+      `Audax Club: ${beneficio.motivo}`,
+      'Seu agendamento está normal, pelo valor cheio. Regularizando a assinatura, o benefício volta a valer.',
+    ].join('\n')
+  }
+  return null
+}
+
 function confirmarCancelarMsg(alvo: ResumoAgendamento): string {
   return [
     'Confirmar o cancelamento?',
@@ -2329,7 +2376,30 @@ export async function processarConversa(entrada: EntradaConversa): Promise<Saida
       }
       rascunhoAtual.esperandoNome = false
       rascunhoAtual.etapa = 'confirmando'
-      return { resposta: confirmarCriarMsg(rascunhoAtual), rascunho: rascunhoAtual, executada: false, motivo: null }
+// O benefício do Club é perguntado ao SERVIDOR antes de confirmar: é ele
+      // que sabe se a assinatura está em dia e se o serviço é coberto. Sem
+      // `clienteId` resolvido não há consulta — e, sem consulta, silêncio.
+      let linhaClub: string | null = null
+      if (deps.beneficioDoServico && rascunhoAtual.clienteId) {
+        try {
+          const beneficio = await deps.beneficioDoServico({
+            clienteId: rascunhoAtual.clienteId,
+            telefone: telefone ?? '',
+            servico: rascunhoAtual.servico ?? '',
+            data: rascunhoAtual.data ?? hoje,
+          })
+          linhaClub = linhaBeneficio(beneficio)
+        } catch {
+          linhaClub = null
+        }
+      }
+      const base = confirmarCriarMsg(rascunhoAtual)
+      return {
+        resposta: linhaClub ? `${base}\n${linhaClub}` : base,
+        rascunho: rascunhoAtual,
+        executada: false,
+        motivo: null,
+      }
     }
 
     // cancelar / remarcar precisam da lista do cliente (RPC com secret)

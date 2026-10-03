@@ -46,6 +46,7 @@ const RelatoriosLazy = lazy(() => import('@/pages/Relatorios'))
 const PDVLazy = lazy(() => import('@/pages/PDV'))
 const ProdutosLazy = lazy(() => import('@/pages/Produtos'))
 const ClubeLazy = lazy(() => import('@/pages/Clube'))
+const PoteLazy = lazy(() => import('@/pages/FechamentoPote'))
 const IaLazy = lazy(() => import('@/pages/Ia'))
 const ConfiguracoesLazy = lazy(() => import('@/pages/Configuracoes'))
 
@@ -64,6 +65,7 @@ const ROTULOS: Record<PaginaId, string> = {
   servicos: 'Serviços',
   pacotes: 'Pacotes',
   clube: 'Clube de assinaturas',
+  pote: 'Audax Club · Pote',
   estoque: 'Produtos / Estoque',
   financeiro: 'Financeiro',
   relatorios: 'Relatórios',
@@ -102,6 +104,7 @@ const IMPLEMENTADAS: PaginaId[] = [
   'pdv',
   'estoque',
   'clube',
+  'pote',
   'ia',
   'configuracoes',
 ]
@@ -252,6 +255,13 @@ function Conteudo() {
           <PaginaProtegida pagina="clube" papel={papel} onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clube…</div>}>
               <ClubeLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'pote' && (
+          <PaginaProtegida pagina="pote" papel={papel} onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando o fechamento do pote…</div>}>
+              <PoteLazy />
             </Suspense>
           </PaginaProtegida>
         )}

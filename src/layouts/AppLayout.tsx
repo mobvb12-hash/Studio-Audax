@@ -19,6 +19,7 @@ export type PaginaId =
   | 'comissoes'
   | 'pacotes'
   | 'clube'
+  | 'pote'
   | 'estoque'
   | 'financeiro'
   | 'relatorios'
@@ -59,6 +60,7 @@ const SECOES: Secao[] = [
       { id: 'servicos', rotulo: 'Serviços' },
       { id: 'pacotes', rotulo: 'Pacotes' },
       { id: 'clube', rotulo: 'Clube de assinaturas' },
+    { id: 'pote', rotulo: 'Audax Club · Pote' },
       { id: 'estoque', rotulo: 'Produtos / Estoque' },
       { id: 'financeiro', rotulo: 'Financeiro' },
       { id: 'relatorios', rotulo: 'Relatórios' },

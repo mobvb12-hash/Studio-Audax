@@ -1,0 +1,551 @@
+// ============================================================================
+// AUDAX CLUB — FECHAMENTO DO POTE (itens 18 a 21)
+//
+// Fluxo: Data inicial + Data final → [ CALCULAR FECHAMENTO ] → resumo, tabela
+// por profissional e detalhamento → [ FECHAR PERÍODO ].
+//
+// O período é SEMPRE EXPLÍCITO (item 16): nada assume "mês atual". A janela é
+// inclusiva e o cálculo vem do SERVIDOR (`clube_pote_calcular`), que recalcula
+// tudo pelo SQL — a tela não soma nada por conta própria.
+//
+// Snapshot: depois de fechado, o resultado é imutável. Correção é reabrir com
+// motivo, e o histórico do cálculo original fica guardado (item 22).
+// ============================================================================
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import ConfirmarModal from '@/components/ConfirmarModal'
+import { CelulaKpi } from '@/components/PainelUi'
+import { ROTULO_FORM as rotulo } from '@/lib/apresentacao'
+import { CAMPO_FORM as campo } from '@/lib/apresentacao'
+import { formatarBRL, normalizarTexto } from '@/lib/moeda'
+import { hojeISO } from '@/modules/agenda/catalogo'
+import {
+  atendimentosDoProfissional,
+  calcularRateioPote,
+  servicoCobertoPeloPlano,
+  type FichaProducao,
+  type Periodo,
+  type RateioPote,
+} from '@/modules/clube/pote'
+import {
+  fecharPote,
+  listarPote,
+  reabrirPote,
+  type CalculoPote,
+  type FechamentoPote,
+} from '@/services/supabase/clubePote'
+import { supabase } from '@/lib/supabase'
+import { useCaixa } from '@/modules/caixa/store'
+import { useClube } from '@/modules/clube/store'
+import { carregarConfiguracoes } from '@/services/supabase/configuracoes'
+import { CONFIG_PADRAO, type Configuracoes } from '@/modules/configuracoes/types'
+
+/** Início e fim do mês, em YYYY-MM-DD. */
+function mesCorrente(hoje: string): Periodo {
+  return { inicio: `${hoje.slice(0, 7)}-01`, fim: hoje }
+}
+
+function dataCurta(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+}
+
+export default function FechamentoPote() {
+  const hoje = hojeISO()
+  const { pagamentos } = useClube()
+  const { lancamentos } = useCaixa()
+  // A configuração é carregada aqui (mesma fonte da tela de Configurações):
+  // o percentual do pote nunca é fixado no código.
+  const [config, setConfig] = useState<Configuracoes>(CONFIG_PADRAO)
+
+  useEffect(() => {
+    let vivo = true
+    void carregarConfiguracoes().then((r) => {
+      if (vivo) setConfig(r.dados)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  const [periodo, setPeriodo] = useState<Periodo>(() => mesCorrente(hoje))
+  const [calculo, setCalculo] = useState<CalculoPote | null>(null)
+  const [fichas, setFichas] = useState<FichaProducao[]>([])
+  const [fechados, setFechados] = useState<FechamentoPote[]>([])
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [detalhe, setDetalhe] = useState<{ nome: string; id?: string } | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
+  const [reabrindo, setReabrindo] = useState<FechamentoPote | null>(null)
+
+  const online = Boolean(supabase())
+  const percentual = config.clube.pote.percentual
+  const poteAtivo = config.clube.pote.ativo
+
+  // Sem Supabase, o mesmo cálculo puro roda em memória a partir dos
+  // pagamentos e das fichas guardadas pelo app — a regra não muda.
+  const estornados = useMemo(
+    () => new Set(lancamentos.filter((l) => l.estornado).map((l) => l.id)),
+    [lancamentos],
+  )
+  const pagamentosPeriodo = useMemo(
+    () =>
+      pagamentos.map((p) => ({
+        data: p.data,
+        valor: p.valor,
+        estornado: p.caixaLancamentoId ? estornados.has(p.caixaLancamentoId) : false,
+      })),
+    [pagamentos, estornados],
+  )
+
+  const carregarHistorico = useCallback(async () => {
+    if (!supabase()) return
+    try {
+      const lista = await listarPote()
+      setFichas(lista.fichas)
+      setFechados(lista.fechamentos)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível carregar o histórico.')
+    }
+  }, [])
+
+// Carga inicial: o setState fica só na cadeia assíncrona (setState síncrono
+  // no corpo do efeito é proibido pelas regras do React).
+  useEffect(() => {
+    let vivo = true
+    void listarPote()
+      .then((lista) => {
+        if (!vivo) return
+        setFichas(lista.fichas)
+        setFechados(lista.fechamentos)
+      })
+      .catch((e: unknown) => {
+        if (!vivo) return
+        setErro(
+          e instanceof Error
+            ? e.message
+            : 'Não foi possível carregar o histórico.',
+        )
+      })
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  async function calcular() {
+    setErro('')
+    setAviso('')
+    setCarregando(true)
+    try {
+      if (supabase()) {
+        const resposta = await (await import('@/services/supabase/clubePote')).calcularPote({ periodo })
+        setCalculo(resposta)
+      } else {
+        setCalculo(null)
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível calcular.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  /** Resultadoshown: do servidor quando há Supabase, puro quando não há. */
+  const resultado: RateioPote | null = useMemo(() => {
+    if (calculo) return calculo
+    if (!online) {
+      return calcularRateioPote({
+        fichas,
+        pagamentos: pagamentosPeriodo,
+        periodo,
+        percentual,
+      })
+    }
+    return null
+  }, [calculo, online, fichas, pagamentosPeriodo, periodo, percentual])
+
+  async function confirmarFechamento() {
+    setErro('')
+    try {
+      await fecharPote({ periodo, responsavel: 'painel' })
+      setConfirmando(false)
+      setAviso('Período fechado. O resultado agora é um registro imutável.')
+      await carregarHistorico()
+      await calcular()
+    } catch (e) {
+      setConfirmando(false)
+      setErro(e instanceof Error ? e.message : 'Não foi possível fechar o pote.')
+    }
+  }
+
+  async function confirmarReabertura(motivo: string) {
+    if (!reabrindo) return
+    setErro('')
+    try {
+      await reabrirPote(reabrindo.id, motivo)
+      setReabrindo(null)
+      setAviso('Fechamento reaberto. O cálculo original continua no histórico.')
+      await carregarHistorico()
+      await calcular()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível reabrir.')
+    }
+  }
+
+  const filtroInvalido = periodo.fim < periodo.inicio
+  const parte = resultado?.partes.find(
+    (p) => p.profissional === detalhe?.nome && (detalhe.id === undefined || p.profissionalId === detalhe.id),
+  )
+  const atendimentosDetalhe = detalhe
+    ? atendimentosDoProfissional(fichas, periodo, detalhe.nome, detalhe.id)
+    : []
+
+  return (
+    <div>
+      <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+        AUDAX CLUB — FECHAMENTO DO POTE
+      </h1>
+      <p className="mt-2 max-w-3xl text-[13px] text-[#4A4436]">
+        Receita de assinaturas do período, dividida proporcionalmente pela
+        produção de cada profissional. O horário mostrado é sempre o que a Agenda
+        e o Caixa registraram —{' '}
+        {online
+          ? 'o cálculo é refeito pelo servidor a cada consulta.'
+          : 'sem conexão, o mesmo cálculo roda no app.'}
+      </p>
+
+      {/* -------------------------------------------------- PERÍODO */}
+      <div className="mt-5 rounded-lg border border-[#E5DCC3] bg-white p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className={rotulo} htmlFor="pote-inicio">
+              Data inicial
+            </label>
+            <input
+              id="pote-inicio"
+              type="date"
+              className={campo}
+              value={periodo.inicio}
+              onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className={rotulo} htmlFor="pote-fim">
+              Data final
+            </label>
+            <input
+              id="pote-fim"
+              type="date"
+              className={campo}
+              value={periodo.fim}
+              onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => void calcular()}
+              disabled={carregando || filtroInvalido}
+              className="w-full rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {carregando ? 'Calculando...' : 'CALCULAR FECHAMENTO'}
+            </button>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => setPeriodo(mesCorrente(hoje))}
+              className="w-full rounded-lg border border-[#E5DCC3] px-4 py-2.5 text-sm font-medium text-[#4A4436] transition-colors hover:border-[#8A6A14]"
+            >
+              Mês atual
+            </button>
+          </div>
+        </div>
+
+        {filtroInvalido && (
+          <p role="alert" className="mt-3 text-[13px] text-red-700">
+            A data final precisa ser igual ou depois da data inicial.
+          </p>
+        )}
+        {!poteAtivo && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+            O pote está <strong>desligado</strong> nas Configurações (percentual
+            {` ${percentual}%`}). Calcular funciona; fechar só é liberado depois
+            que o percentual for definido.
+          </p>
+        )}
+        {erro && (
+          <p role="alert" className="mt-3 text-[13px] text-red-700">
+            {erro}
+          </p>
+        )}
+        {aviso && (
+          <p className="mt-3 rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-3 py-2 text-[12.5px] text-[#3F6B33]">
+            {aviso}
+          </p>
+        )}
+      </div>
+
+      {/* --------------------------------------------------- RESUMO */}
+      {resultado && (
+        <>
+          <p className="mt-4 text-[12px] text-[#8A8171]">
+            {dataCurta(periodo.inicio)} até {dataCurta(periodo.fim)}
+          </p>
+          <div className="mt-2 overflow-x-auto border-y border-[#E5DCC3]">
+            <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
+              <CelulaKpi rotulo="Receita de assinaturas" valor={formatarBRL(resultado.receita)} />
+              <CelulaKpi rotulo="Percentual destinado ao pote" valor={`${resultado.percentual}%`} />
+              <CelulaKpi rotulo="Pote" valor={formatarBRL(resultado.pote)} />
+              <CelulaKpi rotulo="Produção total" valor={`${resultado.fichasTotal} fichas`} />
+              <CelulaKpi rotulo="Valor de referência" valor={formatarBRL(resultado.producaoTotal)} />
+            </div>
+          </div>
+
+          {resultado.percentual <= 0 ? (
+            <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+              Percentual do pote não configurado. Nada é distribuído até o dono
+              definir em Configurações → Clube.
+            </p>
+          ) : resultado.fichasTotal <= 0 ? (
+            <p className="mt-4 rounded-lg border border-dashed border-[#E5DCC3] px-4 py-3 text-[13px] text-[#8A8171]">
+              Nenhuma ficha de Club no período. O pote fica parado: sem produção
+              não há quem divida.
+            </p>
+          ) : (
+            <>
+              {/* ------------------------------------------ TABELA */}
+              <div className="mt-5 overflow-x-auto border border-[#E5DCC3]">
+                <table className="w-full min-w-[640px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-left">
+                      <th className="px-3 py-2 font-semibold text-[#4A4436]">Profissional</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Fichas</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Participação</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Valor a receber</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultado.partes.map((p) => (
+                      <tr
+                        key={p.profissional}
+                        className="cursor-pointer border-b border-[#EFEAE0] last:border-0 hover:bg-[#FAF6EB]"
+                        onClick={() =>
+                          setDetalhe({ nome: p.profissional, id: p.profissionalId })
+                        }
+                      >
+                        <td className="px-3 py-2 font-medium text-[#1C1A15]">{p.profissional}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{p.fichas}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-[#4A4436]">
+                          {p.participacao.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          %
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-[#1C1A15]">
+                          {formatarBRL(p.valor)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-[#E5DCC3] bg-[#FAF6EB] font-semibold">
+                      <td className="px-3 py-2">Total</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{resultado.fichasTotal}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">100,00%</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {formatarBRL(resultado.somaPartes)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* A soma tem de bater com o pote, no centavo (item 27). */}
+              {Math.abs(resultado.somaPartes - resultado.pote) > 0.001 && (
+                <p role="alert" className="mt-2 text-[13px] text-red-700">
+                  Atenção: a soma das partes ({formatarBRL(resultado.somaPartes)}) não
+                  bate com o pote ({formatarBRL(resultado.pote)}). Não feche o
+                  período até o cálculo do servidor corrigir.
+                </p>
+              )}
+
+              {calculo?.jaFechado ? (
+                <p className="mt-4 rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-4 py-3 text-[13px] text-[#3F6B33]">
+                  Este período já está fechado. O resultado abaixo é o cálculo
+                  atual; o valor oficial é o do fechamento registrado no
+                  histórico.
+                </p>
+              ) : (
+                <div className="mt-5">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmando(true)}
+                    disabled={!poteAtivo}
+                    className="rounded-lg bg-[#8A6A14] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    FECHAR PERÍODO
+                  </button>
+                  <p className="mt-2 text-[12px] text-[#8A8171]">
+                    Fechar grava receita, percentual, pote, produção e a parte de
+                    cada profissional como registro imutável, com auditoria.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ------------------------------------- RELATÓRIO (item 23) */}
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CelulaKpi rotulo="Receita Club" valor={formatarBRL(resultado.receita)} />
+            <CelulaKpi rotulo="Pote" valor={formatarBRL(resultado.pote)} />
+            <CelulaKpi rotulo="Benefícios utilizados" valor={`${resultado.utilizacao} atendimentos`} />
+            <CelulaKpi rotulo="Atendimentos avulso" valor={`${resultado.atendimentosAvulso} atendimentos`} />
+          </div>
+        </>
+      )}
+
+      {/* ------------------------------------------ DETALHAMENTO */}
+      {detalhe && resultado && (
+        <div className="mt-6 rounded-lg border border-[#E5DCC3] bg-white p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[15px] font-semibold text-[#1C1A15]">
+                Produção de {detalhe.nome}
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[#8A8171]">
+                {parte?.fichas ?? 0} fichas · {parte?.participacao.toFixed(2) ?? '0,00'}% ·{' '}
+                {formatarBRL(parte?.valor ?? 0)} a receber · referência{' '}
+                {formatarBRL(parte?.producaoReferencia ?? 0)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDetalhe(null)}
+              className="text-[13px] font-medium text-[#8A6A14] hover:underline"
+            >
+              Fechar
+            </button>
+          </div>
+
+          {Object.keys(resultado.porServico).length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {Object.entries(resultado.porServico).map(([servico, dados]) => (
+                <li
+                  key={servico}
+                  className="rounded-full border border-[#E5DCC3] px-3 py-1 text-[12px] text-[#4A4436]"
+                >
+                  {servico}: <strong>{dados.atendimentos}</strong> ·{' '}
+                  {formatarBRL(dados.producaoReferencia)}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[620px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-b border-[#E5DCC3] text-left text-[#4A4436]">
+                  <th className="px-2 py-1.5 font-semibold">Data</th>
+                  <th className="px-2 py-1.5 font-semibold">Cliente</th>
+                  <th className="px-2 py-1.5 font-semibold">Serviço</th>
+                  <th className="px-2 py-1.5 font-semibold">Plano</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">Tabela</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">Pago</th>
+                </tr>
+              </thead>
+              <tbody>
+                {atendimentosDetalhe.map((f) => (
+                  <tr key={f.id ?? `${f.data}-${f.horario}-${f.servico}`} className="border-b border-[#EFEAE0] last:border-0">
+                    <td className="px-2 py-1.5 tabular-nums text-[#4A4436]">
+                      {dataCurta(f.data)} {f.horario}
+                    </td>
+                    <td className="px-2 py-1.5 text-[#1C1A15]">{f.cliente}</td>
+                    <td className="px-2 py-1.5 text-[#4A4436]">{f.servico}</td>
+                    <td className="px-2 py-1.5 text-[#4A4436]">
+                      {servicoCobertoPeloPlano('', f.plano, {})
+                        ? 'Club'
+                        : normalizarTexto(f.plano) || '—'}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatarBRL(f.valorTabela)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatarBRL(f.valorPago)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------- HISTÓRICO */}
+      {fechados.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-[15px] font-semibold text-[#1C1A15]">
+            Fechamentos do pote
+          </h2>
+          <ul className="mt-2 flex flex-col gap-2">
+            {fechados.map((f) => (
+              <li
+                key={f.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5DCC3] bg-white px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-[13.5px] font-medium text-[#1C1A15]">
+                    {dataCurta(f.periodoInicio)} até {dataCurta(f.periodoFim)} ·{' '}
+                    {formatarBRL(f.pote)} · {f.fichasTotal} fichas
+                  </p>
+                  <p className="mt-0.5 text-[12px] text-[#8A8171]">
+                    {f.percentual}% da receita · fechado em {dataCurta(f.fechadoEm.slice(0, 10))}
+                    {f.fechadoPor ? ` por ${f.fechadoPor}` : ''}
+                    {f.reaberto ? ' · REABERTO' : ''}
+                  </p>
+                </div>
+                {f.reaberto ? (
+                  <span className="text-[12px] font-semibold text-amber-700">
+                    Reaberto: {f.reaberto.motivo}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setReabrindo(f)}
+                    className="rounded-lg border border-red-300 px-3 py-1.5 text-[12.5px] font-medium text-red-700 transition-colors hover:bg-red-50"
+                  >
+                    Reabrir
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {confirmando && (
+        <ConfirmarModal
+          titulo="Fechar o período?"
+          texto={`O pote de ${formatarBRL(resultado?.pote ?? 0)} entre ${dataCurta(
+            periodo.inicio,
+          )} e ${dataCurta(periodo.fim)} será gravado como registro imutável, com auditoria. Depois disso o resultado não muda sozinho: correção exige reabrir com motivo.`}
+          rotuloConfirmar="Fechar período"
+          onFechar={() => setConfirmando(false)}
+          onConfirmar={() => void confirmarFechamento()}
+        />
+      )}
+
+      {reabrindo && (
+        <ConfirmarModal
+          titulo="Reabrir o fechamento?"
+          texto="O cálculo original fica no histórico. As fichas do período voltam a ser distribuíveis no próximo fechamento."
+          motivoObrigatorio
+          rotuloConfirmar="Reabrir"
+          onFechar={() => setReabrindo(null)}
+          onConfirmar={(motivo) => void confirmarReabertura(motivo ?? '')}
+        />
+      )}
+    </div>
+  )
+}

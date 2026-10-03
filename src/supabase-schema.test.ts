@@ -139,6 +139,8 @@ expect(nomes).toEqual([
       '../supabase/migrations/025_catalogo_complementos.sql',
       '../supabase/migrations/026_notificacao_agendamento_seguro.sql',
       '../supabase/migrations/027_barbearia_e_complementos_publicos.sql',
+      '../supabase/migrations/028_clube_producao_e_pote.sql',
+      '../supabase/migrations/029_clube_pote_papeis.sql',
     ])
   })
 
@@ -891,5 +893,248 @@ describe('027 — barbearia oficial e complementos públicos', () => {
     expect(texto).not.toMatch(/create trigger/i)
     expect(texto).not.toMatch(/drop table/i)
     expect(texto).not.toMatch(/revoke .* from public, anon, authenticated/)
+  })
+})
+
+// ============================================================================
+// 028 e 029 — Club: produção, benefício e pote
+//
+// Travas que o dinheiro do pote depende:
+//   • nenhum status de assinatura vira COLUNA (continua derivado);
+//   • nenhum preço de serviço é escrito no script (`servicos.preco` é a fonte);
+//   • a escrita das fichas e do fechamento é só por SECURITY DEFINER, e o
+//     benefitso é revalidado dentro do SQL;
+//   • o corpo da regra é o MESMO na 028 e na 029 — a 029 só acrescenta a
+//     checagem de papel.
+// ============================================================================
+describe('028 · produção do Club e pote', () => {
+  const texto = sql('../supabase/migrations/028_clube_producao_e_pote.sql')
+  const comandosSemComentario = comandos(texto).join('\n')
+
+  it('a ficha guarda valor de TABELA e valor PAGO (itens 1 e 7)', () => {
+    for (const coluna of [
+      'cliente_id',
+      'assinatura_id',
+      'plano',
+      'servico',
+      'valor_tabela',
+      'valor_pago',
+      'beneficio',
+      'beneficio_tipo',
+      'desconto_percentual',
+      'profissional_id',
+      'data',
+      'horario',
+      'duracao_min',
+      'fichas',
+      'periodo_pote',
+      'origem',
+      'fechamento_id',
+    ]) {
+      const declaradas = colunasDeclaradas('clube_producao')
+      expect(declaradas.has(coluna), `clube_producao.${coluna}`).toBe(true)
+    }
+    // beneficio_tipo só aceita os três desfechos oficiais.
+    expect(texto).toMatch(
+      /beneficio_tipo text not null default 'avulso'\s+check \(beneficio_tipo in \('ilimitado', 'desconto', 'avulso'\)\)/,
+    )
+  })
+
+  it('o fechamento do pote é por PERÍODO e guarda o rateio (item 21)', () => {
+    const declaradas = colunasDeclaradas('clube_pote_fechamentos')
+    for (const coluna of [
+      'periodo_inicio',
+      'periodo_fim',
+      'receita',
+      'percentual',
+      'pote',
+      'producao_total',
+      'fichas_total',
+      'partes',
+      'fechado_por',
+      'fechado_em',
+      'reaberto',
+    ]) {
+      expect(declaradas.has(coluna), `clube_pote_fechamentos.${coluna}`).toBe(true)
+    }
+  })
+
+  it('status da assinatura continua DERIVADO, nunca coluna', () => {
+    expect(colunasDeclaradas('clube_assinaturas').has('status')).toBe(false)
+    expect(colunasDeclaradas('clube_assinaturas').has('status_assinatura')).toBe(false)
+    // E o cálculo é o MESMO do app: cancelada > vencida > atrasada > próxima.
+    expect(texto).toMatch(/create or replace function public\.audax_clube_status\(/)
+    expect(texto).toMatch(/when coalesce\(p_cancelada, false\) then 'cancelada'/)
+    expect(texto).toMatch(/p_proximo_vencimento < p_hoje - 7 then 'vencida'/)
+    expect(texto).toMatch(/p_proximo_vencimento < p_hoje then 'atrasada'/)
+    // Benefício válido só para ativa e próxima do vencimento.
+    expect(texto).toMatch(/in \('ativa', 'proxima_vencimento'\)/)
+  })
+
+  it('a cobertura do plano vem da CONFIGURAÇÃO, não de preço no código', () => {
+    // As coberturas ficam em configuracoes_sistema.clube (chave que já existe).
+    expect(texto).toMatch(/'coberturas', coalesce\(/)
+    expect(texto).toMatch(/"cabelo":\["Cabelo"\]/)
+// Nenhum preço de serviço escrito à mão. Só o CÓDIGO — o cabeçalho do
+// arquivo cita R$ 30 e R$ 0,00 para explicar a regra, e essa citação não
+// pode ser confundida com preço fixo.
+    expect(comandosSemComentario).not.toMatch(/R\$ ?\d/)
+    // E o preço vem da tabela oficial.
+    expect(texto).toMatch(/from public\.servicos s/)
+    expect(texto).toMatch(/coalesce\(s\.preco, 0\) as preco/)
+  })
+
+  it('pote e desconto NÃO são fixados no código (itens 9 e 14)', () => {
+    expect(texto).toMatch(/'pote', coalesce\(/)
+    // O padrão é inativo e sem desconto: nada acontece sem configuração.
+    expect(texto).toMatch(/"pote":\{"ativo":false,"percentual":0/)
+    // O percentual vem da configuração, com a tela podendo sobrescrever.
+    expect(texto).toMatch(/v_percentual := coalesce\(\s*p_percentual,/)
+    expect(texto).toMatch(/Percentual do pote não configurado\./)
+  })
+
+  it('o rateio usa maior resto e a soma bate com o pote (itens 26 e 27)', () => {
+    // Resto ordenado, com desempate pelo nome (determinístico).
+expect(texto).toMatch(/trunc\(g\.pote \* a\.fichas \/ f\.total, 2\)/)
+    expect(texto).toMatch(/row_number\(\) over \(order by b\.resto desc, b\.nome asc\)/)
+    expect(texto).toMatch(/case when o\.posicao <= s\.centavos then o\.parte \+ 0\.01 else o\.parte end/)
+    // E o fechamento RECUSA gravar se a soma não bater.
+    expect(texto).toMatch(/O rateio não fecha: soma das partes/)
+  })
+
+  it('o período é sempre explícito e inclusivo (item 16)', () => {
+    expect(texto).toMatch(/cp\.data >= p_inicio\s+and cp\.data <= p_fim/)
+    expect(texto).toMatch(/p\.data >= p_inicio\s+and p\.data <= p_fim/)
+    expect(texto).toMatch(/Informe a data inicial e a data final do período\./)
+    expect(texto).toMatch(/A data final precisa ser igual ou depois da data inicial\./)
+  })
+
+  it('a escrita das fichas é SÓ pelo servidor (item 24)', () => {
+    // RLS ligada e sem policy de escrita para `authenticated`.
+    expect(texto).toMatch(/alter table public\.clube_producao enable row level security/)
+    expect(texto).toMatch(/alter table public\.clube_pote_fechamentos enable row level security/)
+    expect(texto).toMatch(
+      /create policy clube_producao_leitura[\s\S]*?for select to authenticated/,
+    )
+    expect(texto).not.toMatch(/for insert to authenticated[\s\S]{0,400}?on public\.clube_producao/)
+    expect(texto).not.toMatch(/for update to authenticated[\s\S]{0,400}?on public\.clube_producao/)
+    // Registrar/atendimento revalida o benefício DENTRO do SQL.
+    expect(texto).toMatch(
+      /v_beneficio := public\.audax_clube_beneficio\(\s*p_cliente_id, p_telefone, p_servico, p_data, p_usar_beneficio\s*\)/,
+    )
+    expect(texto).toMatch(/if v_tipo = 'avulso' or v_status not in \('ativa', 'proxima_vencimento'\) then/)
+  })
+
+  it('a auditoria do pote reusa a de comissões (item 21)', () => {
+    expect(texto).toMatch(/drop constraint if exists comissoes_auditoria_acao_check/)
+    expect(texto).toMatch(
+      /acao in \('fechamento', 'reabertura', 'pote_fechamento', 'pote_reabertura', 'pote_ajuste'\)/,
+    )
+    expect(texto).toMatch(/insert into public\.comissoes_auditoria/)
+  })
+
+  it('não mexe em policy, trigger ou migration anterior (item 26)', () => {
+    expect(texto).not.toMatch(/create trigger/i)
+    expect(texto).not.toMatch(/drop table/i)
+    expect(texto).not.toMatch(/truncate/i)
+    expect(texto).not.toMatch(/delete from/i)
+    // Não altera a agenda nem a caixa.
+    expect(texto).not.toMatch(/alter table public\.agendamentos/)
+    expect(texto).not.toMatch(/alter table public\.caixa_lancamentos/)
+  })
+})
+
+describe('029 · quem pode tocar no pote', () => {
+  const texto028 = sql('../supabase/migrations/028_clube_producao_e_pote.sql')
+  const texto029 = sql('../supabase/migrations/029_clube_pote_papeis.sql')
+
+  const PORTAS = [
+    'clube_pote_calcular',
+    'clube_pote_fechar',
+    'clube_pote_reabrir',
+    'clube_pote_listar',
+    'clube_atendimento_registrar',
+    'clube_producao_estornar',
+  ]
+
+  it('toda porta do pote tem checagem de papel (item 24)', () => {
+    for (const porta of PORTAS) {
+      expect(texto029, porta).toMatch(
+        new RegExp(`create or replace function public\\.${porta}\\(`),
+      )
+    }
+    expect(texto029).toMatch(/if not public\.current_user_is_gerente_ou_acima\(\) then/)
+    // Registrar atendimento é operação de recepção, não só de gerente.
+    expect(texto029).toMatch(/if not public\.current_user_is_recepcao_ou_acima\(\) then/)
+  })
+
+  it('authenticated chega às funções; anon nunca', () => {
+    for (const porta of PORTAS) {
+      expect(texto029, porta).toMatch(
+        new RegExp(`revoke execute on function public\\.${porta}\\([^)]*\\)\\s*\\n\\s*from public, anon`),
+      )
+    }
+    expect(texto029).toMatch(/to authenticated, service_role/)
+    expect(texto029).not.toMatch(/to anon/)
+  })
+
+it('o CORPO da regra é o mesmo da 028 (a 029 só guarda o papel)', () => {
+    // A guarda que a 029 insere logo depois do `begin`. Removê-la do corpo de
+    // 029 tem de deixar exatamente o corpo de 028.
+    const GUARDA = [
+      '  -- Autorização (item 24): a REGRA abaixo é exatamente a da 028, sem',
+      '  -- mudança. Entra apenas a checagem de papel do usuário da sessão.',
+      '  if not public.current_user_is_gerente_ou_acima() then',
+      "    raise exception 'Você não tem permissão para ver o fechamento do pote.';",
+      '  end if;',
+      '  if not public.current_user_is_gerente_ou_acima() then',
+      "    raise exception 'Você não tem permissão para fechar o pote.';",
+      '  end if;',
+      '  if not public.current_user_is_gerente_ou_acima() then',
+      "    raise exception 'Você não tem permissão para reabrir o fechamento.';",
+      '  end if;',
+      '  if not public.current_user_is_recepcao_ou_acima() then',
+      "    raise exception 'Você não tem permissão para registrar atendimento do Club.';",
+      '  end if;',
+      '  if not public.current_user_is_gerente_ou_acima() then',
+      "    raise exception 'Você não tem permissão para estornar ficha de produção.';",
+      '  end if;',
+      '  if not public.current_user_is_gerente_ou_acima() then',
+      "    raise exception 'Você não tem permissão para ver os fechamentos do pote.';",
+      '  end if;',
+    ]
+
+    const corpo = (origem: string, porta: string): string => {
+      const inicio = origem.indexOf(`create or replace function public.${porta}(`)
+      const abre = origem.indexOf('$$', inicio)
+      const fecha = origem.indexOf('$$', abre + 2)
+      return origem
+        .slice(abre, fecha)
+        .split('\n')
+        .filter((linha) => !GUARDA.includes(linha.trimEnd()) && !GUARDA.includes(linha))
+        .join('\n')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    for (const porta of [
+      'clube_pote_calcular',
+      'clube_pote_fechar',
+      'clube_pote_reabrir',
+      'clube_atendimento_registrar',
+      'clube_producao_estornar',
+    ]) {
+      expect(corpo(texto029, porta), `${porta}: corpo divergiu da 028`).toBe(
+        corpo(texto028, porta),
+      )
+    }
+  })
+
+  it('a regra continua sendo recalculada, nunca enviada pelo frontend', () => {
+    // Fechar recalcula o rateio inteiro e recusa o que já está fechado.
+    expect(texto029).toMatch(/v_rateio := public\.clube_pote_calcular\(p_inicio, p_fim, p_percentual, p_profissionais\);/)
+    expect(texto029).toMatch(/Já existe fechamento do pote para este período\./)
+    // Não aceita valor de pote vindo do chamador.
+    expect(texto029).not.toMatch(/p_pote/)
   })
 })

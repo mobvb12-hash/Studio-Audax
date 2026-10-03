@@ -29,6 +29,9 @@ export const RPCS_AUTORIZADAS = [
   // fila de notificações com dedup (migration 024)
   'ia_notificacoes_pendentes',
   'ia_notificacao_resolver',
+  // benefício do Audax Club (migration 028): o SERVIDOR decide cobertura,
+  // preço e desconto. O bot só traduz a resposta.
+  'audax_clube_beneficio',
 ] as const
 
 export type RpcAutorizada = (typeof RPCS_AUTORIZADAS)[number]
@@ -107,6 +110,27 @@ function validarParametros(
   if (nome === 'ia_clube_cliente' && typeof params.p_cliente_id === 'string') {
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(params.p_cliente_id)) {
       return 'Cliente inválido.'
+    }
+  }
+  if (nome === 'audax_clube_beneficio') {
+    // Mesmo formato de cliente das demais chamadas do Club.
+    const cliente = params.p_cliente_id
+    if (typeof cliente !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(cliente)) {
+      return 'Cliente inválido.'
+    }
+    const telefone = params.p_telefone
+    if (telefone !== undefined && typeof telefone !== 'string') {
+      return 'Telefone inválido.'
+    }
+    if (typeof telefone === 'string' && telefone !== '' && !RE_TELEFONE.test(telefone)) {
+      return 'Telefone inválido.'
+    }
+    const servico = params.p_servico
+    if (typeof servico !== 'string' || !RE_TEXTO_CURTO.test(servico) || !servico.trim()) {
+      return 'Serviço inválido.'
+    }
+    if (!RE_DATA.test(String(params.p_data ?? ''))) {
+      return 'Data inválida.'
     }
   }
   if (nome === 'ia_evento_registrar') {

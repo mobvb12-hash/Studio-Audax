@@ -36,7 +36,32 @@ export type ConfigNotificacoes = {
   posAtendimento: boolean
   avaliacao: boolean
 }
-export type ConfigClube = { beneficios: Record<string, string[]> }
+/**
+ * Regras do Audax Club (migration 028).
+ *
+ * coberturas: categoria de serviço coberta por plano — ilimitado.
+ *   Os nomes precisam bater com \servicos.categoria\. Categoria vazia nunca
+ *   é coberta, então sobrancelha, químicos e produtos ficam de fora por padrão.
+ * desconto: fração (0.10 = 10%). \categorias\ diz QUAIS categorias contam
+ *   como procedimento químico; lista vazia = nenhum desconto químico ainda.
+ * pote: percentual da receita de assinaturas destinada aos profissionais.
+ *   \tivo\ liga o botão de fechamento; \participantes\ vazio = todos.
+ */
+export type ConfigClube = {
+  /** Benefícios em texto para a IA. Vazio = a IA não promete nada. */
+  beneficios: Record<string, string[]>
+  coberturas: Record<string, string[]>
+  desconto: {
+    quimicos: number
+    produtos: number
+    categorias: string[]
+  }
+  pote: {
+    ativo: boolean
+    percentual: number
+    participantes: string[]
+  }
+}
 export type ConfigIa = {
   maxSugestoes: number
   botoesInterativos: boolean
@@ -69,7 +94,12 @@ export const CONFIG_PADRAO: Configuracoes = {
     posAtendimento: true,
     avaliacao: true,
   },
-  clube: { beneficios: {} },
+  clube: {
+    beneficios: {},
+    coberturas: { cabelo: [], barba: [], cabelo_barba: [] },
+    desconto: { quimicos: 0, produtos: 0, categorias: [] },
+    pote: { ativo: false, percentual: 0, participantes: [] },
+  },
 ia: { maxSugestoes: 2, botoesInterativos: false, nomeAtendente: 'Audax' },
   barbearia: { endereco: '', telefone: '', instagram: '', mapa: '' },
 }
@@ -144,6 +174,9 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
   const avaliacao = objeto(raiz.avaliacao)
   const notificacoes = objeto(raiz.notificacoes)
   const clube = objeto(raiz.clube)
+  const coberturas = objeto(clube.coberturas)
+  const desconto = objeto(clube.desconto)
+  const pote = objeto(clube.pote)
   const ia = objeto(raiz.ia)
   const barbearia = objeto(raiz.barbearia)
   // Todo link passa pelo mesmo filtro de esquema — inclusive `avaliacao.link`,
@@ -176,11 +209,24 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       ),
       avaliacao: booleano(notificacoes.avaliacao, CONFIG_PADRAO.notificacoes.avaliacao),
     },
-    clube: { beneficios: beneficios(clube.beneficios) },
+    clube: {
+      beneficios: beneficios(clube.beneficios),
+      coberturas: coberturaDe(coberturas),
+      desconto: {
+        quimicos: fracao(desconto.quimicos),
+        produtos: fracao(desconto.produtos),
+        categorias: listaDeTexto(desconto.categorias, 12),
+      },
+      pote: {
+        ativo: booleano(pote.ativo, CONFIG_PADRAO.clube.pote.ativo),
+        percentual: inteiro(pote.percentual, CONFIG_PADRAO.clube.pote.percentual, 0, 100),
+        participantes: listaDeTexto(pote.participantes, 40),
+      },
+    },
     ia: {
       maxSugestoes: inteiro(ia.maxSugestoes, CONFIG_PADRAO.ia.maxSugestoes, 0, 3),
       botoesInterativos: booleano(ia.botoesInterativos, CONFIG_PADRAO.ia.botoesInterativos),
-nomeAtendente: texto(ia.nomeAtendente, CONFIG_PADRAO.ia.nomeAtendente, 40),
+      nomeAtendente: texto(ia.nomeAtendente, CONFIG_PADRAO.ia.nomeAtendente, 40),
     },
     barbearia: {
       endereco: texto(barbearia.endereco, '', 300),
@@ -190,6 +236,33 @@ nomeAtendente: texto(ia.nomeAtendente, CONFIG_PADRAO.ia.nomeAtendente, 40),
         ? texto(barbearia.mapa, '', 500)
         : '',
     },
+  }
+}
+
+/** Fração de desconto entre 0 e 1 (0.10 = 10%). Fora da faixa = 0. */
+function fracao(valor: unknown): number {
+  const n = typeof valor === 'number' ? valor : Number(valor)
+  if (!Number.isFinite(n) || n < 0 || n > 1) return 0
+  return Math.round(n * 10000) / 10000
+}
+
+/** Lista de texto, sem entradas vazias. */
+function listaDeTexto(valor: unknown, limite: number): string[] {
+  return Array.isArray(valor)
+    ? valor
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .slice(0, limite)
+    : []
+}
+
+/** Coberturas por plano — só texto, sem número mágico no código. */
+function coberturaDe(bruto: Record<string, unknown>): Record<string, string[]> {
+  return {
+    cabelo: listaDeTexto(bruto.cabelo, 12),
+    barba: listaDeTexto(bruto.barba, 12),
+    cabelo_barba: listaDeTexto(bruto.cabelo_barba, 12),
   }
 }
 

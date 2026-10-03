@@ -184,6 +184,22 @@ export default function Configuracoes() {
     }))
   const definirIa = <K extends keyof Configuracoes['ia']>(campo: K, valor: Configuracoes['ia'][K]) =>
     setDados((atual) => ({ ...atual, ia: { ...atual.ia, [campo]: valor } }))
+  const definirPote = <K extends keyof Configuracoes['clube']['pote']>(
+    campo: K,
+    valor: Configuracoes['clube']['pote'][K],
+  ) =>
+    setDados((atual) => ({
+      ...atual,
+      clube: { ...atual.clube, pote: { ...atual.clube.pote, [campo]: valor } },
+    }))
+  const definirDesconto = <K extends keyof Configuracoes['clube']['desconto']>(
+    campo: K,
+    valor: Configuracoes['clube']['desconto'][K],
+  ) =>
+    setDados((atual) => ({
+      ...atual,
+      clube: { ...atual.clube, desconto: { ...atual.clube.desconto, [campo]: valor } },
+    }))
   const definirBarbearia = <K extends keyof Configuracoes['barbearia']>(
     campo: K,
     valor: Configuracoes['barbearia'][K],
@@ -420,9 +436,14 @@ export default function Configuracoes() {
                   ...atual,
                   clube: {
                     ...atual.clube,
-                    beneficios: {
-                      ...atual.clube.beneficios,
-                      [plano]: atual.clube.beneficios[plano] ?? [],
+                    coberturas: {
+                      ...atual.clube.coberturas,
+                      [plano]: [
+                        ...new Set([
+                          ...(atual.clube.coberturas[plano] ?? []),
+                          plano === 'cabelo_barba' ? 'Cabelo' : plano === 'barba' ? 'Barba' : 'Cabelo',
+                        ]),
+                      ],
                     },
                   },
                 }))
@@ -431,6 +452,88 @@ export default function Configuracoes() {
               + {plano}
             </Botao>
           ))}
+        </div>
+
+        {/* ------------------------------------------- POTE DO CLUB (028) */}
+        <div className="sm:col-span-2 mt-2 rounded-lg border border-[#E5DCC3] p-4">
+          <h3 className="text-[13px] font-semibold text-[#1C1A15]">
+            Pote do Audax Club
+          </h3>
+          <p className="mt-1 text-[12.5px] text-[#6B6353]">
+            Percentual da receita de assinaturas destinado aos profissionais,
+            dividido proporcionalmente pela produção de cada um. Sem percentual
+            configurado, nada é distribuído.
+          </p>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Campo rotulo="Percentual do pote (%)">
+              <input
+                className={CAMPO_FORM}
+                inputMode="numeric"
+                placeholder="Ex.: 30"
+                value={
+                  dados.clube.pote.percentual === 0
+                    ? ''
+                    : String(dados.clube.pote.percentual)
+                }
+                onChange={(e) => {
+                  const n = Number(e.target.value.replace(',', '.'))
+                  definirPote('percentual', Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0)
+                }}
+              />
+            </Campo>
+            <Campo rotulo="Fechamento do pote">
+              <select
+                className={CAMPO_FORM}
+                value={dados.clube.pote.ativo ? 'sim' : 'nao'}
+                onChange={(e) => definirPote('ativo', e.target.value === 'sim')}
+              >
+                <option value="nao">Desligado</option>
+                <option value="sim">Ligado</option>
+              </select>
+            </Campo>
+            <Campo rotulo="Procedimentos químicos">
+              <input
+                className={CAMPO_FORM}
+                inputMode="numeric"
+                placeholder="Desconto em %, ex.: 10"
+                value={
+                  dados.clube.desconto.quimicos === 0
+                    ? ''
+                    : String(Math.round(dados.clube.desconto.quimicos * 100))
+                }
+                onChange={(e) => {
+                  const n = Number(e.target.value.replace(',', '.'))
+                  definirDesconto(
+                    'quimicos',
+                    Number.isFinite(n) ? Math.min(100, Math.max(0, n)) / 100 : 0,
+                  )
+                }}
+              />
+            </Campo>
+          </div>
+
+          <Campo rotulo="Categorias que contam como procedimento químico">
+            <textarea
+              className={`${CAMPO_FORM} min-h-[70px]`}
+              placeholder="Uma categoria por linha. Precisa bater com a categoria do serviço (ex.: Tratamento)."
+              value={dados.clube.desconto.categorias.join('\n')}
+              onChange={(e) =>
+                definirDesconto(
+                  'categorias',
+                  e.target.value
+                    .split('\n')
+                    .map((l) => l.trim())
+                    .filter(Boolean)
+                    .slice(0, 12),
+                )
+              }
+            />
+          </Campo>
+          <p className="text-xs text-[#8A8171]">
+            Lista vazia = nenhum desconto químico. Sobrancelha e produtos ficam
+            fora dos planos: só entram como.Normal.
+          </p>
         </div>
       </Caixa>
 

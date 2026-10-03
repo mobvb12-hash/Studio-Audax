@@ -72,6 +72,9 @@ export type AcaoPermissao =
   | 'clube:assinatura_criar'
   | 'clube:assinatura_editar'
   | 'clube:pagamento_registrar'
+  // Pote do Audax Club: calcular é leitura; fechar/reabrir é gerente+
+  | 'clube:pote_ver'
+  | 'clube:pote_fechar'
 
   // CRM
   | 'crm:ver'
@@ -127,7 +130,7 @@ const PERMISSOES_POR_PAPEL: Record<PapelPerfil, AcaoPermissao[]> = {
     'comissoes:reabrir', 'comissoes:auditoria_ver',
     'relatorios:ver', 'financeiro:ver',
     'estoque:ver', 'estoque:entrada', 'estoque:ajuste', 'estoque:movimentacoes_ver',
-    'clube:ver', 'clube:assinatura_criar', 'clube:assinatura_editar', 'clube:pagamento_registrar',
+    'clube:ver', 'clube:pote_ver', 'clube:assinatura_criar', 'clube:assinatura_editar', 'clube:pagamento_registrar',
     'crm:ver', 'crm:interacao_registrar', 'crm:reativacao', 'crm:marketing', 'crm:automacoes',
     'whatsapp:ver', 'whatsapp:mensagem_criar', 'whatsapp:mensagem_enviar', 'whatsapp:falha_registrar',
     'ia:ver', 'ia:analisar', 'ia:acao_confirmar',
@@ -149,7 +152,7 @@ const PERMISSOES_POR_PAPEL: Record<PapelPerfil, AcaoPermissao[]> = {
     'comissoes:reabrir', 'comissoes:auditoria_ver',
     'relatorios:ver', 'financeiro:ver',
     'estoque:ver', 'estoque:entrada', 'estoque:ajuste', 'estoque:movimentacoes_ver',
-    'clube:ver', 'clube:assinatura_criar', 'clube:assinatura_editar', 'clube:pagamento_registrar',
+    'clube:ver', 'clube:pote_ver', 'clube:assinatura_criar', 'clube:assinatura_editar', 'clube:pagamento_registrar',
     'crm:ver', 'crm:interacao_registrar', 'crm:reativacao', 'crm:marketing', 'crm:automacoes',
     'whatsapp:ver', 'whatsapp:mensagem_criar', 'whatsapp:mensagem_enviar', 'whatsapp:falha_registrar',
     'ia:ver', 'ia:analisar', 'ia:acao_confirmar',
@@ -171,7 +174,7 @@ const PERMISSOES_POR_PAPEL: Record<PapelPerfil, AcaoPermissao[]> = {
     'comissoes:reabrir', 'comissoes:auditoria_ver',
     'relatorios:ver', 'financeiro:ver',
     'estoque:ver', 'estoque:entrada', 'estoque:ajuste', 'estoque:movimentacoes_ver',
-    'clube:ver', 'clube:assinatura_criar', 'clube:assinatura_editar', 'clube:pagamento_registrar',
+    'clube:ver', 'clube:pote_ver', 'clube:assinatura_criar', 'clube:assinatura_editar', 'clube:pagamento_registrar',
     'crm:ver', 'crm:interacao_registrar', 'crm:reativacao', 'crm:marketing', 'crm:automacoes',
     'whatsapp:ver', 'whatsapp:mensagem_criar', 'whatsapp:mensagem_enviar', 'whatsapp:falha_registrar',
     'ia:ver', 'ia:analisar', 'ia:acao_confirmar',
@@ -249,6 +252,7 @@ export function podeAcessarPagina(papel: PapelPerfil | null | undefined, pagina:
     servicos: ['servicos:ver'],
     comissoes: ['comissoes:ver_todas', 'comissoes:ver_proprias'],
     clube: ['clube:ver'],
+  pote: ['clube:pote_ver'],
     estoque: ['estoque:ver'],
     financeiro: ['financeiro:ver'],
     relatorios: ['relatorios:ver'],

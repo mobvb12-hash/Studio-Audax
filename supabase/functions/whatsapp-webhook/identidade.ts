@@ -32,6 +32,22 @@ export type ClubeCliente = {
   proximoVencimento: string | null
 }
 
+/**
+ * Resposta de `audax_clube_beneficio` (migration 028), reduzida ao que o bot
+ * precisa dizer ao cliente.
+ *
+ * `usarBeneficio` só vem verdadeiro quando o SERVIDOR confirmou assinatura em
+ * dia E cobertura do serviço pelo plano. O bot nunca deduz isso por conta
+ * própria — é o que impede anunciar um benefício que não existe.
+ */
+export type BeneficioServico = {
+  usarBeneficio: boolean
+  beneficioLiberado: boolean
+  statusAssinatura: string | null
+  tipoBeneficio: 'ilimitado' | 'desconto' | 'avulso'
+  motivo: string | null
+}
+
 export type CandidatoCliente = {
   id: string
   nome: string
