@@ -8,7 +8,7 @@ import type {
   CadastroPainel,
 } from '@/services/supabase/painel'
 import { separarAgendamentos } from '../dashboard'
-import { navegarPainel } from '../regras'
+import { irParaAgendamentoOficial, navegarPainel } from '../regras'
 import { Botao, Carregando, EstadoVazio } from '../ui'
 import CartaoAgendamento from './CartaoAgendamento'
 
@@ -95,6 +95,14 @@ export default function PainelDashboard() {
   const ultimos = historico.slice(0, 3)
   const primeiroNome = cadastro?.nome?.trim().split(/\s+/)[0] ?? ''
 
+  /** Agendar sempre pelo fluxo OFICIAL, com o cadastro já preenchido. */
+  function agendar() {
+    irParaAgendamentoOficial({
+      nome: cadastro?.nome ?? '',
+      telefone: cadastro?.telefone ?? '',
+    })
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -125,9 +133,7 @@ export default function PainelDashboard() {
           </>
         ) : (
           <EstadoVazio titulo="Você ainda não tem um agendamento marcado.">
-            <Botao aoClicar={() => navegarPainel('agendar')}>
-              Agendar horário
-            </Botao>
+            <Botao aoClicar={agendar}>Agendar horário</Botao>
           </EstadoVazio>
         )}
       </Secao>

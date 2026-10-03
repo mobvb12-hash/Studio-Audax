@@ -145,6 +145,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/031_comissao_somente_do_dono.sql',
   '../supabase/migrations/032_permissoes_public_e_typo_calcular.sql',
   '../supabase/migrations/033_producao_total_do_snapshot.sql',
+  '../supabase/migrations/034_clube_beneficios_publicos.sql',
 ])
   })
 
@@ -1395,6 +1396,61 @@ describe('032 · revoga o PUBLIC que o PostgreLab dá por padrão', () => {
     expect(texto).toMatch(/if not public\.current_user_is_gerente_ou_acima\(\) then/)
     // E a comissão continua vindo da configuração, não de parâmetro.
     expect(texto).not.toMatch(/p_comissao/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 034 - o conteúdo público do Clube, e só ele                          */
+/* ------------------------------------------------------------------ */
+
+describe('034 · benefícios do Clube são públicos e vazam nada', () => {
+  const bruto = sql('../supabase/migrations/034_clube_beneficios_publicos.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('é só uma projeção do config oficial: não cria tabela nem policy', () => {
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/create policy/i)
+    expect(texto).not.toMatch(/alter table/i)
+    expect(texto).not.toMatch(/insert into/i)
+    expect(texto).not.toMatch(/update /i)
+    expect(texto).not.toMatch(/delete /i)
+    // Lê a MESMA chave que o `audax_clube_beneficio` (028) usa no atendimento.
+    expect(texto).toMatch(/cfg -> 'coberturas'/)
+    expect(texto).toMatch(/cfg -> 'desconto' ->> 'quimicos'/)
+    expect(texto).toMatch(/cfg -> 'desconto' ->> 'produtos'/)
+  })
+
+  it('NÃO devolve assinatura, pagamento, cliente nem dinheiro', () => {
+    // A Area do Cliente lê a assinatura pela `painel_clube_minha` (020), que
+    // garante a posse. Esta função é só conteúdo de plano: se alguém pedir
+    // assinatura aqui, é vazamento.
+    for (const proibido of [
+      'clube_assinaturas',
+      'clube_pagamentos',
+      'clientes',
+      'agendamentos',
+      'caixa_lancamentos',
+      'comissoes',
+      'clube_pote_fechamentos',
+      'auth.uid',
+      'current_cliente_id',
+    ]) {
+      expect(texto, proibido).not.toMatch(new RegExp(proibido, 'i'))
+    }
+  })
+
+  it('não depende de sessão: é a tela de planos, pública de propósito', () => {
+    expect(texto).toMatch(/grant execute on function public\.clube_beneficios_publicos\(\)\s*to anon, authenticated, service_role;/)
+    // E o PUBLIC é revogado explicitamente (função nova nasce com ele).
+    expect(texto).toMatch(/revoke execute on function public\.clube_beneficios_publicos\(\) from public;/)
+    expect(texto).toMatch(/revoke execute on function public\.clube_beneficios_publicos\(\) from anon;/)
+    expect(texto).toMatch(/security definer/)
+    expect(texto).toMatch(/set search_path = public/)
+  })
+
+  it('sem config gravado, devolve vazio em vez de erro', () => {
+    expect(texto).toMatch(/coalesce\(\s*\(\s*select jsonb_build_object/)
+    expect(texto).toMatch(/'\{\}'::jsonb/)
   })
 })
 

@@ -17,6 +17,12 @@ vi.mock('@/services/supabase/agendaPublica', () => ({
 
 vi.mock('@/modules/painel/regras', () => ({
   navegarPainel: vi.fn(),
+  // O preenchimento que chega da Área do Cliente: aqui não há nada, então o
+  // formulário nasce vazio — como o cliente que agenda sem ser cliente ainda.
+  lerPreenchimento: vi.fn(() => null),
+  limparPreenchimento: vi.fn(),
+  irParaAreaDoCliente: vi.fn(),
+  irParaAgendamentoOficial: vi.fn(),
 }))
 
 const catalogo = vi.mocked(carregarCatalogo)
@@ -355,8 +361,11 @@ describe('AgendarPublico — informações da barbearia', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Corte Audax/ })).toBeTruthy(),
     )
-    expect(screen.getByRole('button', { name: 'Abrir Área do Cliente' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Área do Cliente' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Abrir Área do Cliente' }),
+    ).toBeTruthy()
+    // O atalho do topo fala com quem já é cliente da casa.
+    expect(screen.getByRole('button', { name: 'Já sou cliente' })).toBeTruthy()
   })
 
   it('data de hoje é a primeira offered (nada de data passada)', async () => {

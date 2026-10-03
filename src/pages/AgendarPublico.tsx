@@ -36,7 +36,11 @@ import {
   type ServicoPublico,
 } from '@/services/supabase/agendaPublica'
 import BlocoBarbearia from '@/modules/painel/telas/BlocoBarbearia'
-import { navegarPainel } from '@/modules/painel/regras'
+import {
+  irParaAreaDoCliente,
+  lerPreenchimento,
+  limparPreenchimento,
+} from '@/modules/painel/regras'
 import {
   Aviso,
   Bloco,
@@ -98,8 +102,11 @@ export default function AgendarPublico() {
   const [carregando, setCarregando] = useState(true)
   const [tentativa, setTentativa] = useState(0)
 
-  const [nome, setNome] = useState('')
-  const [telefone, setTelefone] = useState('')
+  // Chegando da Área do Cliente, o formulário já nasce preenchido: a identidade
+  // viaja por `sessionStorage` (nunca na URL) e vale só para esta visita.
+  const [preenchimento] = useState(() => lerPreenchimento())
+  const [nome, setNome] = useState(() => preenchimento?.nome ?? '')
+  const [telefone, setTelefone] = useState(() => preenchimento?.telefone ?? '')
   const [servicoNome, setServicoNome] = useState('')
   const [data, setData] = useState('')
   const [slot, setSlot] = useState<SlotEscolhido | null>(null)
@@ -158,6 +165,17 @@ export default function AgendarPublico() {
       vivo = false
     }
   }, [tentativa])
+
+  /**
+   * O preenchimento automático é de uma vez só.
+   *
+   * Ele nasce junto com o formulário (estado inicial), então só resta apagar
+   * o que sobrou no `sessionStorage` — sem `setState` aqui, que forçaria um
+   * segundo render e apagaria o que o cliente já digitou.
+   */
+  useEffect(() => {
+    limparPreenchimento()
+  }, [])
 
   /**
    * Disponibilidade de TODOS os profissionais para o serviço + data escolhidos.
@@ -301,7 +319,9 @@ export default function AgendarPublico() {
                 <Botao
                   variante="secundario"
                   aoClicar={() => {
-                    navegarPainel('agendamentos')
+                    // Quem acabou de agendar quer ver o que agendou: vai para a
+                    // ÁREA DO CLIENTE na aba de agendamentos (URL oficial).
+                    irParaAreaDoCliente('agendamentos')
                   }}
                 >
                   Ver meus agendamentos
@@ -386,10 +406,10 @@ export default function AgendarPublico() {
           direita={
             <button
               type="button"
-              onClick={() => navegarPainel('')}
+              onClick={() => irParaAreaDoCliente()}
               className="min-h-[40px] shrink-0 rounded-xl border border-cream-300 px-3 text-[12.5px] font-semibold text-noir-700 hover:border-gold-400 hover:text-noir-900"
             >
-              Área do Cliente
+              Já sou cliente
             </button>
           }
         />
@@ -685,7 +705,9 @@ export default function AgendarPublico() {
               Entre na sua área para ver agendamentos, histórico e o Audax Club.
             </p>
             <div className="mt-4">
-              <Botao aoClicar={() => navegarPainel('')}>Abrir Área do Cliente</Botao>
+              <Botao aoClicar={() => irParaAreaDoCliente()}>
+                Abrir Área do Cliente
+              </Botao>
             </div>
           </section>
         </div>

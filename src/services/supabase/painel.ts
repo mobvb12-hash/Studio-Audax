@@ -519,3 +519,21 @@ export async function carregarMeuClube(): Promise<ClubePainel | null> {
     pagamentos,
   }
 }
+
+/**
+ * Conteúdo público do Clube — coberturas e descontos do CONFIG OFICIAL
+ * (migration 034). É a mesma chave que o `audax_clube_beneficio` lê no
+ * atendimento, então a tela do cliente e o balcão dizem a mesma coisa.
+ *
+ * Devolve o JSON CRU: quem normaliza é a tela (`painel/clube`), que é onde a
+ * forma dos dados é conhecida. Não traz assinatura nem pagamento — quem traz é
+ * `carregarMeuClube`. Falha de rede aqui NÃO pode derrubar a tela: o plano
+ * continua aparecendo, só sem a lista de benefícios detalhada.
+ */
+export async function carregarBeneficiosClube(): Promise<unknown> {
+  const db = supabase()
+  if (!db) return null
+  const { data, error } = await db.rpc('clube_beneficios_publicos')
+  if (error) return null
+  return data ?? null
+}

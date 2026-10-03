@@ -27,7 +27,7 @@ import type { SlotAgendamento } from '@/pages/Agenda'
 import AgendarPublico from '@/pages/AgendarPublico'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { PainelAuthProvider } from '@/modules/painel/PainelAuthProvider'
-import { ehRotaPainel } from '@/modules/painel/regras'
+import { areaPelaUrl, type AreaPública } from '@/modules/painel/regras'
 import PainelRaiz from '@/modules/painel/telas/PainelRaiz'
 
 // Code splitting - lazy load pages
@@ -345,26 +345,19 @@ function AreaProtegida({ children }: { children: ReactNode }) {
   return <SupabaseAusente />
 }
 
-/** `#/agendar` (hash) ou `/agendar` (pathname) = página pública do cliente. */
-function ehRotaPublica(): boolean {
-  if (typeof window === 'undefined') return false
-  const hash = window.location.hash.replace(/^#/, '')
-  if (hash === '/agendar' || hash.startsWith('/agendar/')) return true
-  return /\/agendar\/?$/.test(window.location.pathname)
-}
-
+/**
+ * Qual área a URL abriu: o agendamento público (`/agendar`), a Área do Cliente
+ * (`/cliente`) ou o app interno. A decisão mora em `areaPelaUrl` — aqui só
+ * escolhe o que montar.
+ *
+ * `/agendar` e `/cliente` são paths de verdade (ver `vercel.json`), então
+ * abrem sem sessão de profissional. O hash legado (`#/agendar`, `#/painel`)
+ * continua valendo.
+ */
 function App() {
-  // Rota PÚBLICA do cliente (§16): `#/agendar` (ou `/agendar`) abre o
-  // agendamento FORA do portão de sessão — sem login para o cliente.
-  // Rota do PAINEL DO CLIENTE: `#/painel...` abre a autenticação do
-  // cliente fora do portão do app interno (o cliente não é staff).
-  const [rotaPublica, setRotaPublica] = useState(() => ehRotaPublica())
-  const [rotaPainel, setRotaPainel] = useState(() => ehRotaPainel())
+  const [area, setArea] = useState<AreaPública>(() => areaPelaUrl())
   useEffect(() => {
-    const aoMudar = () => {
-      setRotaPublica(ehRotaPublica())
-      setRotaPainel(ehRotaPainel())
-    }
+    const aoMudar = () => setArea(areaPelaUrl())
     window.addEventListener('hashchange', aoMudar)
     window.addEventListener('popstate', aoMudar)
     return () => {
@@ -384,9 +377,9 @@ function App() {
         o portão não abre: ele mostra a tela de ausência de configuração em
         vez de entregar o painel.
       */}
-      {rotaPublica ? (
+      {area === 'agendar' ? (
         <AgendarPublico />
-      ) : rotaPainel ? (
+      ) : area === 'cliente' ? (
         <PainelAuthProvider>
           <PainelRaiz />
         </PainelAuthProvider>

@@ -10,17 +10,143 @@ export type RotaPainel =
   | string
 
 /**
- * A rota atual é a do PAINEL DO CLIENTE? Mesmo critério de `#/agendar`:
- * hash `#/painel...` ou pathname terminando em `/painel`. O retorno do
- * e-mail do Supabase (`#access_token=...&type=...`) também conta — sem
- * isto o link de confirmação/recuperação cairia no portão do app interno.
+ * As DUAS URLs públicas e divulgáveis do Studio Audax.
+ *
+ * São paths de verdade (não hash): é o que o cliente recebe no Instagram, no
+ * WhatsApp, em status e em QR Code, e o que o Vercel serve via rewrite do
+ * `vercel.json`. Os caminhos antigas por hash continuam valendo.
  */
-export function ehRotaPainel(): boolean {
-  if (typeof window === 'undefined') return false
+export const CAMINHO_AGENDAR = '/agendar'
+export const CAMINHO_CLIENTE = '/cliente'
+
+/** Qual área a URL atual abre. */
+export type AreaPública = 'agendar' | 'cliente' | 'app'
+
+/**
+ * Resolve a área pela URL.
+ *
+ * O HASH tem precedência sobre o pathname, e isso é_load-bearing: sem isso,
+ * `/agendar#/painel` (o cliente pulando do agendamento para a Área do
+ * Cliente) abriria a Agenda de novo, porque o pathname continua sendo
+ * `/agendar`. O hash é o que também carrega o retorno de e-mail do Supabase.
+ */
+export function areaPelaUrl(): AreaPública {
+  if (typeof window === 'undefined') return 'app'
   const hash = window.location.hash.replace(/^#/, '')
-  if (hash === '/painel' || hash.startsWith('/painel/')) return true
-  if (hashAuthRedirect()) return true
-  return /\/painel\/?$/.test(window.location.pathname)
+  if (hash === '/painel' || hash.startsWith('/painel/')) return 'cliente'
+  if (hash === '/agendar' || hash.startsWith('/agendar/')) return 'agendar'
+  if (hashAuthRedirect()) return 'cliente'
+
+  const caminho = window.location.pathname.replace(/\/+$/, '')
+  if (caminho.endsWith(CAMINHO_AGENDAR)) return 'agendar'
+  // `/cliente` é a URL oficial; `/painel` é o nome antigo e continua abrindo.
+  if (caminho.endsWith(CAMINHO_CLIENTE)) return 'cliente'
+  if (/\/painel$/.test(caminho)) return 'cliente'
+  return 'app'
+}
+
+/** A rota atual é a do AGENDAMENTO PÚBLICO (`/agendar`)? */
+export function ehRotaPublica(): boolean {
+  return areaPelaUrl() === 'agendar'
+}
+
+/** A rota atual é a da ÁREA DO CLIENTE (`/cliente`)? */
+export function ehRotaPainel(): boolean {
+  return areaPelaUrl() === 'cliente'
+}
+
+/** URL absoluta da Área do Cliente — a que entra em cardápio e QR Code. */
+export function urlAreaDoCliente(): string {
+  if (typeof window === 'undefined') return CAMINHO_CLIENTE
+  return `${window.location.origin}${CAMINHO_CLIENTE}`
+}
+
+/** URL absoluta do agendamento público. */
+export function urlAgendamentoOficial(): string {
+  if (typeof window === 'undefined') return CAMINHO_AGENDAR
+  return `${window.location.origin}${CAMINHO_AGENDAR}`
+}
+
+/** Chave do preenchimento que viaja do painel para o agendamento. */
+const CHAVE_PREENCHIMENTO = 'studio-audax:agendar:preenchimento'
+
+export type PreenchimentoCliente = { nome: string; telefone: string }
+
+/**
+ * Vai para a Área do Cliente.
+ *
+ * A troca entre as duas áreas é uma navegação de verdade (não um hash): cada
+ * uma tem URL oficial para poder ser divulgada sozinha. Sem isso, o botão
+ * "Já sou cliente" do agendamento abriria `/agendar#/painel`, que é difícil de
+ * compartilhar e não é o endereço oficial.
+ *
+ * `aba` opcional: leva a intenção junto (ex.: quem acabou de agendar quer cair
+ * em "Agendamentos"), mas o endereço continua sendo `/cliente` para copiar e
+ * colar — o hash é só o destino dentro da área.
+ */
+export function irParaAreaDoCliente(aba?: string): void {
+  if (typeof window === 'undefined') return
+  const destino = `${urlAreaDoCliente()}${aba ? `#/painel/${aba}` : ''}`
+  if (areaPelaUrl() === 'cliente') {
+    navegarPainel(aba ?? '')
+    return
+  }
+  window.location.assign(destino)
+}
+
+/**
+ * Vai para o agendamento OFICIAL, levando nome e telefone do cadastro para
+ * o formulário já nascer preenchido.
+ *
+ * A identidade viaja por `sessionStorage`, nunca na URL: nome e telefone em
+ * query string vazam em print, histórico e compartilhamento de link.
+ */
+export function irParaAgendamentoOficial(preenchimento?: PreenchimentoCliente): void {
+  if (typeof window === 'undefined') return
+  if (preenchimento?.nome || preenchimento?.telefone) {
+    try {
+      window.sessionStorage.setItem(
+        CHAVE_PREENCHIMENTO,
+        JSON.stringify({
+          nome: preenchimento.nome ?? '',
+          telefone: preenchimento.telefone ?? '',
+        }),
+      )
+    } catch {
+      // sessionStorage indisponível: o fluxo abre vazio, sem quebrar nada.
+    }
+  }
+  if (areaPelaUrl() === 'agendar') return
+  window.location.assign(urlAgendamentoOficial())
+}
+
+/**
+ * Lê (sem apagar) o preenchimento deixado pelo painel do cliente.
+ *
+ * A leitura é separada do apagado de propósito: o estado inicial do
+ * formulário é inicializado na primeira renderização, e o `sessionStorage` é
+ * apagado num efeito — sem `setState` dentro do efeito, que o lint proíbe.
+ */
+export function lerPreenchimento(): PreenchimentoCliente | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const bruto = window.sessionStorage.getItem(CHAVE_PREENCHIMENTO)
+    if (!bruto) return null
+    const dados = JSON.parse(bruto) as Partial<PreenchimentoCliente>
+    return { nome: String(dados.nome ?? ''), telefone: String(dados.telefone ?? '') }
+  } catch {
+    return null
+  }
+}
+
+/** Apaga o preenchimento: ele vale para uma visita, não para sempre. */
+export function limparPreenchimento(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(CHAVE_PREENCHIMENTO)
+  } catch {
+    // sessionStorage indisponível: nada a limpar.
+  }
 }
 
 /** Subrota após `#/painel/` ('' ou ausente = 'inicio'). */
@@ -34,6 +160,12 @@ export function rotaPainelAtual(): RotaPainel {
   return 'inicio'
 }
 
+/**
+ * Navega entre as abas da Área do Cliente.
+ *
+ * Muda só o hash — o pathname `/cliente` continua de pé, então a URL
+ * oficial sobrevive à navegação e o evento `hashchange` é nativo.
+ */
 export function navegarPainel(rota: string): void {
   window.location.hash = rota ? `#/painel/${rota}` : '#/painel'
 }

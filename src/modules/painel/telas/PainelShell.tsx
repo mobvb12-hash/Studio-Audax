@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { usePainelAuth } from '../usePainelAuth'
-import { navegarPainel, rotaPainelAtual } from '../regras'
+import { irParaAgendamentoOficial, navegarPainel, rotaPainelAtual } from '../regras'
+import { obterMeuCadastro } from '@/services/supabase/painel'
 import PainelDashboard from './PainelDashboard'
 import PainelAgendamentos from './PainelAgendamentos'
 import PainelClube from './PainelClube'
-import TelaAgendarPainel from './TelaAgendarPainel'
 import TelaPerfilPainel from './TelaPerfilPainel'
 
 type Aba = {
@@ -27,9 +27,12 @@ const ABAS: Aba[] = [
 function conteudoDaRota(rota: string): ReactNode {
   if (rota === 'inicio') return <PainelDashboard />
   if (rota === 'agendamentos') return <PainelAgendamentos />
-  if (rota === 'agendar') return <TelaAgendarPainel />
   if (rota === 'perfil') return <TelaPerfilPainel />
   if (rota === 'clube') return <PainelClube />
+  // `agendar` não é uma segunda agenda: quem chega aqui (link antigo, aba do
+  // navegador) é levado ao AGENDAMENTO OFICIAL, que é o único caminho de
+  // marcação. A rota continua existindo para não quebrar o que já estava
+  // forth — apenas redireciona.
   const aba = ABAS.find((item) => item.rota === rota)
   if (aba) {
     return (
@@ -43,23 +46,22 @@ function conteudoDaRota(rota: string): ReactNode {
       </div>
     )
   }
-  return (
-    <div className="rounded-2xl border border-cream-300 bg-cream-50 p-8 text-center">
-      <h1 className="font-serif-display text-[20px] font-semibold text-noir-900">
-        Painel
-      </h1>
-    </div>
-  )
+  return null
 }
 
 /**
  * Estrutura do painel logado: cabeçalho discreto, ação principal em destaque e
  * navegação por abas. Mobile-first — a barra de abas rola sem arrastar a
  * página e o botão de agendar fica sempre visível no topo.
+ *
+ * O botão de agendar leva ao agendamento OFICIAL (`/agendar`) com nome e
+ * telefone do cadastro já levados: um único lugar onde se marca horário, e o
+ * formulário não nasce em branco para quem já é cliente.
  */
 export default function PainelShell() {
   const { sair } = usePainelAuth()
   const [rota, setRota] = useState(() => rotaPainelAtual())
+  const [indoAgendar, setIndoAgendar] = useState(false)
 
   useEffect(() => {
     const aoMudar = () => setRota(rotaPainelAtual())
@@ -67,7 +69,33 @@ export default function PainelShell() {
     return () => window.removeEventListener('hashchange', aoMudar)
   }, [])
 
-  const naAgendar = rota === 'agendar'
+  // rota `agendar` é legada: leva ao fluxo oficial em vez de abrir outra agenda.
+  useEffect(() => {
+    if (rota === 'agendar') irParaAgendamentoOficial()
+  }, [rota])
+
+  /**
+   * Agendar leva ao fluxo OFICIAL com o cadastro já em mãos.
+   *
+   * O nome e o telefone vêm da MESMA RPC do perfil (`obterMeuCadastro`), e a
+   * navegação acontece mesmo se a leitura falhar — o formulário abre vazio em
+   * vez de o botão não fazer nada.
+   */
+  async function agendar() {
+    if (indoAgendar) return
+    setIndoAgendar(true)
+    try {
+      const cadastro = await obterMeuCadastro()
+      irParaAgendamentoOficial({
+        nome: cadastro?.nome ?? '',
+        telefone: cadastro?.telefone ?? '',
+      })
+    } catch {
+      irParaAgendamentoOficial()
+    }
+  }
+
+  const agendando = rota === 'agendar' || indoAgendar
 
   return (
     <div className="min-h-screen bg-cream-100 text-noir-900">
@@ -90,7 +118,7 @@ export default function PainelShell() {
           </button>
         </div>
 
-        {!naAgendar && (
+        {!agendando && (
           <nav className="mx-auto flex w-full max-w-xl gap-1 overflow-x-auto px-4 pb-3 sm:px-6">
             {ABAS.map((aba) => {
               const ativa = rota === aba.rota
@@ -119,15 +147,16 @@ export default function PainelShell() {
       </main>
 
       {/* Ação principal sempre ao alcance do polegar */}
-      {!naAgendar && (
+      {!agendando && (
         <div className="fixed inset-x-0 bottom-0 border-t border-cream-300 bg-cream-100/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur">
           <div className="mx-auto w-full max-w-xl">
             <button
               type="button"
-              onClick={() => navegarPainel('agendar')}
-              className="min-h-[52px] w-full rounded-xl bg-gold-500 text-[15px] font-semibold text-noir-900 transition-colors hover:bg-gold-400"
+              onClick={() => void agendar()}
+              disabled={agendando}
+              className="min-h-[52px] w-full rounded-xl bg-gold-500 text-[15px] font-semibold text-noir-900 transition-colors hover:bg-gold-400 disabled:opacity-70"
             >
-              Agendar novo horário
+              {indoAgendar ? 'Abrindo…' : 'Agendar novo horário'}
             </button>
           </div>
         </div>
