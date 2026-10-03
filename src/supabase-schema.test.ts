@@ -132,6 +132,7 @@ expect(nomes).toEqual([
       '../supabase/migrations/018_painel_cliente.sql',
       '../supabase/migrations/019_painel_agendamento.sql',
       '../supabase/migrations/020_painel_clube.sql',
+      '../supabase/migrations/021_agenda_lock_concorrencia.sql',
     ])
   })
 
@@ -625,6 +626,92 @@ describe('Supabase — clube do painel (020)', () => {
     expect(texto).toMatch(
       /revoke execute on function public\.painel_clube_minha\(\) from anon/,
     )
+  })
+})
+
+describe('Supabase — lock de concorrência da Agenda (021)', () => {
+  const texto = sql('../supabase/migrations/021_agenda_lock_concorrencia.sql')
+
+  it('não mexe em RLS, policies, tabelas nem dados da Agenda', () => {
+    expect(texto).not.toMatch(/create policy/i)
+    expect(texto).not.toMatch(/drop policy/i)
+    expect(texto).not.toMatch(/alter table/i)
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/delete from/i)
+    expect(texto).not.toMatch(/update public\./i)
+    // migration só de estrutura: nenhum dado de teste embutido
+    expect(texto).not.toMatch(/CONC TESTE|'TESTE|TESTE FASE/i)
+  })
+
+  it('usa advisory transaction lock com a chave profissional:data', () => {
+    expect(texto).toMatch(/pg_advisory_xact_lock/)
+    expect(texto).toMatch(
+      /hashtextextended\(p_profissional \|\| ':' \|\| coalesce\(to_char\(p_data,'YYYY-MM-DD'\),''\), 0\)/,
+    )
+  })
+
+  it('o trigger de sobreposição trava ANTES do EXISTS (fecha o TOCTOU)', () => {
+    const corpo = texto.slice(
+      texto.indexOf('create or replace function public.agendamentos_sem_sobreposicao()'),
+      texto.indexOf('$$;', texto.indexOf('create or replace function public.agendamentos_sem_sobreposicao()')),
+    )
+    const trava = corpo.indexOf('perform public.agenda_lock_slot')
+    const conflito = corpo.indexOf('if exists')
+    expect(trava).toBeGreaterThan(-1)
+    expect(conflito).toBeGreaterThan(-1)
+    expect(trava).toBeLessThan(conflito)
+  })
+
+  it('a criação oficial trava antes do teste de conflito (mensagem amigável preservada)', () => {
+    const corpo = texto.slice(
+      texto.indexOf('create or replace function public.agendamento_publico_criar('),
+      texto.indexOf('$$;', texto.indexOf('create or replace function public.agendamento_publico_criar(')),
+    )
+    const trava = corpo.indexOf('perform public.agenda_lock_slot')
+    const conflito = corpo.indexOf('if exists (\n    select 1\n      from agendamentos')
+    expect(trava).toBeGreaterThan(-1)
+    expect(trava).toBeLessThan(conflito)
+    // a frase que o cliente recebe continua a mesma de antes
+    expect(corpo).toMatch(
+      /raise exception 'Este horário acabou de ser ocupado\. Escolha outro\.'/,
+    )
+  })
+
+  it('remarcação: trava os dois slots em ordem determinística e devolve NEW', () => {
+    expect(texto).toMatch(/perform public\.agenda_lock_slots\(\s*old\.profissional, old\.data,\s*new\.profissional, new\.data\)/)
+    // devolver NULL num trigger BEFORE UPDATE cancelaria a remarcação
+    const corpo = texto.slice(
+      texto.indexOf('create or replace function public.agendamentos_lock_remarcacao()'),
+      texto.indexOf('$$;', texto.indexOf('create or replace function public.agendamentos_lock_remarcacao()')),
+    )
+    expect(corpo).not.toMatch(/return null;/)
+    expect(corpo).toMatch(/return new;/)
+  })
+
+  it('ordena as chaves antes de travar (evita deadlock)', () => {
+    expect(texto).toMatch(/if v1 > v2 then/)
+    expect(texto).toMatch(/if v1 = v2 then/)
+  })
+
+  it('mantém os dois triggers instalados em agendamentos', () => {
+    expect(texto).toMatch(
+      /create trigger agendamentos_sem_sobreposicao\s+before insert or update on public\.agendamentos/,
+    )
+    expect(texto).toMatch(
+      /create trigger agendamentos_lock_remarcacao\s+before update on public\.agendamentos/,
+    )
+  })
+
+  it('helpers sem EXECUTE para o cliente e sem drop de função com grant', () => {
+    expect(texto).toMatch(
+      /revoke execute on function public\.agenda_lock_slot\(text, date\) from public, anon, authenticated/,
+    )
+    expect(texto).not.toMatch(/drop function/i)
+  })
+
+  it('preserva RLS e search_path das funções recriadas', () => {
+    expect(texto).toMatch(/set search_path = public/)
+    expect(texto).toMatch(/security definer/)
   })
 })
 
