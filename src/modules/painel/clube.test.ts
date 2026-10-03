@@ -176,6 +176,51 @@ describe('benefícios vêm da configuração oficial', () => {
     ])
   })
 
+  it('o texto oficial da casa tem prioridade sobre a derivação', () => {
+    // A cobertura do plano combinado inclui o serviço combo, e remontar a
+    // frase daria "cabelo, barba e cabelo e barba ilimitados". O texto da casa
+    // (o mesmo `clube.beneficios` que a IA lê) entra na frente.
+    const comTexto = normalizarBeneficios({
+      coberturas: {
+        cabelo: ['Cabelo'],
+        barba: ['Barba'],
+        cabelo_barba: ['Cabelo', 'Barba', 'Cabelo e barba'],
+      },
+      desconto: { quimicos: 0.1, produtos: 0.1 },
+      textos: {
+        cabelo_barba: [
+          'Corte ilimitado durante a vigência',
+          'Barba ilimitada durante a vigência',
+          '10% em procedimentos químicos',
+          '10% em produtos',
+        ],
+      },
+    })
+    expect(beneficiosDoPlano('cabelo_barba', comTexto)).toEqual([
+      'Corte ilimitado durante a vigência',
+      'Barba ilimitada durante a vigência',
+      '10% em procedimentos químicos',
+      '10% em produtos',
+    ])
+    // Plano sem texto oficial continua derivando do config.
+    expect(beneficiosDoPlano('barba', comTexto)).toEqual([
+      'barba ilimitado durante a vigência',
+      '10% em procedimentos químicos',
+      '10% em produtos',
+    ])
+  })
+
+  it('o texto oficial também normaliza lixo', () => {
+    const ruim = normalizarBeneficios({ textos: { cabelo: 'não é lista', barba: [1, 'Barba'] } })
+    expect(ruim.textos.cabelo).toBeUndefined()
+    expect(ruim.textos.barba).toEqual(['Barba'])
+    // Texto válido passa; e sem cobertura/desconto configurados a lista fica
+    // VAZIA de propósito — a tela mostra "fal com a equipe" em vez de chutar
+    // uma cobertura que o servidor não vai aplicar.
+    expect(beneficiosDoPlano('barba', ruim)).toEqual(['Barba'])
+    expect(beneficiosDoPlano('cabelo', ruim)).toEqual([])
+  })
+
   it('o rótulo do plano é o da casa quando existe, senão o do módulo', () => {
     const daCasa = normalizarBeneficios({ rotulos: { cabelo: 'Audax Corte Mensal' } })
     expect(rotuloDoPlano('cabelo', daCasa)).toBe('Audax Corte Mensal')

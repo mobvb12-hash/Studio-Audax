@@ -47,7 +47,11 @@ const BENEFICIOS = {
 function vencido(ha: number): string {
   const d = new Date()
   d.setDate(d.getDate() - ha)
-  return d.toISOString().slice(0, 10)
+  // Data LOCAL, não `toISOString()`: em Recife (UTC-3), à noite, o UTC já virou
+  // o dia seguinte e o teste passaria a medir outro dia.
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mes}-${dia}`
 }
 
 beforeEach(() => {

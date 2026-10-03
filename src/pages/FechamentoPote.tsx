@@ -39,7 +39,26 @@ import { useClube } from '@/modules/clube/store'
 import { carregarConfiguracoes } from '@/services/supabase/configuracoes'
 import { CONFIG_PADRAO, type Configuracoes } from '@/modules/configuracoes/types'
 
-/** Início e fim do mês, em YYYY-MM-DD. */
+/**
+ * Período inicial: HOJE, e só hoje.
+ *
+ * Antes a tela assumia o mês corrente (1º dia → hoje). Isso é exatamente o
+ * que o dono pediu para não acontecer: o pote é sempre o período que a pessoa
+ * ESCOLHEU, e um mês assumido no lugar dela mistura meses de receita e de
+ * produção sem ninguém pedir. Começando em hoje→hoje, o período é escolhido
+ * antes de qualquer número aparecer.
+ */
+function periodoInicial(hoje: string): Periodo {
+  return { inicio: hoje, fim: hoje }
+}
+
+/**
+ * Atalho "Mês atual" — só roda quando a pessoa clica nele.
+ *
+ * Não é o padrão da tela (ver `periodoInicial`): é uma régua que o dono pode
+ * puxar quando realmente quiser o mês. O cálculo sempre usa o intervalo que
+ * está nos dois campos, seja ele qual for.
+ */
 function mesCorrente(hoje: string): Periodo {
   return { inicio: `${hoje.slice(0, 7)}-01`, fim: hoje }
 }
@@ -67,7 +86,7 @@ export default function FechamentoPote() {
     }
   }, [])
 
-  const [periodo, setPeriodo] = useState<Periodo>(() => mesCorrente(hoje))
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoInicial(hoje))
   const [calculo, setCalculo] = useState<CalculoPote | null>(null)
   const [fichas, setFichas] = useState<FichaProducao[]>([])
   const [fechados, setFechados] = useState<FechamentoPote[]>([])
@@ -297,15 +316,23 @@ const online = Boolean(supabase())
           <p className="mt-4 text-[12px] text-[#8A8171]">
             {dataCurta(periodo.inicio)} até {dataCurta(periodo.fim)}
           </p>
-<div className="mt-2 overflow-x-auto border-y border-[#E5DCC3]">
+          <div className="mt-2 overflow-x-auto border-y border-[#E5DCC3]">
+            {/* Os cinco valores do resumo, cada um separado: receita das
+                assinaturas, pote, produção, comissão e o que fica com a
+                empresa. Nenhum deles é derivado do outro na tela. */}
             <div className="flex min-w-[760px] divide-x divide-[#E5DCC3]">
-              <CelulaKpi rotulo="Receita recebida em assinaturas" valor={formatarBRL(resultado.receita)} />
+              <CelulaKpi rotulo="Receita das assinaturas" valor={formatarBRL(resultado.receita)} />
               <CelulaKpi rotulo="Pote (100% da receita)" valor={formatarBRL(resultado.pote)} />
-              <CelulaKpi rotulo="Total de fichas" valor={`${resultado.fichasTotal} fichas`} />
-              <CelulaKpi rotulo="Valor de referência" valor={formatarBRL(resultado.producaoTotal)} />
+              <CelulaKpi rotulo="Produção total" valor={`${resultado.fichasTotal} fichas`} />
+              <CelulaKpi rotulo={`Comissão dos profissionais (${Math.round(resultado.comissaoPercentual * 100)}%)`} valor={formatarBRL(resultado.comissaoTotal)} />
               <CelulaKpi rotulo="Receita da empresa" valor={formatarBRL(resultado.receitaEmpresa)} />
             </div>
           </div>
+          {resultado.producaoTotal > 0 && (
+            <p className="mt-1.5 text-[12px] text-[#8A8171]">
+              Valor de referência da produção: {formatarBRL(resultado.producaoTotal)}
+            </p>
+          )}
 
           {resultado.fichasTotal <= 0 ? (
             <p className="mt-4 rounded-lg border border-dashed border-[#E5DCC3] px-4 py-3 text-[13px] text-[#8A8171]">

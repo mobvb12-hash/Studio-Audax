@@ -85,7 +85,7 @@ export function avisoDoStatus(status: StatusParaCliente): string {
 /* Benefícios: a mesma configuração oficial que o atendimento lê         */
 /* ------------------------------------------------------------------ */
 
-/** Projeção de `configuracoes_sistema.clube` (migration 034). */
+/** Projeção de `configuracoes_sistema.clube` (migration 034/035). */
 export type BeneficiosPublicos = {
   /** Categorias cobertas por plano — ilimitado dentro da vigência. */
   coberturas: Record<string, string[]>
@@ -93,12 +93,19 @@ export type BeneficiosPublicos = {
   desconto: { quimicos: number; produtos: number }
   /** Rótulos dos planos, quando a casa configurou texto próprio. */
   rotulos: Record<string, string>
+  /**
+   * Texto oficial de benefício por plano — é o MESMO `clube.beneficios` que a
+   * IA já lia. Quando a casa escreve a lista de benefits, a tela mostra a
+   * palavra dela em vez de remontar a frase a partir das coberturas.
+   */
+  textos: Record<string, string[]>
 }
 
 const BENEFICIOS_VAZIOS: BeneficiosPublicos = {
   coberturas: {},
   desconto: { quimicos: 0, produtos: 0 },
   rotulos: {},
+  textos: {},
 }
 
 /** Nomes de categoria que o dono costuma usar, por plano — NÃO é fallback. */
@@ -153,6 +160,17 @@ export function normalizarBeneficios(bruto: unknown): BeneficiosPublicos {
   for (const [plano, valor] of Object.entries(rotulosBrutos)) {
     if (typeof valor === 'string' && valor.trim() !== '') rotulos[plano] = valor
   }
+  // O texto oficial vem em `textos` (o `clube.beneficios` da casa), e não de
+  // `rotulos` — as duas coisas moram no mesmo objeto no banco.
+  const textosBrutos =
+    obj.textos && typeof obj.textos === 'object'
+      ? (obj.textos as Record<string, unknown>)
+      : {}
+  const textos: Record<string, string[]> = {}
+  for (const [plano, valor] of Object.entries(textosBrutos)) {
+    const lista = listaDeTexto(valor)
+    if (lista.length > 0) textos[plano] = lista
+  }
   return {
     coberturas,
     desconto: {
@@ -160,6 +178,7 @@ export function normalizarBeneficios(bruto: unknown): BeneficiosPublicos {
       produtos: fracao(descontoBruto.produtos),
     },
     rotulos,
+    textos,
   }
 }
 
@@ -181,17 +200,25 @@ function rotuloPadrao(plano: string): string {
 }
 
 /**
- * A lista de benefícios que o cliente lê, montada a partir da CONFIGURAÇÃO.
+ * A lista de benefícios que o cliente lê.
  *
- * Não existe texto de benefício escrito aqui: o que aparece é "cobertura das
- * categorias configuradas para este plano" e "os descontos configurados". Se
- * o dono mudar a configuração, a lista muda junto — e nunca pode mente sobre
- * um plano cancelado, porque `liberado` vem da regra do servidor.
+ * Prioridade:
+ *   1. o TEXTO OFICIAL da casa (`clube.beneficios`, o mesmo que a IA lê) —
+ *      é a palavra do dono, e é o que evita "cabelo, barba e cabelo e barba
+ *      ilimitados" na tela quando a cobertura do plano combinado inclui o
+ *      serviço combo;
+ *   2. senão, a derivação das coberturas e dos descontos do config.
+ *
+ * Em nenhum dos dois casos a tela decide direito do cliente: `liberado` vem da
+ * regra do servidor.
  */
 export function beneficiosDoPlano(
   plano: string,
   beneficios: BeneficiosPublicos | null | undefined,
 ): string[] {
+  const oficiais = beneficios?.textos?.[plano]
+  if (oficiais && oficiais.length > 0) return oficiais
+
   const lista: string[] = []
   /*
    * SEM fallback de categoria. Se a configuração não chegou, a tela não

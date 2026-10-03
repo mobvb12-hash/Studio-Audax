@@ -146,6 +146,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/032_permissoes_public_e_typo_calcular.sql',
   '../supabase/migrations/033_producao_total_do_snapshot.sql',
   '../supabase/migrations/034_clube_beneficios_publicos.sql',
+  '../supabase/migrations/035_clube_categorias_e_beneficios.sql',
 ])
   })
 
@@ -1491,5 +1492,109 @@ describe('033 · producao_total do snapshot é a produção', () => {
       /v_comissao := coalesce\(\(v_rateio ->> 'comissaoPercentual'\)::numeric, 0\.40\);/,
     )
     expect(texto).not.toMatch(/p_comissao/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 035 - a configuração que a casa nunca preencheu                       */
+/* ------------------------------------------------------------------ */
+
+describe('035 · categorias, químicos e texto dos benefícios', () => {
+  const bruto = sql('../supabase/migrations/035_clube_categorias_e_beneficios.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('corrige só o que estava errado, usando a taxonomia da casa', () => {
+    // "Alisamento Americano" estava como "Cabelo" — químico entrando como
+    // corte ilimitado. Passa para "Tratamento", que a casa já usava.
+    expect(texto).toMatch(/set categoria = 'Tratamento'/)
+    expect(texto).toMatch(/= 'alisamento americano'/)
+    // E a guarda garante que só mexe se ainda estiver errado.
+    expect(texto).toMatch(/and btrim\(coalesce\(categoria, ''\)\) = 'Cabelo';/)
+  })
+
+  it('NÃO inventa taxonomia: reusa "Tratamento", que já existia', () => {
+    // O app já sugere Cabelo/Barba/Cabelo e barba/Tratamento/Outro, e a casa
+    // já tinha "Tratamento" em Luzes, Platinado e Limpeza de Pele.
+    expect(texto).toMatch(/'\["Tratamento"\]'::jsonb/)
+    expect(texto).not.toMatch(/'\["Quimico"\]'::jsonb/)
+    expect(texto).not.toMatch(/Cabelo e barba/)
+  })
+
+  it('"Corte + Barba" fica como está: decisão do dono', () => {
+    // O dono optou por manter 'Cabelo' — Audax Corte e Audax Corte + Barba
+    // continuam com o combo de graça. Por isso a migration não toca nas
+    // coberturas dos planos.
+    expect(texto).not.toMatch(/'\{coberturas,cabelo_barba\}'/)
+    expect(texto).not.toMatch(/'\{coberturas,cabelo\}'/)
+    expect(texto).not.toMatch(/'\{coberturas,barba\}'/)
+  })
+
+  it('Sobrancelha NÃO entra como cobertura', () => {
+    expect(texto).toMatch(/'sobrancelha'/)
+    expect(texto).toMatch(/NÃO é cobertura do Club/)
+  })
+
+  it('os químicos entram com 10% e sem mexer no preço de tabela', () => {
+    expect(texto).toMatch(/'\{desconto,categorias\}'/)
+    // `servicos.preco` é a tabela oficial: esta migration não o altera.
+    expect(texto).not.toMatch(/set\s+preco/)
+    expect(texto).not.toMatch(/update public\.servicos\s+set\s+preco/)
+  })
+
+  it('a comissão oficial vai PARA A CONFIGURAÇÃO (não fica só no SQL)', () => {
+    // Em produção o bloco `comissao` não existia: as funções caíam no padrão
+    // 0.40 do próprio SQL. A regra oficial tem que estar no lugar onde o dono
+    // configura — e `jsonb_set` só cria o último passo, então o objeto
+    // intermediário precisa ser criado antes.
+    expect(texto).toMatch(/jsonb_set\(cfg, '\{comissao\}'/)
+    expect(texto).toMatch(/'\{comissao,percentual\}'/)
+    expect(texto).toMatch(/'0\.40'::jsonb/)
+  })
+
+  it('tira o pote.percentual que reapareceu, sem mexer no pote.ativo', () => {
+    // `pote.percentual` era "percentual da receita que entra no pote" — a
+    // ambiguidade que a 030 removeu. Nenhuma função o lê, mas deixá-lo gravado
+    // faz quem lê a configuração achar que o pote é 40% das mensalidades.
+    expect(texto).toMatch(/cfg -> 'pote' \? 'percentual'/)
+    expect(texto).toMatch(/- 'percentual'/)
+    // O botão de fechamento é do dono: a migration não mexe nele.
+    expect(texto).not.toMatch(/'\{pote,ativo\}'/)
+  })
+
+  it('é idempotente: nada duplica na segunda execução', () => {
+    expect(texto).toMatch(
+      /when jsonb_array_length\(\s*coalesce\(cfg -> 'desconto' -> 'categorias', '\[\]'::jsonb\)\) > 0/,
+    )
+    expect(texto).toMatch(/when cfg -> 'beneficios' -> 'cabelo' is not null/)
+    expect(texto).toMatch(/and cfg -> 'beneficios' -> 'barba' is not null/)
+    expect(texto).toMatch(/and cfg -> 'beneficios' -> 'cabelo_barba' is not null/)
+  })
+
+  it('ABORTA se a casa não estiver como o dono pediu', () => {
+    expect(texto).toMatch(/Configuração do Club divergente/)
+    expect(texto).toMatch(/A comissão do Club não está em 40/)
+    expect(texto).toMatch(/Os químicos não estão configurados/)
+    expect(texto).toMatch(/O campo pote\.percentual voltou a existir/)
+    // E barra o erro que motivou a migration: químico como cobertura.
+    expect(texto).toMatch(/entrou como COBERTURA de algum plano/)
+  })
+
+  it('a RPC pública passa a devolver o texto oficial dos benefícios', () => {
+    expect(texto).toMatch(/create or replace function public\.clube_beneficios_publicos\(\)/)
+    expect(texto).toMatch(/'textos', coalesce\(/)
+    expect(texto).toMatch(/jsonb_each\(coalesce\(cfg -> 'beneficios', '\{\}'::jsonb\)\)/)
+    expect(texto).toMatch(/where jsonb_typeof\(e\.valor\) = 'array'/)
+  })
+
+  it('a migration não cria regra de negócio nenhuma', () => {
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/create policy/i)
+    expect(texto).not.toMatch(/alter table/i)
+    // Nada da fórmula do pote é tocado aqui.
+    expect(texto).not.toMatch(/audax_clube_rateio/)
+    expect(texto).not.toMatch(/clube_pote_fechar/)
+    expect(texto).not.toMatch(/clube_pote_calcular/)
+    expect(texto).not.toMatch(/update public\.clube_producao/)
+    expect(texto).not.toMatch(/update public\.clube_assinaturas/)
   })
 })

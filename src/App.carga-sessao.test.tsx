@@ -106,8 +106,15 @@ describe('App — a carga do Supabase espera a sessão', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 
     // autenticado: a carga dos módulos roda com sessão
+    //
+    // O timeout é generoso de propósito: o que este teste verifica é o
+    // COMPORTAMENTO (nenhuma consulta sem sessão, consultas depois do login),
+    // não a velocidade da máquina. Com 148 arquivos rodando em paralelo, 3s
+    // estouravam de vez em quando e o teste falhava sem que nada do produto
+    // tivesse mudado. A asserção continua idêntica — só demos folga ao
+    // carregamento.
     await waitFor(() => expect(consultas.lista.length).toBeGreaterThan(0), {
-      timeout: 3000,
+      timeout: 15000,
     })
     const foraDaSessao = consultas.lista.filter((c) => !c.autenticado)
     expect(
