@@ -101,6 +101,38 @@ function primeiroDia() {
   return screen.getAllByRole('button', { name: /^Dia \d{4}/ })[0]
 }
 
+/**
+ * Abre uma categoria da sanfona — o mesmo gesto que a pessoa faz.
+ *
+ * As categorias vêm FECHADAS (é o desenho pedido, igual ao do Audax Club). Com
+ * estado controlado, "fechado" significa escondido de verdade, então o teste
+ * exercita o caminho real em vez de clicar num botão invisível.
+ */
+function abrirGrupo(categoria: string): void {
+  const botao = screen
+    .getAllByRole('button', { expanded: false })
+    .find((b) => (b.textContent ?? '').includes(categoria))
+  if (!botao) throw new Error(`categoria "${categoria}" não está na vitrine`)
+  fireEvent.click(botao)
+}
+
+/** Fecha a categoria, invertendo o que `abrirGrupo` fez. */
+function fecharGrupo(categoria: string): void {
+  const botao = screen
+    .getAllByRole('button', { expanded: true })
+    .find((b) => (b.textContent ?? '').includes(categoria))
+  if (!botao) throw new Error(`categoria "${categoria}" não está aberta`)
+  fireEvent.click(botao)
+}
+
+/** Abre a categoria e escolhe o serviço, como o caminho real da pessoa. */
+function escolherServicoNaVitrine(categoria: string, nome: string): void {
+  abrirGrupo(categoria)
+  fireEvent.click(
+    screen.getByRole('button', { name: new RegExp(`^${nome} - R\\$`) }),
+  )
+}
+
 function escolherDia(): string {
   const botao = primeiroDia()
   const rotulo = botao.getAttribute('aria-label') ?? ''
@@ -131,10 +163,12 @@ describe('vitrine (primeira tela)', () => {
     render(<AgendarPublico />)
 
     expect(await screen.findByText('Agende seu horário')).toBeTruthy()
-    // Serviço do catálogo, com nome e preço vindos do banco.
-    expect(screen.getByRole('button', { name: /^Corte Audax - R\$/ })).toBeTruthy()
     // Destaque do dono: mesmo serviço, botão de agendar.
     expect(screen.getByRole('button', { name: 'Agendar Barba' })).toBeTruthy()
+    // Serviço do catálogo, com nome e preço vindos do banco. Está na categoria
+    // Cabelo, então a linha é a que a pessoa lê antes de abrir.
+    abrirGrupo('Cabelo')
+    expect(screen.getByRole('button', { name: /^Corte Audax - R\$/ })).toBeTruthy()
   })
 
   it('cada serviço da lista tem o botão ESCOLHER escrito', async () => {
@@ -142,6 +176,7 @@ describe('vitrine (primeira tela)', () => {
     await screen.findByText('Agende seu horário')
 
     for (const nome of ['Corte Audax', 'Luzes']) {
+      abrirGrupo(nome === 'Corte Audax' ? 'Cabelo' : 'Tratamento')
       const cartao = screen.getByRole('button', { name: new RegExp(`^${nome} -`) })
       expect(cartao.textContent).toContain('Escolher')
       expect(cartao.textContent).toContain('min')
@@ -166,25 +201,43 @@ describe('vitrine (primeira tela)', () => {
     expect(screen.queryByText('Destaques da casa')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Agendar Barba' })).toBeNull()
     // E o serviço continua disponível na lista completa, dentro do grupo Barba.
+    abrirGrupo('Barba')
     expect(screen.getByRole('button', { name: /^Barba - R\$/ })).toBeTruthy()
   })
 
-  it('agrupa a lista pela categoria oficial da casa, e o primeiro grupo vem aberto', async () => {
+  it('agrupa pela categoria oficial da casa, com todas fechadas', async () => {
+    /*
+     * Nenhuma categoria começa aberta — é o mesmo desenho do Audax Club: uma
+     * linha fechada, e as opções aparecem abaixo quando a pessoa abre. Abrir
+     * uma é escolha de quem está olhando.
+     */
     catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    const grupos = screen.getAllByRole('group')
-    expect(grupos).toHaveLength(3)
-    expect(grupos.map((g) => g.getAttribute('open') !== null)).toEqual([
-      true,
-      false,
-      false,
+    const linhas = screen.getAllByRole('button', { expanded: false })
+    expect(linhas.map((l) => l.textContent ?? '')).toEqual([
+      expect.stringContaining('Cabelo'),
+      expect.stringContaining('Barba'),
+      expect.stringContaining('Tratamento'),
     ])
-    // A categoria é a que o dono digitou no cadastro — a sanfona não inventa.
-    expect(grupos[0].textContent).toContain('Cabelo')
-    expect(grupos[1].textContent).toContain('Barba')
-    expect(grupos[2].textContent).toContain('Tratamento')
+  })
+
+  it('as opções do serviço aparecem ABAIXO da linha da categoria', async () => {
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    // Fechado, o serviço não está na tela — nem para quem está lendo a linha.
+    expect(screen.queryByRole('button', { name: /^Corte Audax - R\$/ })).toBeNull()
+
+    abrirGrupo('Cabelo')
+    const cartao = screen.getByRole('button', { name: /^Corte Audax - R\$/ })
+    // Aberto, o serviço está DENTRO do painel da categoria, não solto na página.
+    const painel = screen.getByRole('button', { expanded: true, name: /Cabelo/ })
+    const alvo = document.getElementById(painel.getAttribute('aria-controls') ?? '')
+    expect(alvo).not.toBeNull()
+    expect(alvo?.contains(cartao)).toBe(true)
   })
 
   it('a linha fechada diz quantos serviços tem e a partir de quanto sai', async () => {
@@ -192,11 +245,12 @@ describe('vitrine (primeira tela)', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    const linhas = screen.getAllByRole('group').map((g) => g.textContent ?? '')
+    const linhas = screen.getAllByRole('button', { expanded: false })
+    const texto = linhas.map((l) => l.textContent ?? '')
     // "Cabelo" tem só o Corte; "Tratamento" tem as Luzes. O preço é formatado
     // pela MESMA função da tela — nada de "R$ 30,00" escrito no teste.
-    expect(linhas[0]).toContain(`1 serviço · a partir de ${formatarBRL(30)}`)
-    expect(linhas[2]).toContain(`1 serviço · a partir de ${formatarBRL(90)}`)
+    expect(texto[0]).toContain(`1 serviço · a partir de ${formatarBRL(30)}`)
+    expect(texto[2]).toContain(`1 serviço · a partir de ${formatarBRL(90)}`)
   })
 
   it('abre e fecha a sanfona', async () => {
@@ -204,9 +258,13 @@ describe('vitrine (primeira tela)', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    const grupos = screen.getAllByRole('group')
-    fireEvent.click(grupos[2].querySelector('summary') as HTMLElement)
-    expect(grupos[2].getAttribute('open')).not.toBeNull()
+    abrirGrupo('Tratamento')
+    expect(
+      screen.getByRole('button', { name: /^Luzes - R\$/ }),
+    ).toBeTruthy()
+
+    fecharGrupo('Tratamento')
+    expect(screen.queryByRole('button', { name: /^Luzes - R\$/ })).toBeNull()
   })
 
   it('serviço sem categoria vai para "Outros" em vez de sumir', async () => {
@@ -219,7 +277,65 @@ describe('vitrine (primeira tela)', () => {
     await screen.findByText('Agende seu horário')
 
     expect(screen.getByText('Outros')).toBeTruthy()
+    abrirGrupo('Outros')
     expect(screen.getByRole('button', { name: /^Pezinho - R\$/ })).toBeTruthy()
+  })
+
+  it('os destaques têm seta, porque sem barra visível o mouse não rola', async () => {
+    /*
+     * Regressão do que a tela mostrou: a barra de rolagem do carrossel é
+     * escondida e não havia seta nenhuma, então no mouse (Shift+roda do teclado
+     * ou não) os destaques depois do terceiro eram inalcançáveis. No toque o
+     * arrasto resolvia, e por isso o bug só aparecia no computador.
+     */
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      destaques: ['Barba', 'Corte Audax', 'Luzes'],
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    // jsdom não calcula layout: sem largura real não há overflow, então a
+    // resposta é dada com um elemento forçado a reportar que transborda.
+    const trilha = document.querySelector('ul.overflow-x-auto') as HTMLElement
+    let posicao = 0
+    Object.defineProperty(trilha, 'clientWidth', { value: 400, configurable: true })
+    Object.defineProperty(trilha, 'scrollWidth', { value: 1200, configurable: true })
+    Object.defineProperty(trilha, 'scrollLeft', {
+      get: () => posicao,
+      configurable: true,
+    })
+    // `scrollBy` também não existe no jsdom: o que interessa aqui é que a seta
+    // chame a rolagem NA DIREÇÃO CERTA, não que o pixel saia certo.
+    const rolar = vi.fn((passo: { left: number }) => {
+      posicao += passo.left
+    })
+    trilha.scrollBy = rolar as unknown as HTMLElement['scrollBy']
+    fireEvent.scroll(trilha)
+
+    const proxima = await screen.findByRole('button', { name: 'Mais destaques' })
+    const anterior = screen.getByRole('button', { name: 'Destaques anteriores' })
+    // No começo: só dá para ir para a frente.
+    expect((anterior as HTMLButtonElement).disabled).toBe(true)
+    expect((proxima as HTMLButtonElement).disabled).toBe(false)
+
+    fireEvent.click(proxima)
+    expect(posicao).toBeGreaterThan(0)
+    // Depois de rolar, as duas setas ficam disponíveis.
+    fireEvent.scroll(trilha)
+    expect((anterior as HTMLButtonElement).disabled).toBe(false)
+
+    fireEvent.click(anterior)
+    expect(posicao).toBeLessThan(400)
+  })
+
+  it('sem transbordo, as setas não aparecem', async () => {
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    // Um destaque só cabe na tela: seta de não ir a lugar nenhum é ruído.
+    expect(screen.queryByRole('button', { name: 'Mais destaques' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Destaques anteriores' })).toBeNull()
   })
 
   it('mostra a equipe, com a foto que a casa cadastrou', async () => {
@@ -398,7 +514,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
 
     expect(await screen.findByText('Escolha seu barbeiro')).toBeTruthy()
     // A vitrine some: uma etapa por vez.
@@ -408,7 +524,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('Cleiton e Ítalo aparecem juntos, com ESCOLHER', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
 
     const cleiton = await screen.findByRole('button', { name: 'Escolher Cleiton Silva' })
     const italo = screen.getByRole('button', { name: 'Escolher Italo Santos' })
@@ -419,7 +535,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('escolher o barbeiro abre os DIAS (não os horários)', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
 
     expect(await screen.findByText('Escolha o dia')).toBeTruthy()
@@ -432,7 +548,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('escolher o dia consulta a Agenda e mostra só horários livres', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     const dia = escolherDia()
@@ -450,7 +566,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
     slots.mockResolvedValue([])
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -462,7 +578,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('escolher o horário abre os complementos', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -476,7 +592,7 @@ describe('voltar', () => {
   it('volta uma etapa sem perder as escolhas', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     const dia = escolherDia()
@@ -496,11 +612,14 @@ describe('voltar', () => {
   it('voltar do barbeiro devolve para a vitrine com o serviço marcado', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     await screen.findByText('Escolha seu barbeiro')
 
     fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
     await waitFor(() => expect(screen.getByText('Agende seu horário')).toBeTruthy())
+    // A vitrine volta como estava: a categoria que a pessoa abriu continua
+    // aberta, e o serviço continua marcado.
+    expect(screen.getByRole('button', { expanded: true, name: /Cabelo/ })).toBeTruthy()
     const cartao = screen.getByRole('button', { name: /^Corte Audax - R\$/ })
     expect(cartao.getAttribute('aria-pressed')).toBe('true')
     expect(cartao.textContent).toContain('Escolhido')
@@ -517,7 +636,7 @@ describe('complementos', () => {
   async function ateComplementos() {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -596,7 +715,7 @@ describe('dados, resumo e confirmação', () => {
   async function ateResumo() {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -613,7 +732,7 @@ describe('dados, resumo e confirmação', () => {
   it('não deixa seguir sem nome e telefone', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: /^Corte Audax - R\$/ }))
+    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()

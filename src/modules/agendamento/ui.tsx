@@ -11,7 +11,7 @@
 // voltar, o cartão de serviço da vitrine e os blocos dela (galeria da casa,
 // carrossel de destaques, sanfona de serviços e equipe).
 // ============================================================================
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { dataLocal } from '@/lib/apresentacao'
 import { formatarBRL } from '@/lib/moeda'
@@ -460,10 +460,16 @@ function CartaoDestaque({
  * "Destaques da casa" em carrossel: os serviços que o DONO escolheu em
  * Configurações, na ordem que ele gravou.
  *
- * Rolagem horizontal com `snap` em vez de setas e bolinhas: no celular o
- * arrasto é o gesto que a pessoa já conhece e não exige ponteiro fino nem
- * estado de "qual slide está na tela" — que é o que quebraria se a lista
- * mudasse de tamanho depois de montada.
+ * Rolagem horizontal com `snap` e SETAS de navegação.
+ *
+ * A barra de rolagem é escondida de propósito, e é por isso que as setas não são
+ * enfeite: sem barra visível, quem está no mouse só teria Shift+roda do
+ * teclado — e a pessoa ficava sem alcance nenhum para os destaques depois do
+ * terceiro. No toque o arrasto resolve; no clique, a seta. Com as duas, não
+ * sobra aparelho sem caminho.
+ *
+ * As setas somem quando não há o que rolar e travam nas pontas, então elas
+ * não prometem um movimento que não existe.
  */
 export function CarrosselDestaques({
   servicos,
@@ -474,10 +480,71 @@ export function CarrosselDestaques({
   selecionado: string
   aoEscolher: (nome: string) => void
 }) {
+  const trilha = useRef<HTMLUListElement | null>(null)
+  const [rolagem, setRolagem] = useState({ voltar: false, avancar: false, extra: false })
+
+  /*
+   * Medir em vez de adivinhar: se a lista couber na tela, ou se a pessoa já
+   * chegou ao fim, a seta desliga. Ouvir `scroll` (e o redimensionar da janela)
+   * é o que mantém isso certo depois de montado — o conteúdo muda de largura
+   * conforme a tela, os serviços mudam de ordem quando o dono edita, e um
+   * "tem mais?" calculado uma vez na montagem vira mentira em minutos.
+   */
+  useEffect(() => {
+    const el = trilha.current
+    if (!el) return
+    const medir = () => {
+      const sobra = el.scrollWidth - el.clientWidth
+      setRolagem({
+        voltar: el.scrollLeft > 1,
+        avancar: sobra > 1 && el.scrollLeft < sobra - 1,
+        extra: sobra > 1,
+      })
+    }
+    medir()
+    el.addEventListener('scroll', medir, { passive: true })
+    window.addEventListener('resize', medir)
+    return () => {
+      el.removeEventListener('scroll', medir)
+      window.removeEventListener('resize', medir)
+    }
+  }, [servicos.length])
+
+  function mover(direcao: -1 | 1) {
+    const el = trilha.current
+    if (!el) return
+    el.scrollBy({ left: direcao * el.clientWidth * 0.82, behavior: 'smooth' })
+  }
+
   if (servicos.length === 0) return null
+
   return (
     <div>
-      <ul className={`-mx-4 flex snap-x snap-mandatory gap-3 px-4 sm:-mx-6 sm:px-6 ${SEM_BARRA}`}>
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <h2 className="text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+          Destaques da casa
+        </h2>
+        {rolagem.extra && (
+          <span className="flex shrink-0 items-center gap-1.5">
+            <SetaDestaque
+              rotulo="Destaques anteriores"
+              paraEsquerda
+              desabilitado={!rolagem.voltar}
+              aoClicar={() => mover(-1)}
+            />
+            <SetaDestaque
+              rotulo="Mais destaques"
+              desabilitado={!rolagem.avancar}
+              aoClicar={() => mover(1)}
+            />
+          </span>
+        )}
+      </div>
+
+      <ul
+        ref={trilha}
+        className={`-mx-4 flex snap-x snap-mandatory gap-3 px-4 sm:-mx-6 sm:px-6 ${SEM_BARRA}`}
+      >
         {servicos.map((s) => (
           <CartaoDestaque
             key={s.nome}
@@ -489,12 +556,44 @@ export function CarrosselDestaques({
           />
         ))}
       </ul>
-      {servicos.length > 1 && (
+      {rolagem.extra && (
         <p className="mt-2 text-[11.5px] text-noir-400">
-          Arraste para ver os outros destaques.
+          Arraste ou use as setas para ver os outros {servicos.length - 1}{' '}
+          {servicos.length - 1 === 1 ? 'destaque' : 'destaques'}.
         </p>
       )}
     </div>
+  )
+}
+
+/** Seta do carrossel: 40px de alvo, sem sumir quando não há para onde ir. */
+function SetaDestaque({
+  rotulo,
+  desabilitado,
+  paraEsquerda,
+  aoClicar,
+}: {
+  rotulo: string
+  desabilitado: boolean
+  paraEsquerda?: boolean
+  aoClicar: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={aoClicar}
+      disabled={desabilitado}
+      aria-label={rotulo}
+      className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+        desabilitado
+          ? 'cursor-not-allowed border-cream-200 text-noir-300'
+          : 'border-cream-300 bg-cream-50 text-noir-800 hover:border-gold-500 hover:bg-cream-100'
+      }`}
+    >
+      <span aria-hidden="true" className="text-[13px] leading-none">
+        {paraEsquerda ? '◀' : '▶'}
+      </span>
+    </button>
   )
 }
 
@@ -510,65 +609,91 @@ function menorPreco(servicos: { preco: number }[]): number {
  * categoria que a equipe digita no cadastro. Serviço sem categoria cai em
  * "Outros" em vez de sumir.
  *
- * A LINHA FECHADA carrega a informação que faz a pessoa abrir: quantos serviços
- * tem e a partir de quanto sai. Uma linha que só escreve "Cabelo" obriga a
- * pessoa a abrir tudo para saber se o que ela quer está ali — e era
- * exatamente por não ver os serviços que a vitrine anterior ficou ruim.
+ * MESMO DESENHO DO AUDAX CLUB: uma linha fechada, e as opções aparecem abaixo
+ * quando a pessoa abre. Nenhuma categoria começa aberta — abrir uma é escolha
+ * de quem está olhando, e uma lista que já vem esticada é o que empurra o resto
+ * da página para baixo. O que a linha fechada garante é que ninguém precisa
+ * abrir para saber se o serviço está ali: ela diz quantos são e a partir de
+ * quanto sai.
  *
- * Só o PRIMEIRO grupo vem aberto, para o caminho do agendamento ter um ponto de
- * partida visível sem depender de toque. Os demais abrem com um clique, e o
- * navegador guarda o estado depois — quem abriu, continua aberto.
+ * Abertura é CONTROLADA de propósito, e por dois motivos:
+ *
+ *   1. `voltar` da etapa do barbeiro remonta a vitrine. Um `<details>` sem
+ *      controle reabriria fechado e apagaria do jeito que a pessoa abriu.
+ *      Quem guarda a lista de abertas é o componente do fluxo, que não
+ *      desmonta entre etapas.
+ *   2. Botão com `aria-expanded` em vez de `<details>`: aqui o estado é
+ *      nosso, e "fechado" tem que SIGNIFICAR escondido. Com `<details>` o
+ *      navegador decide o que sumir, o que deixa o comportamento dos testes
+ *      diferente do comportamento da tela.
  */
 export function SanfonaServicos({
   grupos,
+  abertos,
   selecionado,
+  aoAlternar,
   aoEscolher,
 }: {
   grupos: { categoria: string; servicos: { nome: string; preco: number; duracaoMin: number }[] }[]
+  abertos: string[]
   selecionado: string
+  aoAlternar: (categoria: string) => void
   aoEscolher: (nome: string) => void
 }) {
   return (
     <div className="flex flex-col gap-2">
-      {grupos.map((grupo, indice) => (
-        <details
-          key={grupo.categoria}
-          open={indice === 0}
-          className="group rounded-2xl border border-cream-300 bg-cream-50"
-        >
-          <summary className="flex min-h-[58px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-            <span className="min-w-0">
-              <span className="block text-[15px] leading-snug font-semibold text-noir-900">
-                {grupo.categoria}
-              </span>
-              <span className="mt-0.5 block text-[12.5px] text-noir-500">
-                {grupo.servicos.length}{' '}
-                {grupo.servicos.length === 1 ? 'serviço' : 'serviços'} · a partir
-                de {formatarBRL(menorPreco(grupo.servicos))}
-              </span>
-            </span>
-            <span
-              aria-hidden="true"
-              className="shrink-0 text-[11px] text-noir-400 transition-transform group-open:rotate-180"
+      {grupos.map((grupo) => {
+        const aberta = abertos.includes(grupo.categoria)
+        const painel = `painel-${grupo.categoria}`
+        return (
+          <div
+            key={grupo.categoria}
+            className="overflow-hidden rounded-2xl border border-cream-300 bg-cream-50"
+          >
+            <button
+              type="button"
+              onClick={() => aoAlternar(grupo.categoria)}
+              aria-expanded={aberta}
+              aria-controls={painel}
+              className="flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
             >
-              ▼
-            </span>
-          </summary>
-          <ul className="flex flex-col gap-2 px-3 pb-3">
-            {grupo.servicos.map((s) => (
-              <li key={s.nome}>
-                <CartaoServicoVitrine
-                  nome={s.nome}
-                  preco={s.preco}
-                  duracaoMin={s.duracaoMin}
-                  selecionado={selecionado === s.nome}
-                  aoEscolher={() => aoEscolher(s.nome)}
-                />
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
+              <span className="min-w-0">
+                <span className="block text-[15px] leading-snug font-semibold text-noir-900">
+                  {grupo.categoria}
+                </span>
+                <span className="mt-0.5 block text-[12.5px] text-noir-500">
+                  {grupo.servicos.length}{' '}
+                  {grupo.servicos.length === 1 ? 'serviço' : 'serviços'} · a
+                  partir de {formatarBRL(menorPreco(grupo.servicos))}
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className={`shrink-0 text-[11px] text-noir-400 transition-transform ${
+                  aberta ? 'rotate-180' : ''
+                }`}
+              >
+                ▼
+              </span>
+            </button>
+            {aberta && (
+              <ul id={painel} className="flex flex-col gap-2 px-3 pb-3">
+                {grupo.servicos.map((s) => (
+                  <li key={s.nome}>
+                    <CartaoServicoVitrine
+                      nome={s.nome}
+                      preco={s.preco}
+                      duracaoMin={s.duracaoMin}
+                      selecionado={selecionado === s.nome}
+                      aoEscolher={() => aoEscolher(s.nome)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

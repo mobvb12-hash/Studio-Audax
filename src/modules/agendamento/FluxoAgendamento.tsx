@@ -87,6 +87,24 @@ export default function FluxoAgendamento() {
   const [estado, setEstado] = useState<EstadoAgendamento>(ESTADO_VAZIO)
   const [etapa, setEtapa] = useState<Etapa>('servico')
 
+  /*
+   * Categorias que a pessoa abriu na sanfona.
+   *
+   * É apresentação, e por isso mora aqui e não na máquina de estados — mas
+   * mora NESTE componente, que não desmonta entre etapas. Sem isso, voltar do
+   * barbeiro remontaria a vitrine com todas as categorias fechadas e a pessoa
+   * perderia de vista o serviço que acabou de escolher.
+   */
+  const [categoriasAbertas, setCategoriasAbertas] = useState<string[]>([])
+
+  const alternarCategoria = useCallback((categoria: string) => {
+    setCategoriasAbertas((atual) =>
+      atual.includes(categoria)
+        ? atual.filter((c) => c !== categoria)
+        : [...atual, categoria],
+    )
+  }, [])
+
   // Horários do dia escolhido — sempre da Agenda, nunca calculados aqui.
   const [slots, setSlots] = useState<string[]>([])
   const [carregandoSlots, setCarregandoSlots] = useState(false)
@@ -377,6 +395,8 @@ export default function FluxoAgendamento() {
       erro={erro}
       enviando={enviando}
       confirmado={confirmado}
+      categoriasAbertas={categoriasAbertas}
+      aoAlternarCategoria={alternarCategoria}
       aoEscolherServico={escolherServico}
       aoEscolherProfissional={escolherProfissional}
       aoEscolherData={escolherData}
@@ -419,6 +439,9 @@ type PropsEtapa = {
     horario: string
     valor: number
   } | null
+  /** Categorias abertas na sanfona — sobrevive ao `voltar` entre etapas. */
+  categoriasAbertas: string[]
+  aoAlternarCategoria: (categoria: string) => void
   aoEscolherServico: (nome: string) => void
   aoEscolherProfissional: (nome: string) => void
   aoEscolherData: (iso: string) => void
@@ -491,6 +514,8 @@ function normalizarDestaques(
 function EtapaServicos({
   catalogo,
   estado,
+  categoriasAbertas,
+  aoAlternarCategoria,
   aoEscolherServico,
 }: PropsEtapa) {
   const destaques = normalizarDestaques(catalogo.destaques, catalogo.servicos)
@@ -516,9 +541,6 @@ function EtapaServicos({
         <div className="min-w-0">
           {destaques.length > 0 && (
             <section className="mb-7">
-              <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
-                Destaques da casa
-              </h2>
               <CarrosselDestaques
                 servicos={destaques}
                 selecionado={estado.servicoNome}
@@ -533,7 +555,9 @@ function EtapaServicos({
             </h2>
             <SanfonaServicos
               grupos={agruparPorCategoria(resto)}
+              abertos={categoriasAbertas}
               selecionado={estado.servicoNome}
+              aoAlternar={aoAlternarCategoria}
               aoEscolher={aoEscolherServico}
             />
           </section>

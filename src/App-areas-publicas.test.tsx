@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import App from './App'
 
 /**
@@ -79,6 +79,7 @@ vi.mock('@/services/supabase/agendaPublica', () => ({
           nome: 'Corte',
           preco: 30,
           duracaoMin: 30,
+          categoria: 'Cabelo',
           complementos: [],
         },
       ],
@@ -157,7 +158,12 @@ describe('App — /agendar abre o agendamento público, sem porta de staff', () 
     ficaEm('/agendar')
     render(<App />)
 
-    expect(await screen.findByText('Corte')).toBeTruthy()
+    // A categoria vem fechada, como a do Audax Club: quem abre é quem está
+    // olhando. Então o gesto da pessoa vem antes da conferência do botão.
+    // `queryAllBy` e não `getAllBy`: `getAll` lança exceção quando não acha.
+    const linha = await screen.findByRole('button', { name: /Cabelo/ })
+    expect(screen.queryAllByText('Escolher')).toHaveLength(0)
+    fireEvent.click(linha)
     expect(screen.getAllByText('Escolher').length).toBeGreaterThan(0)
   })
 })
