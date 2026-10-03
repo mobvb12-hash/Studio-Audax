@@ -144,6 +144,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/030_pote_integral_e_comissao.sql',
   '../supabase/migrations/031_comissao_somente_do_dono.sql',
   '../supabase/migrations/032_permissoes_public_e_typo_calcular.sql',
+  '../supabase/migrations/033_producao_total_do_snapshot.sql',
 ])
   })
 
@@ -1393,6 +1394,46 @@ describe('032 · revoga o PUBLIC que o PostgreLab dá por padrão', () => {
   it('a guarda de papel do corpo continua intacta', () => {
     expect(texto).toMatch(/if not public\.current_user_is_gerente_ou_acima\(\) then/)
     // E a comissão continua vindo da configuração, não de parâmetro.
+    expect(texto).not.toMatch(/p_comissao/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 033 - o snapshot congela a PRODUÇÃO, não o pote                     */
+/* ------------------------------------------------------------------ */
+
+describe('033 · producao_total do snapshot é a produção', () => {
+  const bruto = sql('../supabase/migrations/033_producao_total_do_snapshot.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('a coluna producao_total recebe a referência da produção', () => {
+    // A 030 gravava o pote duas vezes: na coluna pote e na producao_total.
+    expect(texto).toMatch(/\(v_rateio ->> 'producaoReferencia'\)::numeric/)
+  })
+
+  it('os valores gravados saem na ordem das colunas', () => {
+    const valores = texto.slice(texto.indexOf('values ('))
+    const ordem = [...valores.matchAll(/\(v_rateio ->> '(\w+)'\)/g)].map((m) => m[1])
+    // insert: receita, percentual(100), pote, producao_total, fichas_total,
+    //         comissao_percentual, comissao_total, receita_empresa, partes...
+    expect(ordem.slice(0, 5)).toEqual([
+      'receita',
+      'pote',
+      'producaoReferencia',
+      'fichasTotal',
+      'comissaoTotal',
+    ])
+  })
+
+  it('a trava contra rateio quebrado e as guardas continuam no corpo', () => {
+    expect(texto).toMatch(/O rateio não fecha: soma das parcelas R\$ % difere do pote R\$ %/)
+    expect(texto).toMatch(/Já existe fechamento do pote para este período\./)
+    expect(texto).toMatch(/Não há ficha de Club no período para distribuir\./)
+    expect(texto).toMatch(/if not public\.current_user_is_gerente_ou_acima\(\) then/)
+    // E o rateio ainda recebe a comissão da configuração, não de parâmetro.
+    expect(texto).toMatch(
+      /v_comissao := coalesce\(\(v_rateio ->> 'comissaoPercentual'\)::numeric, 0\.40\);/,
+    )
     expect(texto).not.toMatch(/p_comissao/)
   })
 })
