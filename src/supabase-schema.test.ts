@@ -155,6 +155,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/040_expediente_por_dia.sql',
   '../supabase/migrations/041_perfis_e_conta_do_cliente.sql',
   '../supabase/migrations/042_perfis_permissoes.sql',
+  '../supabase/migrations/043_perfis_papel_check.sql',
 ])
   })
 
@@ -2178,5 +2179,40 @@ describe('042 - exceção por pessoa sem criar um segundo modelo de papel', () =
     expect(texto).toContain('raise exception')
     // se o dono algum dia ganhar linha, o push quebra em vez de segurar
     expect(texto).toMatch(/perfis_permissoes nao pode ter linha de dono/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 043 - a check de perfis.papel que ficou para trás da 001 editada     */
+/* ------------------------------------------------------------------ */
+
+describe('043 - perfis.papel aceita os cinco papéis oficiais', () => {
+  const bruto = sql('../supabase/migrations/043_perfis_papel_check.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('só troca a constraint de perfis, e ela vêm com os cinco valores', () => {
+    expect(texto).toContain('alter table public.perfis drop constraint if exists perfis_papel_check')
+    // os mesmos de PapelPerfil (modules/auth/tipos.ts) e do arquivo 001
+    for (const papel of ['dono', 'admin', 'gerente', 'recepcao', 'profissional']) {
+      expect(texto, papel).toContain(`'${papel}'`)
+    }
+    // nenhuma outra tabela, coluna ou política é tocada
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/add column/i)
+    expect(texto).not.toMatch(/create policy|drop policy|enable row level security/i)
+    expect(texto).not.toMatch(/alter table public\.(?!perfis\b)/i)
+    // e nada destrutivo: nenhum dado e nenhuma tabela caem
+    expect(texto).not.toMatch(/\bdelete from\b|\btruncate\b|\bdrop table\b|\bdrop column\b/i)
+  })
+
+  it('a verificação embutida falha alto se dono/gerente continuarem fora', () => {
+    expect(texto).toContain("conname = 'perfis_papel_check'")
+    expect(texto).toContain("like '%dono%'")
+    expect(texto).toContain("like '%gerente%'")
+    expect(texto).toContain('raise exception')
+  })
+
+  it('não cria regra entre papel e vínculo profissional', () => {
+    expect(texto).not.toMatch(/profissionais|user_id\s*is\s+not\s+null/i)
   })
 })
