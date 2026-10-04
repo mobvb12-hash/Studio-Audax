@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import BlocoBarbearia from '@/modules/painel/telas/BlocoBarbearia'
 import { SecaoAudaxClub } from './club'
 import { irParaAreaDoCliente } from '@/modules/painel/regras'
+import { formatarBRL } from '@/lib/moeda'
 import {
   carregarCatalogo,
   criarAgendamentoPublico,
@@ -35,6 +36,7 @@ import {
   ESTADO_VAZIO,
   invalidateHorarioSeNaoCabe,
   selecao,
+  servicosAdicionais,
   type EstadoAgendamento,
   type Etapa,
   type ItemCatalogo,
@@ -399,6 +401,7 @@ export default function FluxoAgendamento() {
       disponiveis={disponiveis}
       duracaoMin={duracaoMin}
       valor={valor}
+      valorBase={base?.preco ?? 0}
       slots={slots}
       carregandoSlots={carregandoSlots}
       erro={erro}
@@ -435,6 +438,8 @@ type PropsEtapa = {
   disponiveis: ReturnType<typeof selecao>['complementos']
   duracaoMin: number
   valor: number
+  /** Preco do servico base sozinho, para o total dos extras na tela de extras. */
+  valorBase: number
   slots: string[]
   carregandoSlots: boolean
   erro: string
@@ -550,6 +555,18 @@ function EtapaServicos({
         </h1>
         <p className="mt-2 max-w-sm text-[14.5px] leading-relaxed text-noir-500">
           Escolha o serviço e a gente cuida do resto.
+        </p>
+        {/*
+          * A DICA que converte.
+          *
+          * Ninguém combina dois serviços porque a tela pediu: combina porque
+          *ocorreu de ver que dá. Dizer isso ANTES da escolha é o que faz a
+          * pessoa pensar "então vou levar a sobrancelha também" — e o caminho
+          * para isso já existe, na etapa de extras. Sem a dica, o adicional
+          * aparece como cobrança surpresa no fim.
+          */}
+        <p className="mt-1.5 max-w-sm text-[13px] text-noir-400">
+          Dá para incluir outro serviço no mesmo horário — você escolhe depois.
         </p>
       </header>
 
@@ -710,16 +727,49 @@ function EtapaHorario({
   )
 }
 
+/**
+ * "Quer completar seu atendimento?" — o "adicionar também".
+ *
+ * A pergunta aqui é "quero fazer mais alguma coisa hoje?", e a resposta honesta
+ * é QUALQUER serviço do catálogo. A configuração `servicos.complementos` deixa
+ * de ser uma lista fechada — quando estava vazia (que era o caso), a etapa não
+ * oferecia nada e quem queria corte + barba + sobrancelha não tinha como pedir
+ * os três. Agora a configuração decide a ORDEM de leitura: o que a casa sugeriu
+ * vem primeiro, e o resto do catálogo vem logo abaixo.
+ *
+ * Três coisas que fazem isso_reviewar bem em vez de virar uma lista de compras:
+ *
+ *   • NADA vem marcado. Extra pré-marcado é taxa escondida, e a pessoa
+ *     descobriria o valor dobrado só no resumo.
+ *   • O preço e a duração de cada extra aparecem na linha, e o total é
+ *     recalculado na hora — com aviso quando o horário escolhido deixa de
+ *     caber, em vez de prometer um horário que o servidor recusa.
+ *   • Quem não quiser nada leva o botão "Continuar" sem penalidade: pular
+ *     extras é uma escolha legítima, não um erro de caminho.
+ */
 function EtapaComplementos({
   estado,
-  disponiveis,
   erro,
   aoAlternarComplemento,
   aoVoltar,
   aoAvancar,
   catalogo,
+  valor,
+  valorBase,
 }: PropsEtapa) {
   const prosseguir = () => aoAvancar('dados')
+  const base = catalogo.servicos.find((s) => s.nome === estado.servicoNome)
+  const { sugeridos, outros } = useMemo(
+    () => servicosAdicionais(catalogo.servicos, estado.servicoNome),
+    [catalogo.servicos, estado.servicoNome],
+  )
+  // O que a CASA marcou para este serviço vem primeiro; o resto do catálogo
+  // abaixo. A lista nunca fica vazia enquanto houver outro serviço cadastrado.
+  const grupos = [
+    { titulo: 'Sugestões da casa', itens: sugeridos },
+    { titulo: 'Outros serviços', itens: outros },
+  ].filter((g) => g.itens.length > 0)
+
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
       <Progresso etapa="complementos" />
@@ -727,48 +777,92 @@ function EtapaComplementos({
         etapa="complementos"
         titulo="Quer completar seu atendimento?"
         descricao={
-          disponiveis.length === 0
-            ? 'A casa não cadastrou complementos para este serviço.'
-            : 'Sugestões da casa para este serviço. Nada é cobrado sem você escolher.'
+          grupos.length === 0
+            ? 'Este é o único serviço do catálogo por enquanto.'
+            : `Além de ${base?.nome ?? 'o serviço escolhido'}, você pode incluir outro no mesmo horário. Nada é cobrado sem você escolher.`
         }
         voltar={aoVoltar}
       >
         {erro && <Aviso texto={erro} />}
-        <div className="flex flex-col gap-2">
-          {disponiveis.map((c) => {
-            const marcado = Boolean(c.id) && estado.complementoIds.includes(c.id as string)
-            return (
-              <button
-                key={c.id ?? c.nome}
-                type="button"
-                onClick={() => c.id && aoAlternarComplemento(c.id)}
-                aria-pressed={marcado}
-                className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-                  marcado
-                    ? 'border-gold-600 bg-gold-200/50'
-                    : 'border-cream-300 bg-cream-50 hover:border-gold-400'
-                }`}
-              >
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold text-noir-900">
-                    {c.nome}
-                  </span>
-                  <span className="block text-[12.5px] text-noir-500">
-                    {c.duracaoMin} min
-                  </span>
+
+        {/*
+          * O total ANTES de continuar, e o que os extras acrescentam.
+          *
+          * A pessoa não deve descobrir o preço final no resumo: se a soma só
+          * aparece no fim, o "adicione mais um" vira uma surpresa e a taxa
+          * parece terdobrado sozinha.
+          */}
+        {grupos.length > 0 && (
+          <div
+            role="group"
+            aria-label="Total do atendimento"
+            className="mb-4 rounded-xl border border-cream-300 bg-cream-100 px-4 py-3"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] text-noir-600">
+                {base?.nome ?? 'Serviço'}{' '}
+                <span className="tabular-nums">
+                  {formatarBRL(valorBase)}
                 </span>
-                <span className="shrink-0 text-right">
-                  <span className="block text-[14px] font-semibold text-noir-800">
-                    R$ {c.preco.toFixed(2).replace('.', ',')}
-                  </span>
-                  <span className="block text-[10.5px] font-bold tracking-[0.1em] text-gold-700 uppercase">
-                    {marcado ? 'Adicionado' : 'Adicionar'}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+              </span>
+              <span className="text-[15px] font-semibold tabular-nums text-noir-900">
+                {formatarBRL(valor)}
+              </span>
+            </div>
+            {valor > valorBase && (
+              <p className="mt-1 text-[12.5px] text-noir-500">
+                Incluindo o que você adicionou. O horário continua o mesmo se
+                der tempo; se não der, a gente pede outro.
+              </p>
+            )}
+          </div>
+        )}
+
+        {grupos.map((grupo) => (
+          <section key={grupo.titulo} className="mb-4">
+            <h2 className="mb-2 text-[11.5px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
+              {grupo.titulo}
+            </h2>
+            <div className="flex flex-col gap-2">
+              {grupo.itens.map((c) => {
+                const marcado =
+                  Boolean(c.id) && estado.complementoIds.includes(c.id as string)
+                return (
+                  <button
+                    key={c.id ?? c.nome}
+                    type="button"
+                    onClick={() => c.id && aoAlternarComplemento(c.id)}
+                    aria-pressed={marcado}
+                    aria-label={`${marcado ? 'Remover' : 'Adicionar'} ${c.nome}`}
+                    className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                      marcado
+                        ? 'border-gold-600 bg-gold-200/50'
+                        : 'border-cream-300 bg-cream-50 hover:border-gold-400'
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-[15px] font-semibold text-noir-900">
+                        {c.nome}
+                      </span>
+                      <span className="block text-[12.5px] text-noir-500">
+                        {c.duracaoMin} min
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[14px] font-semibold tabular-nums text-noir-800">
+                        {formatarBRL(c.preco)}
+                      </span>
+                      <span className="block text-[10.5px] font-bold tracking-[0.1em] text-gold-700 uppercase">
+                        {marcado ? 'Adicionado' : 'Adicionar'}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        ))}
+
         <div className="mt-5">
           <Botao aoClicar={prosseguir} variante="primario">
             Continuar

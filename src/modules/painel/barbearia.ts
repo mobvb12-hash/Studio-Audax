@@ -1,5 +1,6 @@
 import type { BarbeariaPublica } from '@/services/supabase/agendaPublica'
 
+
 /**
  * Links públicos da barbearia — derivados dos DADOS OFICIAIS configurados,
  * nunca digitados aqui.
@@ -87,3 +88,47 @@ export function temDadosDaBarbearia(barbearia: BarbeariaPublica): boolean {
       barbearia.instagram.trim(),
   )
 }
+
+/**
+ * Horário de funcionamento, agrupado por dia.
+ *
+ * "Segunda a sexta" é um AGRUPAMENTO de leitura, não uma regra: se os cinco
+ * dias não tiverem o mesmo horário, caem em linhas separadas. Isso é o que
+ * segura a tela honesta quando a casa muda o sábado — em vez de prometer o
+ * horário de segunda numa sexta que fecha mais cedo.
+ *
+ * Só mostra o que a casa configurou (`barbearia.horarios`). Dia sem entrada
+ * usa o expediente geral da Agenda, que não é público aqui:omitir é melhor que
+ * chutar. Com o mesmo conjunto, `agenda_expediente_do_dia` monta a grade.
+ */
+export function linhasDeHorario(
+  horarios: BarbeariaPublica['horarios'],
+): { nome: string; texto: string }[] {
+  if (!horarios) return []
+  const hora = (chave: string) => {
+    const d = horarios[chave]
+    return d ? `${d.inicio} às ${d.fim}` : ''
+  }
+  const linhas: { nome: string; texto: string }[] = []
+  const semana = ['1', '2', '3', '4', '5'].map(hora).filter(Boolean)
+  if (semana.length === 5 && new Set(semana).size === 1) {
+    linhas.push({ nome: 'Segunda a sexta', texto: semana[0] })
+  } else {
+    for (const [chave, nome] of [
+      ['1', 'Segunda'],
+      ['2', 'Terça'],
+      ['3', 'Quarta'],
+      ['4', 'Quinta'],
+      ['5', 'Sexta'],
+    ] as const) {
+      const texto = hora(chave)
+      if (texto) linhas.push({ nome, texto })
+    }
+  }
+  const sabado = hora('6')
+  if (sabado) linhas.push({ nome: 'Sábado', texto: sabado })
+  const domingo = hora('0')
+  if (domingo) linhas.push({ nome: 'Domingo', texto: domingo })
+  return linhas
+}
+

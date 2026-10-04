@@ -7,6 +7,7 @@ import {
   rotuloTelefone,
   temDadosDaBarbearia,
 } from '../barbearia'
+import { linhasDeHorario } from '../barbearia'
 import { BotaoLink } from '../ui'
 
 /**
@@ -22,7 +23,8 @@ export default function BlocoBarbearia({
 }: {
   barbearia: BarbeariaPublica
 }) {
-  if (!temDadosDaBarbearia(barbearia)) return null
+  const horarios = linhasDeHorario(barbearia.horarios)
+  if (!temDadosDaBarbearia(barbearia) && horarios.length === 0) return null
 
   const mapa = linkMapa(barbearia)
   const whatsapp = linkWhatsapp(barbearia)
@@ -60,6 +62,29 @@ export default function BlocoBarbearia({
       </div>
 
       <dl className="mb-4 flex flex-col gap-2.5">
+        {/*
+          * HORÁRIO DE FUNCIONAMENTO.
+          *
+          * Fica no mesmo bloco dos outros dados da casa porque é o mesmo dado.
+          * E só aparece o que a casa cadastrou: a vitrine não completa horário
+          * faltante com palpite, senão o cliente aparece na hora errada.
+          */}
+        {horarios.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <dt className="text-[11px] font-semibold tracking-[0.12em] text-noir-400 uppercase">
+              Horário
+            </dt>
+            {horarios.map((linha) => (
+              <dd
+                key={linha.nome}
+                className="flex items-baseline justify-between gap-3 text-[13.5px] text-noir-800"
+              >
+                <span className="shrink-0 text-noir-600">{linha.nome}</span>
+                <span className="text-right tabular-nums">{linha.texto}</span>
+              </dd>
+            ))}
+          </div>
+        )}
         {telefone && (
           <div className="flex items-baseline gap-2">
             <dt className="shrink-0 text-[11px] font-semibold tracking-[0.12em] text-noir-400 uppercase">

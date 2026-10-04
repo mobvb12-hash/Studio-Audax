@@ -22,11 +22,13 @@ import {
   CHAVES_CONFIG,
   CONFIG_PADRAO,
   DESCRICAO_CHAVE,
+  DIAS_SEMANA,
   problemaNaConfig,
   ROTULO_CHAVE,
   valorDaChave,
   type ChaveConfig,
   type Configuracoes,
+  type HorarioDia,
 } from '@/modules/configuracoes/types'
 
 function Botao({
@@ -423,6 +425,100 @@ export default function Configuracoes() {
             </ul>
           </div>
         )}
+        {/*
+          * HORÁRIO DE FUNCIONAMENTO.
+
+          * É a mesma configuração que `agenda_expediente_do_dia` (migration 040)
+          * lê para montar a grade de horários — o que a vitrine mostra e o que a
+          * Agenda oferece saem daqui. Antes o sistema agendava 08:00 às 20:00
+          * todo dia, e a página não podia dizer "fecha às 19:00" oferecendo
+          * horário que a casa não atende.
+
+          * Dia sem marcação usa o expediente geral da Agenda, que a equipe
+          * edita na tela da Agenda. Então aqui a casa escreve só o que é
+          * DIFERENTE do padrão — que é o dia a dia dela.
+          */}
+        <div className="mt-4 rounded-lg border border-[#E5DCC3] p-4">
+          <p className={ROTULO_FORM}>Horário de funcionamento</p>
+          <p className="mt-1 text-xs text-[#8A8171]">
+            Dia que ficar em branco usa o expediente geral da Agenda. O que você
+            escrever aqui é o que o cliente lê no site E o que o sistema oferece
+            para agendar.
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {DIAS_SEMANA.map((dia) => {
+              const atual = dados.barbearia.horarios[dia.chave]
+              const marcado = Boolean(atual)
+              const definir = (campo: 'inicio' | 'fim' | 'almocoInicio' | 'almocoFim', valor: string) => {
+                const base: HorarioDia = marcado && atual ? atual : { inicio: '', fim: '', almocoInicio: '', almocoFim: '' }
+                definirBarbearia('horarios', {
+                  ...dados.barbearia.horarios,
+                  [dia.chave]: { ...base, [campo]: valor },
+                })
+              }
+              return (
+                <li key={dia.chave} className="rounded-lg border border-[#E5DCC3] px-3 py-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={() => {
+                        const proximos = { ...dados.barbearia.horarios }
+                        if (marcado) delete proximos[dia.chave]
+                        else
+                          proximos[dia.chave] = {
+                            inicio: '08:00',
+                            fim: '19:00',
+                            almocoInicio: '',
+                            almocoFim: '',
+                          }
+                        definirBarbearia('horarios', proximos)
+                      }}
+                    />
+                    <span className="text-sm text-[#1C1A15]">{dia.nome}</span>
+                  </label>
+                  {marcado && atual && (
+                    <div className="mt-2 flex flex-wrap items-end gap-2">
+                      <Campo rotulo="Abre">
+                        <input
+                          type="time"
+                          className={CAMPO_FORM}
+                          value={atual.inicio}
+                          onChange={(e) => definir('inicio', e.target.value)}
+                        />
+                      </Campo>
+                      <Campo rotulo="Fecha">
+                        <input
+                          type="time"
+                          className={CAMPO_FORM}
+                          value={atual.fim}
+                          onChange={(e) => definir('fim', e.target.value)}
+                        />
+                      </Campo>
+                      <Campo rotulo="Almoço (vazio = sem pausa)">
+                        <input
+                          type="time"
+                          className={CAMPO_FORM}
+                          value={atual.almocoInicio}
+                          onChange={(e) => definir('almocoInicio', e.target.value)}
+                        />
+                      </Campo>
+                      <Campo rotulo="Volta">
+                        <input
+                          type="time"
+                          className={CAMPO_FORM}
+                          value={atual.almocoFim}
+                          onChange={(e) => definir('almocoFim', e.target.value)}
+                        />
+                      </Campo>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+
         <p className="text-xs text-[#8A8171]">
           O telefone é o botão de WhatsApp da página pública e a resposta da IA.
           Enquanto estiver vazio, nenhum dos dois mostra número — o sistema não

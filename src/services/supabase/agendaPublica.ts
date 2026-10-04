@@ -60,6 +60,12 @@ export type BarbeariaPublica = {
    * esconde a galeria e abre direto nos serviços.
    */
   fotos?: string[]
+  /**
+   * Horário de funcionamento por dia (0 = domingo). É a MESMA configuração que
+   * `agenda_expediente_do_dia` lê para montar a grade: o que o cliente lê aqui
+   * é o que a Agenda vai oferecer de verdade.
+   */
+  horarios?: Record<string, { inicio: string; fim: string }>
 }
 
 export type CatalogoPublico = {
@@ -153,6 +159,30 @@ const BARBEARIA_VAZIA: BarbeariaPublica = {
   instagram: '',
   mapa: '',
   fotos: [],
+  horarios: {},
+}
+
+/**
+ * Horários por dia, só os que são coerentes.
+ *
+ * Mesmos limites do servidor (`audax_config_valida`): chave 0 a 6, HH:MM de
+ * verdade e fim depois do início. Dia ruim é descartado, não corrigido —
+ * horário de funcionamento errado numa vitrine é pior que horário ausente,
+ * porque a pessoa aparece na hora que a casa não atende.
+ */
+function normalizarHorarios(bruto: unknown): Record<string, { inicio: string; fim: string }> {
+  const obj = (bruto ?? {}) as Record<string, unknown>
+  const saida: Record<string, { inicio: string; fim: string }> = {}
+  for (const [chave, dia] of Object.entries(obj)) {
+    if (!/^[0-6]$/.test(chave)) continue
+    const d = (dia ?? {}) as Record<string, unknown>
+    const inicio = typeof d.inicio === 'string' ? d.inicio.trim() : ''
+    const fim = typeof d.fim === 'string' ? d.fim.trim() : ''
+    if (!/^\d{2}:\d{2}$/.test(inicio) || !/^\d{2}:\d{2}$/.test(fim)) continue
+    if (inicio >= fim) continue
+    saida[chave] = { inicio, fim }
+  }
+  return saida
 }
 
 function normalizarBarbearia(bruto: unknown): BarbeariaPublica {
@@ -172,6 +202,7 @@ function normalizarBarbearia(bruto: unknown): BarbeariaPublica {
           .filter((f) => /^https?:\/\/\S+$/.test(f))
           .slice(0, 8)
       : [],
+    horarios: normalizarHorarios(obj.horarios),
   }
 }
 

@@ -100,6 +100,50 @@ export type ConfigBarbearia = {
    * vitrine esconde a galeria e abre direto nos serviços.
    */
   fotos: string[]
+  /**
+   * Horário de funcionamento por dia da semana.
+   *
+   * A chave é o dia no mesmo número do PostgreSQL e do app: 0 = domingo,
+   * 1 = segunda ... 6 = sábado. Dia SEM entrada usa o expediente geral da
+   * Agenda — então a casa só configura o que é diferente do padrão.
+   *
+   * É a mesma configuração lida por `agenda_expediente_do_dia` (migration
+   * 040): o que a vitrine mostra e o que a Agenda oferece é a MESMA coisa. Foi
+   * por isso que o horário passou a ser exibido — o sistema agendava até as
+   * 20:00 todo dia, e a página não podia dizer "fecha às 19:00" oferecendo
+   * horário que a casa não atende.
+   */
+  horarios: Record<string, HorarioDia>
+}
+
+/** Horário de UM dia da semana. Almoço vazio = o dia não tem pausa. */
+export type HorarioDia = {
+  /** HH:MM */
+  inicio: string
+  /** HH:MM */
+  fim: string
+  /** HH:MM — vazio = sem almoço */
+  almocoInicio: string
+  /** HH:MM — vazio = sem almoço */
+  almocoFim: string
+}
+
+/** Os sete dias, na ordem em que a casa e o cliente leem. */
+export const DIAS_SEMANA = [
+  { chave: '1', nome: 'Segunda' },
+  { chave: '2', nome: 'Terça' },
+  { chave: '3', nome: 'Quarta' },
+  { chave: '4', nome: 'Quinta' },
+  { chave: '5', nome: 'Sexta' },
+  { chave: '6', nome: 'Sábado' },
+  { chave: '0', nome: 'Domingo' },
+] as const
+
+/** Só HH:MM de verdade — mesmo limite do servidor. */
+export function horaValida(valor: string): boolean {
+  if (!/^\d{2}:\d{2}$/.test(valor)) return false
+  const [h, m] = valor.split(':').map(Number)
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59
 }
 
 export type Configuracoes = {
@@ -136,6 +180,8 @@ ia: { maxSugestoes: 2, botoesInterativos: false, nomeAtendente: 'Audax' },
     mapa: '',
     destaques: [],
     fotos: [],
+    // Sem override por dia: vale o expediente geral da Agenda.
+    horarios: {},
   },
 }
 
@@ -288,6 +334,7 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       fotos: listaDeTexto(barbearia.fotos, 8)
         .map((f) => texto(f, '', 2000))
         .filter((f) => linkValido(f)),
+      horarios: normalizarHorarios(barbearia.horarios),
     },
   }
 }
@@ -310,6 +357,38 @@ function fracaoComPadrao(valor: unknown, padrao: number): number {
   const fracaoConvertida = n > 1 ? n / 100 : n
   if (fracaoConvertida > 1) return padrao
   return Math.round(fracaoConvertida * 10000) / 10000
+}
+
+/**
+ * Horários por dia, normalizados para o que o servidor aceita.
+ *
+ * Dia fora de 0 a 6, ou com hora que não é HH:MM, ou com fim antes do início:
+ * o dia INTEIRO é descartado, não corrigido. Horário de funcionamento errado
+ * numa vitrine é pior que horário ausente — a pessoa aparece na hora que a
+ * casa não atende. Almoço incompleto ou invertido vira "sem almoço", que é o
+ * que o dono quis dizer ao deixar em branco.
+ */
+function normalizarHorarios(valor: unknown): Record<string, HorarioDia> {
+  const fonte = objeto(valor)
+  const saida: Record<string, HorarioDia> = {}
+  for (const [chave, bruto] of Object.entries(fonte)) {
+    if (!/^[0-6]$/.test(chave)) continue
+    const dia = objeto(bruto)
+    const inicio = texto(dia.inicio, '', 5)
+    const fim = texto(dia.fim, '', 5)
+    if (!horaValida(inicio) || !horaValida(fim) || inicio >= fim) continue
+    const almocoInicio = texto(dia.almocoInicio, '', 5)
+    const almocoFim = texto(dia.almocoFim, '', 5)
+    const temAlmoco =
+      horaValida(almocoInicio) && horaValida(almocoFim) && almocoInicio < almocoFim
+    saida[chave] = {
+      inicio,
+      fim,
+      almocoInicio: temAlmoco ? almocoInicio : '',
+      almocoFim: temAlmoco ? almocoFim : '',
+    }
+  }
+  return saida
 }
 
 /** Lista de texto, sem entradas vazias. */

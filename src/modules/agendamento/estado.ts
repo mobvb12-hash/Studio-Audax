@@ -264,6 +264,44 @@ export function complementosDisponiveis(
   )
 }
 
+/**
+ * O que a pessoa pode ADICIONAR ao serviço que já escolheu.
+ *
+ * A pergunta real é "quero fazer mais alguma coisa hoje?", e a resposta honesta
+ * é: qualquer serviço do catálogo. A configuração `servicos.complementos` deixa
+ * de ser uma whitelist que pode estar vazia e vira uma ORDENAÇÃO — o que a
+ * casa sugeriu aparece primeiro, e o resto do catálogo vem logo abaixo.
+ *
+ * Por que não só as sugestões da casa: com a configuração vazia (que é como
+ * estava) a etapa de extras não oferecia nada, e a pessoa que queria corte +
+ * barba + sobrancelha não tinha como pedir os três. O catálogo é a fonte; a
+ * configuração só decide a ordem de leitura.
+ *
+ * Três decisões:
+ *
+ *   • O serviço já escolhido NUNCA aparece — não se oferece a si mesmo.
+ *   • serviço sem id fica de fora: sem id não há como marcar e desmarcar com
+ *     segurança, e é melhor não mostrar do que mostrar algo que não grava.
+ *   • A ordem é a do catálogo (que a RPC devolve por nome), e dentro de cada
+ *     grupo as sugestões mantêm a ordem do catálogo também — mudar o texto do
+ *     serviço não embaralha a lista de extras.
+ */
+export function servicosAdicionais(
+  servicos: ItemCatalogo[],
+  servicoNome: string,
+): { sugeridos: ItemCatalogo[]; outros: ItemCatalogo[] } {
+  const base = servicos.find((s) => s.nome === servicoNome)
+  if (!base) return { sugeridos: [], outros: [] }
+  const sugeridos = new Set(base.complementos ?? [])
+  const restantes = servicos.filter(
+    (s) => s.id && s.nome !== servicoNome && s.nome !== base.nome,
+  )
+  return {
+    sugeridos: restantes.filter((s) => sugeridos.has(s.id as string)),
+    outros: restantes.filter((s) => !sugeridos.has(s.id as string)),
+  }
+}
+
 /** Dados válidos para confirmar (mesmas regras de antes, sem inventar). */
 export function dadosValidos(estado: EstadoAgendamento): boolean {
   const digitos = estado.telefone.replace(/\D/g, '')

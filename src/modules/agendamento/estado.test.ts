@@ -15,6 +15,7 @@ import {
   ESTADO_VAZIO,
   invalidateHorarioSeNaoCabe,
   selecao,
+  servicosAdicionais,
   type EstadoAgendamento,
   type ItemCatalogo,
 } from './estado'
@@ -152,6 +153,69 @@ describe('complementos', () => {
   it('nunca sugere o próprio serviço como complemento dele mesmo', () => {
     const lista = complementosDisponiveis(CATALOGO, 'Corte de  Cabelo')
     expect(lista.map((c) => c.nome)).not.toContain('Corte de  Cabelo')
+  })
+
+  it('serviço sem configuração de complementos não devolve nada', () => {
+    expect(complementosDisponiveis(CATALOGO, 'Barba')).toEqual([])
+  })
+})
+
+describe('serviços adicionais (o "adicionar também")', () => {
+  const COMPLETO: ItemCatalogo[] = [
+    { id: 'srv-corte', nome: 'Corte Audax', preco: 30, duracaoMin: 30, categoria: 'Cabelo', complementos: ['srv-barba'] },
+    { id: 'srv-barba', nome: 'Barba', preco: 20, duracaoMin: 20, categoria: 'Barba', complementos: [] },
+    { id: 'srv-sobrancelha', nome: 'Sobrancelha', preco: 8, duracaoMin: 10, categoria: 'Barba', complementos: [] },
+    { id: 'srv-luzes', nome: 'Luzes', preco: 90, duracaoMin: 60, categoria: 'Tratamento', complementos: [] },
+  ]
+
+  it('oferece o CATÁLOGO INTEIRO, mesmo sem nenhuma sugestão configurada', () => {
+    /*
+     * Regressão do que a tela mostrou: a etapa vinha só de
+     * `servicos.complementos`, que estava vazio, e não oferecia nada. Quem
+     * queria corte + barba + sobrancelha não tinha como pedir os três.
+     */
+    const semSugestao: ItemCatalogo[] = COMPLETO.map((s) => ({
+      ...s,
+      complementos: [],
+    }))
+    const { sugeridos, outros } = servicosAdicionais(semSugestao, 'Corte Audax')
+    expect(sugeridos).toEqual([])
+    expect(outros.map((s) => s.nome)).toEqual(['Barba', 'Sobrancelha', 'Luzes'])
+  })
+
+  it('as sugestões da casa vêm primeiro, e o resto depois', () => {
+    const { sugeridos, outros } = servicosAdicionais(COMPLETO, 'Corte Audax')
+    expect(sugeridos.map((s) => s.nome)).toEqual(['Barba'])
+    expect(outros.map((s) => s.nome)).toEqual(['Sobrancelha', 'Luzes'])
+  })
+
+  it('o serviço escolhido nunca é oferecido a si mesmo', () => {
+    const { sugeridos, outros } = servicosAdicionais(COMPLETO, 'Corte Audax')
+    expect([...sugeridos, ...outros].map((s) => s.nome)).not.toContain(
+      'Corte Audax',
+    )
+  })
+
+  it('serviço sem id fica de fora — sem id não há como marcar e desmarcar', () => {
+    const semId: ItemCatalogo[] = [
+      { id: 'srv-corte', nome: 'Corte Audax', preco: 30, duracaoMin: 30, complementos: [] },
+      { nome: 'Pezinho', preco: 15, duracaoMin: 10 },
+    ]
+    expect(servicosAdicionais(semId, 'Corte Audax').outros).toEqual([])
+  })
+
+  it('serviço base desconhecido não oferece nada', () => {
+    expect(servicosAdicionais(COMPLETO, 'Não existe')).toEqual({
+      sugeridos: [],
+      outros: [],
+    })
+  })
+
+  it('catálogo com um serviço só não oferece adicional', () => {
+    expect(servicosAdicionais([COMPLETO[1]], 'Barba')).toEqual({
+      sugeridos: [],
+      outros: [],
+    })
   })
 
   it('recalcula duração e valor com os complementos', () => {

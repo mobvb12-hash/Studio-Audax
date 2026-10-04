@@ -151,6 +151,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/037_confirmacao_whatsapp_publico.sql',
   '../supabase/migrations/038_config_destaques.sql',
   '../supabase/migrations/039_vitrine_galeria_e_categoria.sql',
+  '../supabase/migrations/040_expediente_por_dia.sql',
 ])
   })
 
@@ -1812,5 +1813,155 @@ describe('039 · a categoria do serviço e a galeria da casa', () => {
     expect(texto).toMatch(/if p_valor \? 'comissao' then/)
     expect(texto).toMatch(/foreach v_texto in array array\['endereco', 'instagram'\] loop/)
     expect(texto).toMatch(/Configuração desconhecida/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/* 040 - a casa abre em horarios diferentes por dia da semana          */
+/* ------------------------------------------------------------------ */
+
+describe('040 · expediente por dia da semana', () => {
+  const bruto = sql('../supabase/migrations/040_expediente_por_dia.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('cria UM resolver, e é ele quem decide o expediente', () => {
+    expect(texto).toMatch(
+      /create or replace function public\.agenda_expediente_do_dia\(p_data date\)/,
+    )
+    // O dia da semana é o do PostgreSQL: 0 = domingo.
+    expect(texto).toMatch(/v_dow := extract\(dow from p_data\)::int;/)
+    // E ele lê `barbearia.horarios` da mesma configuração do endereço.
+    expect(texto).toMatch(/where c\.chave = 'barbearia'/)
+    expect(texto).toMatch(
+      /v_dia := coalesce\(v_barb -> 'horarios', '\{\}'::jsonb\) -> v_dow::text;/,
+    )
+  })
+
+  it('não usa `record` sem linha — cai no padrão em vez de estourar', () => {
+    // `select into record` sem linha deixa o record NÃO ATRIBUÍDO, e
+    // `v_base.inicio` estoura em plpgsql. Uma casa sem a linha 'padrao' tem
+    // que continuar funcionando.
+    expect(texto).not.toMatch(/v_base\s+record/)
+    expect(texto).toContain('v_base_inicio text;')
+    expect(texto).toContain("coalesce(v_base_inicio, '08:00')")
+    expect(texto).toContain("coalesce(v_base_fim, '20:00')")
+  })
+
+  it('o almoço é por dia, e ausente é sem almoço — nunca o de outro dia', () => {
+    expect(texto).toContain(
+      "v_ai     := btrim(coalesce(v_dia ->> 'almocoInicio', ''));",
+    )
+    expect(texto).toContain(
+      "v_af     := btrim(coalesce(v_dia ->> 'almocoFim', ''));",
+    )
+    // Almoço pela metade ou invertido não é pausa.
+    expect(texto).toContain("if v_ai = '' or v_af = '' or v_ai >= v_af then")
+  })
+
+  it('a GRADE pública devolve o expediente do dia, não o da semana', () => {
+    expect(texto).toContain(
+      "'expediente', public.agenda_expediente_do_dia(p_data),",
+    )
+    // E não consulta mais a linha solta do expediente.
+    expect(texto).not.toContain("'inicio', e.inicio,")
+  })
+
+  it('a CRIAÇÃO valida contra o mesmo expediente do dia', () => {
+    // `jsonb_to_record` e não `from func(...)`: uma função que devolve jsonb,
+    // no FROM, vira uma coluna só — `d.inicio` não existiria.
+    expect(texto).toContain('from jsonb_to_record(public.agenda_expediente_do_dia(p_data))')
+    expect(texto).toContain(
+      'as d(inicio text, fim text, almoco_inicio text, almoco_fim text);',
+    )
+    // E o servidor parou de ler a linha 'padrao' direto.
+    expect(texto).not.toContain(
+      'into v_exp_inicio, v_exp_fim, v_alm_inicio, v_alm_fim\n    from agenda_expediente e',
+    )
+  })
+
+  it('a regra de vaga da 021 continua INTEIRA', () => {
+    /*
+     * O que muda é QUAL expediente ela compara. Lock, sobreposição, bloqueio,
+     * conflito e a origem precisam continuar palavra por palavra — é a regra
+     * que garante a vaga.
+     */
+    for (const intacto of [
+      'perform public.agenda_lock_slot(p_profissional, p_data);',
+      'Profissional indisponível.',
+      'Este horário está bloqueado para o profissional escolhido.',
+      'insert into agendamentos (',
+    ]) {
+      expect(texto).toContain(intacto)
+    }
+    // O lock continua sendo serializado ANTES do teste de conflito.
+    const lock = texto.indexOf('perform public.agenda_lock_slot(p_profissional, p_data);')
+    const conflito = texto.indexOf('for update')
+    expect(lock).toBeGreaterThan(-1)
+    if (conflito > -1) expect(lock).toBeLessThan(conflito)
+  })
+
+  it('o horário de funcionamento vai para o catálogo público', () => {
+    expect(texto).toContain(
+      "'horarios', coalesce(b.valor -> 'horarios', '{}'::jsonb),",
+    )
+    // A vitrine continua levando o resto dos dados da casa.
+    for (const intacto of [
+      "'fotos', coalesce(",
+      "'endereco', btrim(coalesce(b.valor ->> 'endereco', ''))",
+      "'telefone', btrim(coalesce(b.valor ->> 'telefone', ''))",
+    ]) {
+      expect(texto).toContain(intacto)
+    }
+  })
+
+  it('valida `barbearia.horarios` só com dia 0 a 6 e HH:MM', () => {
+    expect(texto).toContain("if v_chave = 'barbearia' and p_valor ? 'horarios' then")
+    expect(texto).toContain("par.key !~ '^[0-6]$'")
+    expect(texto).toContain(
+      "if (v_horario ->> 'inicio') !~ '^[0-2][0-9]:[0-5][0-9]$'",
+    )
+    expect(texto).toContain(
+      "or (v_horario ->> 'inicio') >= (v_horario ->> 'fim') then",
+    )
+    expect(texto).toContain('Horário de funcionamento inválido.')
+    expect(texto).toContain('Horário de almoço inválido.')
+  })
+
+  it('qualquer serviço ATIVO pode entrar como extra', () => {
+    /*
+     * Regressão: a etapa de extras vinha da lista que a casa configurava, e
+     * ela estava vazia — não oferecia nada. O servidor barra o que não é
+     * serviço ativo e o próprio base; o excesso é barrado pela regra de vaga.
+     */
+    expect(texto).toContain("if not found or v_compl.id = v_base.id then")
+    // A whitelist saiu de cena.
+    expect(texto).not.toContain(
+      "if not (trim(v_item) = any (coalesce(v_base.complementos",
+    )
+    // E a soma das durações e a delegação continuam como eram.
+    for (const intacto of [
+      'v_dur := v_dur + coalesce(v_compl.duracao_min, 0);',
+      "'[Complementos: ' || array_to_string(v_nomes, ', ') || ']';",
+      'select public.agendamento_publico_criar(',
+    ]) {
+      expect(texto).toContain(intacto)
+    }
+  })
+
+  it('a regra de criação da 021 NÃO é redefinida aqui', () => {
+    // Só o WRAPPER de extras é redefinido. `agendamento_publico_criar` continua
+    // sendo a autoridade, chamada por delegação.
+    expect(texto).toContain(
+      'create or replace function public.agendamento_publico_criar(',
+    )
+    expect(texto).toContain(
+      'create or replace function public.agendamento_publico_criar_complementos(',
+    )
+    // Nenhuma tabela nova: `barbearia.horarios` é jsonb na configuração.
+    expect(texto).not.toMatch(/create table/i)
+    expect(texto).not.toMatch(/create or replace trigger/i)
+    expect(texto).not.toMatch(/\bdrop\b/i)
   })
 })

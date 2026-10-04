@@ -630,11 +630,11 @@ describe('voltar', () => {
   })
 })
 
-describe('complementos', () => {
-  async function ateComplementos() {
+describe('extras: incluir outro serviço no mesmo horário', () => {
+  async function ateExtras(servico = 'Corte Audax') {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Corte Audax')
+    escolherServicoNaVitrine(servico)
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -642,35 +642,96 @@ describe('complementos', () => {
     await screen.findByText('Quer completar seu atendimento?')
   }
 
-  it('sugere só o que a casa configurou para o serviço', async () => {
-    await ateComplementos()
+  it('oferece QUALQUER serviço do catálogo, não só o que a casa sugeriu', async () => {
+    /*
+     * Regressão do que a tela mostrou: a etapa vinha da configuração
+     * `servicos.complementos`, que estava vazia, então não oferecia NADA.
+     * Quem queria corte + barba + sobrancelha não tinha como pedir os três.
+     * O catálogo é a fonte; a configuração só decide a ordem de leitura.
+     */
+    await ateExtras()
 
-    // "Barba" é complemento do Corte no catálogo...
-    expect(screen.getByRole('button', { name: /Barba.*20 min/ })).toBeTruthy()
-    // ...e o próprio serviço não aparece como complemento de si mesmo.
-    expect(screen.queryByRole('button', { name: /Corte Audax.*ADICIONAR/i })).toBeNull()
+    // A Barba é sugestão da casa para o Corte (esta no catálogo do teste).
+    expect(screen.getByRole('button', { name: 'Adicionar Barba' })).toBeTruthy()
+    // As Luzes não são sugestão de ninguém — e aparecem mesmo assim.
+    expect(screen.getByRole('button', { name: 'Adicionar Luzes' })).toBeTruthy()
+  })
+
+  it('as sugestões da casa vêm primeiro, e o resto do catálogo depois', async () => {
+    await ateExtras()
+
+    expect(screen.getByText('Sugestões da casa')).toBeTruthy()
+    expect(screen.getByText('Outros serviços')).toBeTruthy()
+    // A ordem na tela segue a ordem dos grupos.
+    const sugestoes = screen.getByText('Sugestões da casa')
+    const outros = screen.getByText('Outros serviços')
+    expect(
+      sugestoes.compareDocumentPosition(outros) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('o serviço já escolhido não é oferecido a si mesmo', async () => {
+    await ateExtras()
+
+    // "Adicionar Corte Audax" não pode existir: seria o mesmo serviço duas
+    // vezes, e a duração contaria ele dobrado.
+    expect(screen.queryByRole('button', { name: 'Adicionar Corte Audax' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remover Corte Audax' })).toBeNull()
+    // O nome aparece UMA vez na tela: na linha do total, como o serviço base.
+    expect(screen.getAllByText('Corte Audax')).toHaveLength(1)
   })
 
   it('nada vem pré-marcado', async () => {
-    await ateComplementos()
-    const botao = screen.getByRole('button', { name: /Barba.*20 min/ })
+    await ateExtras()
+
+    const botao = screen.getByRole('button', { name: 'Adicionar Barba' })
     expect(botao.getAttribute('aria-pressed')).toBe('false')
     expect(botao.textContent).toContain('Adicionar')
+    // E o total mostrado é o do serviço SOZINHO: nada pré-marcado.
+    expect(
+      screen.getByRole('group', { name: 'Total do atendimento' }).textContent,
+    ).toContain(formatarBRL(30))
+  })
+
+  it('o total aparece ANTES de continuar, com o que os extras somam', async () => {
+    /*
+     * Se a soma só aparecesse no resumo, o "adicione mais um" viraria surpresa
+     * e o valor dobrado pareceria taxa escondida.
+     */
+    await ateExtras()
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Barba' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('group', { name: 'Total do atendimento' }).textContent,
+      ).toContain(formatarBRL(50)),
+    )
+    expect(screen.getByRole('button', { name: 'Remover Barba' })).toBeTruthy()
   })
 
   it('adicionar marca e recalcula a duração na Agenda', async () => {
-    await ateComplementos()
-    fireEvent.click(screen.getByRole('button', { name: /Barba.*20 min/ }))
+    await ateExtras()
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Barba' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Barba.*20 min/ }).getAttribute('aria-pressed')).toBe(
-        'true',
-      ),
+      expect(
+        screen.getByRole('button', { name: 'Remover Barba' }).getAttribute('aria-pressed'),
+      ).toBe('true'),
     )
     // 30 do corte + 20 da barba = 50 min, e a Agenda é consultada de novo.
+    await waitFor(() => expect(slots.mock.calls.some((c) => c[1] === 50)).toBe(true))
+  })
+
+  it('desmarcar volta o total e a duração ao serviço sozinho', async () => {
+    await ateExtras()
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Barba' }))
+    await waitFor(() => expect(slots.mock.calls.some((c) => c[1] === 50)).toBe(true))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover Barba' }))
     await waitFor(() =>
-      expect(slots.mock.calls.some((c) => c[1] === 50)).toBe(true),
+      expect(screen.getByRole('button', { name: 'Adicionar Barba' })).toBeTruthy(),
     )
+    expect(slots.mock.calls.some((c) => c[1] === 50)).toBe(true)
   })
 
   it('complemento que não cabe devolve o horário e avisa', async () => {
@@ -683,8 +744,8 @@ describe('complementos', () => {
             { horario: '09:00', profissionais: ['Cleiton Silva'] },
           ] as SlotLivre[]),
     )
-    await ateComplementos()
-    fireEvent.click(screen.getByRole('button', { name: /Barba.*20 min/ }))
+    await ateExtras()
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Barba' }))
 
     expect(
       await screen.findByText(/não cabe mais no horário escolhido/i),
@@ -693,21 +754,35 @@ describe('complementos', () => {
     expect(screen.getByText(/Studio Audax/)).toBeTruthy()
   })
 
-  it('serviço sem complemento diz que a casa não cadastrou', async () => {
-    // Recomeça escolhendo a Barba, que não tem complementos.
+  it('quem não quer extra segue sem pagar nada a mais', async () => {
+    await ateExtras()
+
+    // Pular extras é uma escolha legítima: o botão existe e leva adiante.
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(await screen.findByText('Seus dados')).toBeTruthy()
+  })
+
+  it('se o catálogo tiver só este serviço, a etapa diz isso', async () => {
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      destaques: [],
+      servicos: [{ id: 'srv-soz', nome: 'Barba', preco: 20, duracaoMin: 20 }],
+    })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    fireEvent.click(screen.getByRole('button', { name: 'Agendar Barba' }))
+    escolherServicoNaVitrine('Barba')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
     fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
 
     expect(
-      await screen.findByText(/não cadastrou complementos/i),
+      await screen.findByText(/único serviço do catálogo/i),
     ).toBeTruthy()
+    expect(screen.queryByText('Outros serviços')).toBeNull()
   })
 })
+
 
 describe('dados, resumo e confirmação', () => {
   async function ateResumo() {
