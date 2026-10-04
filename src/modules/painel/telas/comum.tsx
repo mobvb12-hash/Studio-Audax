@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { MarcaAudax } from '@/components/MarcaAudax'
 
 /** Campo de formulário no padrão visual do Studio Audax. */
 export function Campo({
@@ -101,6 +102,9 @@ export function CartaoPainel({
   return (
     <div className="flex min-h-screen items-center justify-center bg-cream-50 px-4 py-10">
       <div className="w-full max-w-sm rounded-xl border border-cream-300 bg-white p-8">
+        <div className="mb-4 flex justify-center">
+          <MarcaAudax className="h-12 w-12 text-noir-900" />
+        </div>
         <h1 className="text-center text-xl font-bold text-noir-900">{titulo}</h1>
         <div
           className="mx-auto mt-3 h-px w-16 bg-gold-700"

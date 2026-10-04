@@ -246,7 +246,7 @@ describe('Profissionais inativos × novos agendamentos', () => {
 })
 
 describe('Agenda — profissional inativo preserva histórico', () => {
-  it('mantém coluna, agendamento salvo e sinaliza "· inativo" no cabeçalho', () => {
+  it('não vira coluna operacional, mas conserva o histórico salvo', () => {
     semearProfissionais([
       { nome: 'Audax', ativo: true },
       { nome: 'Diego', ativo: false },
@@ -254,11 +254,12 @@ describe('Agenda — profissional inativo preserva histórico', () => {
     semearAgendamento({ profissional: 'Diego', cliente: 'Ana Souza' })
     env(<Agenda onNovo={vi.fn()} />)
 
-    // cabeçalho com o marcador (não remove a coluna)
-    expect(screen.getAllByText('Diego').length).toBeGreaterThan(0)
-    expect(screen.getByText('Barbeiro(a) · inativo')).toBeTruthy()
-    // histórico visível na grade
-    expect(screen.getByText('Ana Souza')).toBeTruthy()
+    // inativos não têm coluna operacional na Agenda
+    expect(screen.queryByText('Diego')).toBeNull()
+    expect(screen.queryByText('Barbeiro(a) · inativo')).toBeNull()
+    // histórico preservado no banco/contexto
+    expect(ctxAgenda.agendamentos).toHaveLength(1)
+    expect(ctxAgenda.agendamentos[0].profissional).toBe('Diego')
   })
 })
 
@@ -396,22 +397,21 @@ describe('Agenda — cadastro duplicado (mesmo nome)', () => {
     ).toHaveLength(1)
   })
 
-  it('somente inativos com o mesmo nome: coluna única, marcada e sem novos agendamentos', () => {
+  it('somente inativos com o mesmo nome: nenhuma coluna operacional', () => {
     semearProfissionais([
       { nome: 'Cleiton Silva', ativo: false, id: 'prof-a' },
       { nome: 'Cleiton Silva', ativo: false, id: 'prof-b' },
     ])
     env(<Agenda onNovo={vi.fn()} />)
 
-    expect(screen.getAllByText('Cleiton Silva')).toHaveLength(1)
-    expect(screen.getByText('Barbeiro(a) · inativo')).toBeTruthy()
-    // a grade mantém o histórico, mas a célula não agenda
+    expect(screen.queryByText('Cleiton Silva')).toBeNull()
+    expect(screen.queryByText('Barbeiro(a) · inativo')).toBeNull()
     expect(
       screen.queryByLabelText(/Agendar 10:00 com Cleiton Silva/),
     ).toBeNull()
     expect(
-      screen.getAllByLabelText(/Indisponível 10:00 com Cleiton Silva/),
-    ).toHaveLength(1)
+      screen.queryByLabelText(/Indisponível 10:00 com Cleiton Silva/),
+    ).toBeNull()
   })
 
   it('coluna com ativo + inativo do mesmo nome continua agendável e histórico intacto', () => {

@@ -94,6 +94,9 @@ export default function Agenda({ onNovo }: Props) {
     // cadastro (nome); o histórico nunca é alterado.
     const escolhidos = new Map<string, { coluna: Coluna; ativo: boolean }>()
     for (const p of profissionais) {
+      // Somente o cadastro ATIVO vira coluna operacional. Histórico continua
+      // no banco mesmo quando o profissional é inativado (ativo=false).
+      if (!p.ativo) continue
       const atual = escolhidos.get(p.nome)
       if (!atual) {
         escolhidos.set(p.nome, {
@@ -111,13 +114,15 @@ export default function Agenda({ onNovo }: Props) {
     }
     const lista: Coluna[] = [...escolhidos.values()].map((e) => e.coluna)
     for (const ag of doDia) {
-      if (!escolhidos.has(ag.profissional)) {
-        escolhidos.set(ag.profissional, {
-          coluna: { nome: ag.profissional, foto: '' },
-          ativo: false,
-        })
-        lista.push({ nome: ag.profissional, foto: '' })
-      }
+      if (escolhidos.has(ag.profissional)) continue
+      // Profissional cadastrado inativo (ex.: TESTE) NÃO volta como coluna;
+      // nome que não existe mais em profissionais segue visível como antes.
+      if (profissionais.some((p) => p.nome === ag.profissional)) continue
+      escolhidos.set(ag.profissional, {
+        coluna: { nome: ag.profissional, foto: '' },
+        ativo: false,
+      })
+      lista.push({ nome: ag.profissional, foto: '' })
     }
     return lista
   }, [profissionais, doDia])
