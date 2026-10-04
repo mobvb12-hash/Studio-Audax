@@ -205,7 +205,7 @@ describe('vitrine (primeira tela)', () => {
     }
   })
 
-  it('as opções do serviço aparecem ABAIXO da linha, com preço e ESCOLHER', async () => {
+  it('as opções do serviço aparecem ABAIXO da linha, com ESCOLHER', async () => {
     catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
@@ -221,9 +221,24 @@ describe('vitrine (primeira tela)', () => {
     const linha = screen.getByRole('button', { expanded: true, name: /Corte Audax/ })
     const alvo = document.getElementById(linha.getAttribute('aria-controls') ?? '')
     expect(alvo?.contains(cartao)).toBe(true)
-    // Preço e duração no painel; a categoria da casa como contexto.
-    expect(alvo?.textContent).toContain(formatarBRL(30))
+    // A categoria da casa aparece como contexto dentro do painel.
     expect(alvo?.textContent).toContain('Cabelo')
+  })
+
+  it('a linha fechada já mostra o preço, para comparar sem abrir nada', async () => {
+    /*
+     * Com a linha a 600px de largura, nome à esquerda e chevron à direita
+     * deixavam o meio vazio: a página virava uma pilha de barras vazias. O
+     * preço à direita preenche a linha e evita o clique.
+     */
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const linha = screen.getByRole('button', { expanded: false, name: /Corte Audax/ })
+    expect(linha.textContent).toContain('Corte Audax')
+    expect(linha.textContent).toContain('30 min')
+    expect(linha.textContent).toContain(formatarBRL(30))
   })
 
   it('abre e fecha a linha do serviço', async () => {

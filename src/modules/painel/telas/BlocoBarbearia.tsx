@@ -103,19 +103,28 @@ export default function BlocoBarbearia({
         )}
       </dl>
 
-      <div className="flex flex-wrap gap-2">
+      {/*
+       * BOTÕES EMPILHADOS, UM POR LINHA.
+       *
+       * Lado a lado numa coluna de 300px, "Como chegar" quebrava em duas
+       * linhas enquanto os outros ficavam numa — o desalinhamento mais visível
+       * da tela. Empilhados, cada um tem a largura inteira da caixa, o texto
+       * cabe em uma linha e o alvo de toque fica maior, que é o que importa no
+       * celular.
+       */}
+      <div className="flex flex-col gap-2">
         {mapa && (
-          <BotaoLink href={mapa} variante="primario">
+          <BotaoLink href={mapa} variante="primario" esticar={false}>
             <span aria-hidden="true">📍</span> Como chegar
           </BotaoLink>
         )}
         {whatsapp && (
-          <BotaoLink href={whatsapp}>
+          <BotaoLink href={whatsapp} esticar={false}>
             <span aria-hidden="true">📱</span> WhatsApp
           </BotaoLink>
         )}
         {instagram && (
-          <BotaoLink href={instagram}>
+          <BotaoLink href={instagram} esticar={false}>
             <span aria-hidden="true">📸</span> Instagram
           </BotaoLink>
         )}

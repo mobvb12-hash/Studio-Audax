@@ -388,17 +388,29 @@ export function BotaoLink({
   children,
   href,
   variante = 'secundario',
+  esticar = true,
 }: {
   children: ReactNode
   href: string
   variante?: 'primario' | 'secundario'
+  /**
+   * Divide a linha com os irmãos (padrão: botões lado a lado).
+   *
+   * `false` para empilhar: `flex-1` numa coluna faz os botões dividirem a
+   * ALTURA, e "Como chegar" quebrava em duas linhas numa caixa de 300px
+   * enquanto os outros ficavam numa. Empilhado, cada um ocupa a largura
+   * inteira e o texto cabe.
+   */
+  esticar?: boolean
 }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-3 text-center text-[13.5px] font-semibold transition-colors ${
+      className={`inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-3 text-center text-[13.5px] font-semibold whitespace-nowrap transition-colors ${
+        esticar ? 'flex-1' : 'w-full'
+      } ${
         variante === 'primario'
           ? 'bg-gold-500 text-noir-900 hover:bg-gold-400'
           : 'border border-cream-300 bg-cream-50 text-noir-800 hover:border-gold-400 hover:bg-cream-100'

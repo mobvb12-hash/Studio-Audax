@@ -549,30 +549,30 @@ function EtapaServicos({
         <BotaoEntrar aoEntrar={() => irParaAreaDoCliente()} />
       </div>
 
-      <header className="mb-6">
-        <h1 className="font-serif-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[32px]">
+      <header className="mb-7">
+        <h1 className="font-serif-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[34px]">
           Agende seu horário
         </h1>
-        <p className="mt-2 max-w-sm text-[14.5px] leading-relaxed text-noir-500">
-          Escolha o serviço e a gente cuida do resto.
-        </p>
-        {/*
-          * A DICA que converte.
-          *
-          * Ninguém combina dois serviços porque a tela pediu: combina porque
-          *ocorreu de ver que dá. Dizer isso ANTES da escolha é o que faz a
-          * pessoa pensar "então vou levar a sobrancelha também" — e o caminho
-          * para isso já existe, na etapa de extras. Sem a dica, o adicional
-          * aparece como cobrança surpresa no fim.
-          */}
-        <p className="mt-1.5 max-w-sm text-[13px] text-noir-400">
-          Dá para incluir outro serviço no mesmo horário — você escolhe depois.
+        <p className="mt-2 max-w-md text-[14.5px] leading-relaxed text-noir-500">
+          Escolha o serviço e a gente cuida do resto. Dá para incluir outro no
+          mesmo horário — você escolhe depois.
         </p>
       </header>
 
       <GaleriaBarbearia fotos={catalogo.barbearia.fotos} />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+      {/*
+        * GRADE DA VITRINE.
+        *
+        * `items-start` para a lateral não esticar até o fim da coluna: sem ele,
+        * o cartão da casa esticava pela altura toda da lista de serviços e a
+        * caixa virava uma coluna de metros de creme vazio.
+        *
+        * A coluna do meio é `minmax(0, 1fr)` para poder encolher — sem o `0`, o
+        * carrossel (que é mais largo que a coluna) estica a grade e empurra a
+        * lateral para fora da tela.
+        */}
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
           {destaques.length > 0 && (
             <section className="mb-7">

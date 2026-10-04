@@ -363,9 +363,20 @@ function TituloSecao({ children }: { children: ReactNode }) {
   )
 }
 
-/** Esconde a barra de rolagem: quem desliza é o dedo, não um dedo mole. */
+/**
+ * Esconde a barra de rolagem: quem desliza é o dedo, não um dedo mole.
+ *
+ * E o SANGRO da margem negativa é SÓ NO CELULAR. O carrossel e a galeria
+ * precisam encostar na borda da tela no telefone, onde não há coluna lateral
+ * parabalancing. No desktop, a margem negativa empurrava o primeiro card para
+ * FORA da grade — 20px à esquerda de todo o resto da página, que é
+ * exatamente o "fora de esquadro" que apareceu na tela.
+ */
 const SEM_BARRA =
   'overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+
+/** Sangra até a borda da tela só enquanto não há coluna ao lado. */
+const SANGRIA = '-mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0'
 
 /**
  * Galeria da casa, no topo da vitrine.
@@ -386,7 +397,7 @@ export function GaleriaBarbearia({ fotos }: { fotos?: string[] }) {
 
   return (
     <section aria-label="Fotos do Studio Audax" className="mb-7">
-      <ul className={`-mx-4 flex snap-x snap-mandatory gap-3 px-4 sm:-mx-6 sm:px-6 ${SEM_BARRA}`}>
+      <ul className={`${SANGRIA} flex snap-x snap-mandatory gap-3 ${SEM_BARRA}`}>
         {lista.map((foto, indice) =>
           quebradas.includes(indice) ? null : (
             <li
@@ -553,7 +564,7 @@ export function CarrosselDestaques({
 
       <ul
         ref={trilha}
-        className={`-mx-4 flex snap-x snap-mandatory gap-3 px-4 sm:-mx-6 sm:px-6 ${SEM_BARRA}`}
+        className={`${SANGRIA} flex snap-x snap-mandatory gap-3 ${SEM_BARRA}`}
       >
         {servicos.map((s) => (
           <CartaoDestaque
@@ -637,6 +648,7 @@ export function LinhaSanfona({
   painel: string
   titulo: string
   subtitulo: string
+  /** Aberta no momento — controlado pelo fluxo, para sobreviver ao `voltar`. */
   aberta: boolean
   /** `ouro` é a linha do Audax Club; `creme`, a de serviço. */
   variante?: 'creme' | 'ouro'
@@ -660,14 +672,14 @@ export function LinhaSanfona({
         onClick={aoAlternar}
         aria-expanded={aberta}
         aria-controls={painel}
-        className="flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex min-h-[58px] w-full items-center gap-3 px-4 py-2.5 text-left"
       >
-        <span className="min-w-0">
+        <span className="min-w-0 flex-1">
           <span
             className={`block leading-snug font-semibold ${
               variante === 'ouro'
                 ? 'font-serif-display text-[19px] text-noir-900'
-                : 'text-[15px] text-noir-900'
+                : 'text-[15.5px] text-noir-900'
             }`}
           >
             {titulo}
@@ -701,15 +713,14 @@ export function LinhaSanfona({
 /**
  * "Todos os serviços": UMA LINHA POR SERVIÇO, como na vitrine de referência.
  *
- * Lista completa, sem filtro: os destaques do carrossel são atalho, não filtro.
- * A lista anterior tirava de dentro os serviços já destacados, e quando os
- * destaques cobriam o catálogo inteiro ela ficava VAZIA — que foi exatamente
- * onde a pessoa procurou o serviço que não via. Aqui nenhum serviço some: o que
- * está no catálogo está na lista.
+ * A linha FECHADA já carrega preço e duração. Antes ela mostrava só o nome, e
+ * com a linha a 600px de largura o texto ficava nas duas pontas com um vazio no
+ * meio — a página parecia feita de barras vazias. Com o preço à direita, a
+ * pessoa compara sem abrir nada, que é para isso que a linha existe.
  *
- * Sem agrupar por categoria: a linha é do SERVIÇO, e o nome da categoria, quando
- * a casa cadastrou, aparece como contexto dentro do painel. Uma taxonomia a
- * menos para decorar e um clique a menos para chegar no serviço.
+ * Lista completa, sem filtro: os destaques do carrossel são atalho, não filtro.
+ * Quando os destaques cobrem o catálogo, uma lista que escondesse os repetidos
+ * ficaria VAZIA — e era ali que a pessoa procurava o serviço que não via.
  */
 export function ListaServicos({
   servicos,
@@ -731,19 +742,14 @@ export function ListaServicos({
           key={s.nome}
           painel={`servico-${indice}`}
           titulo={s.nome}
-          subtitulo={`${s.duracaoMin} min`}
+          subtitulo={`${s.duracaoMin} min · ${formatarBRL(s.preco)}`}
           aberta={abertos.includes(s.nome)}
           aoAlternar={() => aoAlternar(s.nome)}
         >
           <div className="flex items-center justify-between gap-3 rounded-xl border border-cream-300 bg-cream-50 px-4 py-3">
-            <span className="min-w-0">
-              <span className="block text-[15px] font-semibold tabular-nums text-noir-900">
-                {formatarBRL(s.preco)}
-              </span>
-              <span className="mt-0.5 block text-[12.5px] text-noir-500">
-                {s.duracaoMin} min
-                {s.categoria ? ` · ${s.categoria}` : ''}
-              </span>
+            <span className="min-w-0 text-[13px] text-noir-500">
+              {s.duracaoMin} min
+              {s.categoria ? ` · ${s.categoria}` : ''}
             </span>
             <SeloEscolher
               escolhido={selecionado === s.nome}
