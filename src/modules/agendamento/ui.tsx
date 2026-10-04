@@ -148,68 +148,48 @@ export function Tela({
 /* Cartões                                                               */
 /* ------------------------------------------------------------------ */
 
-/** Botão "ESCOLHER" — o verbo aparece escrito, como o dono pediu. */
-export function SeloEscolher({ escolhido }: { escolhido?: boolean }) {
-  return (
-    <span
-      className={`shrink-0 rounded-md border px-2 py-1 text-[10.5px] font-bold tracking-[0.1em] uppercase ${
-        escolhido
-          ? 'border-gold-600 bg-gold-500 text-noir-900'
-          : 'border-cream-400 text-noir-500'
-      }`}
-    >
-      {escolhido ? 'Escolhido' : 'Escolher'}
-    </span>
-  )
-}
-
-/** Cartão de serviço da vitrine: nome, duração, preço e ESCOLHER. */
-export function CartaoServicoVitrine({
-  nome,
-  preco,
-  duracaoMin,
-  selecionado,
-  aoEscolher,
+/**
+ * Botão "ESCOLHER" — o verbo aparece escrito, como o dono pediu.
+ *
+ * `comoBotao` é para a vitrine, onde a linha já é o rótulo do serviço e o selo
+ * precisa ser clicável. Aí ele vira um botão de verdade, com nome acessível
+ * próprio: um `<span>` dentro de um `<div>` não seria focável nem seria lido
+ * como controle pelo leitor de tela.
+ */
+export function SeloEscolher({
+  escolhido,
+  comoBotao,
+  rotulo,
+  aoClicar,
 }: {
-  nome: string
-  preco: number
-  duracaoMin: number
-  selecionado: boolean
-  aoEscolher: () => void
+  escolhido?: boolean
+  comoBotao?: boolean
+  rotulo?: string
+  aoClicar?: () => void
 }) {
+  const classe = `shrink-0 rounded-md border px-2 py-1 text-[10.5px] font-bold tracking-[0.1em] uppercase ${
+    escolhido
+      ? 'border-gold-600 bg-gold-500 text-noir-900'
+      : 'border-cream-400 text-noir-500'
+  }`
+  const texto = escolhido ? 'Escolhido' : 'Escolher'
+
+  if (!comoBotao) {
+    return <span className={classe}>{texto}</span>
+  }
   return (
     <button
       type="button"
-      onClick={aoEscolher}
-      aria-pressed={selecionado}
-      aria-label={`${nome} - ${formatarBRL(preco)} - ${duracaoMin} minutos`}
-      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors ${
-        selecionado
-          ? 'border-gold-600 bg-gold-200/50 ring-1 ring-gold-600'
-          : 'border-cream-300 bg-cream-50 hover:border-gold-400 hover:bg-cream-100'
-      }`}
+      onClick={aoClicar}
+      aria-pressed={escolhido}
+      aria-label={rotulo}
+      className={classe}
     >
-      <span className="min-w-0 flex-1">
-        <span className="block text-[16px] leading-snug font-semibold text-noir-900">
-          {nome}
-        </span>
-        <span className="mt-0.5 block text-[12.5px] text-noir-500">
-          {duracaoMin} min
-        </span>
-      </span>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        <span
-          className={`text-[15px] font-semibold tabular-nums ${
-            selecionado ? 'text-gold-800' : 'text-noir-800'
-          }`}
-        >
-          {formatarBRL(preco)}
-        </span>
-        <SeloEscolher escolhido={selecionado} />
-      </span>
+      {texto}
     </button>
   )
 }
+
 
 /** Cartão de profissional, com foto quando a casa cadastrou. */
 export function CartaoProfissional({
@@ -597,103 +577,153 @@ function SetaDestaque({
   )
 }
 
-/** "R$ 20,00" — o menor preço do grupo, para a linha fechada mostrar o valor. */
-function menorPreco(servicos: { preco: number }[]): number {
-  return servicos.reduce((menor, s) => Math.min(menor, s.preco), Infinity)
-}
-
 /**
- * "Todos os serviços" em sanfona, agrupada pela CATEGORIA OFICIAL da casa.
+ * A linha de sanfona — a MESMA peça para o Audax Club e para cada serviço.
  *
- * O agrupamento vem de `agruparPorCategoria` (migration 039) — a mesma
- * categoria que a equipe digita no cadastro. Serviço sem categoria cai em
- * "Outros" em vez de sumir.
- *
- * MESMO DESENHO DO AUDAX CLUB: uma linha fechada, e as opções aparecem abaixo
- * quando a pessoa abre. Nenhuma categoria começa aberta — abrir uma é escolha
- * de quem está olhando, e uma lista que já vem esticada é o que empurra o resto
- * da página para baixo. O que a linha fechada garante é que ninguém precisa
- * abrir para saber se o serviço está ali: ela diz quantos são e a partir de
- * quanto sai.
+ * Uma linha fechada, com o nome em cima, o detalhe embaixo e o chevron à
+ * direita; as opções abrem ABAIXO, no painel que a linha declara em
+ * `aria-controls`. Um componente só para as duas coisas é o que garante que o
+ * Club e a lista de serviços se comportem igual: se divergirem, a página fica
+ * com dois jeitos de abrir e a pessoa aprende o lento.
  *
  * Abertura é CONTROLADA de propósito, e por dois motivos:
  *
- *   1. `voltar` da etapa do barbeiro remonta a vitrine. Um `<details>` sem
- *      controle reabriria fechado e apagaria do jeito que a pessoa abriu.
- *      Quem guarda a lista de abertas é o componente do fluxo, que não
- *      desmonta entre etapas.
- *   2. Botão com `aria-expanded` em vez de `<details>`: aqui o estado é
- *      nosso, e "fechado" tem que SIGNIFICAR escondido. Com `<details>` o
- *      navegador decide o que sumir, o que deixa o comportamento dos testes
- *      diferente do comportamento da tela.
+ *   1. `voltar` da etapa do barbeiro remonta a vitrine. Uma linha sem controle
+ *      reabriria fechada e apagaria do jeito que a pessoa abriu. Quem guarda a
+ *      lista de abertas é o componente do fluxo, que não desmonta entre etapas.
+ *   2. Botão com `aria-expanded` em vez de `<details>`: aqui o estado é nosso,
+ *      e "fechado" tem que SIGNIFICAR escondido. Com `<details>` o navegador
+ *      decide o que sumir, e o teste passa a medir uma coisa diferente da tela.
  */
-export function SanfonaServicos({
-  grupos,
+export function LinhaSanfona({
+  painel,
+  titulo,
+  subtitulo,
+  aberta,
+  variante = 'creme',
+  aoAlternar,
+  children,
+}: {
+  painel: string
+  titulo: string
+  subtitulo: string
+  aberta: boolean
+  /** `ouro` é a linha do Audax Club; `creme`, a de serviço. */
+  variante?: 'creme' | 'ouro'
+  aoAlternar: () => void
+  children?: ReactNode
+}) {
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border transition-colors ${
+        variante === 'ouro'
+          ? aberta
+            ? 'border-gold-500 bg-gold-200/30'
+            : 'border-gold-300 bg-gold-200/20'
+          : aberta
+            ? 'border-gold-400 bg-cream-50'
+            : 'border-cream-300 bg-cream-50'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={aoAlternar}
+        aria-expanded={aberta}
+        aria-controls={painel}
+        className="flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="min-w-0">
+          <span
+            className={`block leading-snug font-semibold ${
+              variante === 'ouro'
+                ? 'font-serif-display text-[19px] text-noir-900'
+                : 'text-[15px] text-noir-900'
+            }`}
+          >
+            {titulo}
+          </span>
+          <span
+            className={`mt-0.5 block text-[12.5px] ${
+              variante === 'ouro' ? 'text-noir-600' : 'text-noir-500'
+            }`}
+          >
+            {subtitulo}
+          </span>
+        </span>
+        <span
+          aria-hidden="true"
+          className={`shrink-0 text-[11px] transition-transform ${
+            variante === 'ouro' ? 'text-gold-700' : 'text-noir-400'
+          } ${aberta ? 'rotate-180' : ''}`}
+        >
+          ▼
+        </span>
+      </button>
+      {aberta && (
+        <div id={painel} className="px-4 pb-4">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * "Todos os serviços": UMA LINHA POR SERVIÇO, como na vitrine de referência.
+ *
+ * Lista completa, sem filtro: os destaques do carrossel são atalho, não filtro.
+ * A lista anterior tirava de dentro os serviços já destacados, e quando os
+ * destaques cobriam o catálogo inteiro ela ficava VAZIA — que foi exatamente
+ * onde a pessoa procurou o serviço que não via. Aqui nenhum serviço some: o que
+ * está no catálogo está na lista.
+ *
+ * Sem agrupar por categoria: a linha é do SERVIÇO, e o nome da categoria, quando
+ * a casa cadastrou, aparece como contexto dentro do painel. Uma taxonomia a
+ * menos para decorar e um clique a menos para chegar no serviço.
+ */
+export function ListaServicos({
+  servicos,
   abertos,
   selecionado,
   aoAlternar,
   aoEscolher,
 }: {
-  grupos: { categoria: string; servicos: { nome: string; preco: number; duracaoMin: number }[] }[]
+  servicos: { nome: string; preco: number; duracaoMin: number; categoria?: string }[]
   abertos: string[]
   selecionado: string
-  aoAlternar: (categoria: string) => void
+  aoAlternar: (nome: string) => void
   aoEscolher: (nome: string) => void
 }) {
   return (
     <div className="flex flex-col gap-2">
-      {grupos.map((grupo) => {
-        const aberta = abertos.includes(grupo.categoria)
-        const painel = `painel-${grupo.categoria}`
-        return (
-          <div
-            key={grupo.categoria}
-            className="overflow-hidden rounded-2xl border border-cream-300 bg-cream-50"
-          >
-            <button
-              type="button"
-              onClick={() => aoAlternar(grupo.categoria)}
-              aria-expanded={aberta}
-              aria-controls={painel}
-              className="flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <span className="min-w-0">
-                <span className="block text-[15px] leading-snug font-semibold text-noir-900">
-                  {grupo.categoria}
-                </span>
-                <span className="mt-0.5 block text-[12.5px] text-noir-500">
-                  {grupo.servicos.length}{' '}
-                  {grupo.servicos.length === 1 ? 'serviço' : 'serviços'} · a
-                  partir de {formatarBRL(menorPreco(grupo.servicos))}
-                </span>
+      {servicos.map((s, indice) => (
+        <LinhaSanfona
+          key={s.nome}
+          painel={`servico-${indice}`}
+          titulo={s.nome}
+          subtitulo={`${s.duracaoMin} min`}
+          aberta={abertos.includes(s.nome)}
+          aoAlternar={() => aoAlternar(s.nome)}
+        >
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-cream-300 bg-cream-50 px-4 py-3">
+            <span className="min-w-0">
+              <span className="block text-[15px] font-semibold tabular-nums text-noir-900">
+                {formatarBRL(s.preco)}
               </span>
-              <span
-                aria-hidden="true"
-                className={`shrink-0 text-[11px] text-noir-400 transition-transform ${
-                  aberta ? 'rotate-180' : ''
-                }`}
-              >
-                ▼
+              <span className="mt-0.5 block text-[12.5px] text-noir-500">
+                {s.duracaoMin} min
+                {s.categoria ? ` · ${s.categoria}` : ''}
               </span>
-            </button>
-            {aberta && (
-              <ul id={painel} className="flex flex-col gap-2 px-3 pb-3">
-                {grupo.servicos.map((s) => (
-                  <li key={s.nome}>
-                    <CartaoServicoVitrine
-                      nome={s.nome}
-                      preco={s.preco}
-                      duracaoMin={s.duracaoMin}
-                      selecionado={selecionado === s.nome}
-                      aoEscolher={() => aoEscolher(s.nome)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
+            </span>
+            <SeloEscolher
+              escolhido={selecionado === s.nome}
+              comoBotao
+              rotulo={`Agendar ${s.nome}`}
+              aoClicar={() => aoEscolher(s.nome)}
+            />
           </div>
-        )
-      })}
+        </LinhaSanfona>
+      ))}
     </div>
   )
 }

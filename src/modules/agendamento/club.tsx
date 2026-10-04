@@ -9,6 +9,7 @@ import {
   rotuloDoPlano,
   type BeneficiosPublicos,
 } from '@/modules/painel/clube'
+import { LinhaSanfona } from './ui'
 
 /**
  * Os planos do Audax Club mostrados na vitrine.
@@ -58,9 +59,14 @@ export const ORDEM_PLANOS = ['cabelo', 'barba', 'cabelo_barba'] as const
  */
 export function SecaoAudaxClub({
   barbearia,
+  aberto,
+  aoAlternar,
   aoEscolher,
 }: {
   barbearia: BarbeariaPublica
+  /** Aberto controlado pelo fluxo, como as linhas de serviço. */
+  aberto: boolean
+  aoAlternar: () => void
   aoEscolher?: (plano: string) => void
 }) {
   const club = usePlanosClub()
@@ -87,86 +93,75 @@ export function SecaoAudaxClub({
 
   return (
     /*
-     * FECHADO por padrão, como a vitrine de referência.
+     * A MESMA peça de linha dos serviços — `LinhaSanfona`, na variante ouro.
      *
-     * Três cards de plano ocupavam mais do que a tela inteira e empurravam a
-     * lista de serviços para fora da primeira dobra — a pessoa saía da página
-     * sem ver serviço nenhum. Fechado, o Club é uma linha que diz quantos
-     * planos existem, e quem quiser ler os benefícios abre.
+     * Fechado por padrão: três cards de plano abertos ocupavam mais do que a
+     * tela inteira e empurravam a lista de serviços para fora da primeira
+     * dobra. Fechado, o Club é uma linha que diz quantos planos existem, e quem
+     * quiser ler os benefícios abre.
      *
      * A linha fechada não promete o que não está pronto: só a quantidade de
      * planos. Preço e condição de assinatura não são inventados aqui.
      */
-    <details className="group rounded-2xl border border-gold-300 bg-gold-200/20">
-      <summary className="flex min-h-[58px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-        <span className="min-w-0">
-          <span className="block font-serif-display text-[19px] leading-snug font-semibold text-noir-900">
-            Audax Club
-          </span>
-          <span className="mt-0.5 block text-[12.5px] text-noir-600">
-            {planos.length}{' '}
-            {planos.length === 1 ? 'plano de assinatura' : 'planos de assinatura'}
-          </span>
-        </span>
-        <span
-          aria-hidden="true"
-          className="shrink-0 text-[11px] text-gold-700 transition-transform group-open:rotate-180"
-        >
-          ▼
-        </span>
-      </summary>
-
-      <div className="px-4 pb-4">
-        <p className="text-[13.5px] leading-relaxed text-noir-600">
-          Assinatura com procedimento ilimitado durante a vigência.
-        </p>
-        <div className="mt-3 flex flex-col gap-3">
-          {planos.map((plano) => {
-            const conversaDoPlano = conversa(plano.rotulo)
-            return (
-              <div
-                key={plano.chave}
-                className="rounded-xl border border-cream-300 bg-cream-50 p-4"
-              >
-                <p className="text-[15px] font-semibold text-noir-900">
-                  {plano.rotulo}
-                </p>
-                <ul className="mt-1.5 space-y-0.5">
-                  {plano.beneficios.map((b) => (
-                    <li key={b} className="text-[13px] leading-snug text-noir-600">
-                      · {b}
-                    </li>
-                  ))}
-                </ul>
-                {aoEscolher && (
-                  <button
-                    type="button"
-                    onClick={() => aoEscolher(plano.chave)}
-                    className="mt-3 min-h-[40px] rounded-lg border border-gold-600 px-3.5 text-[12px] font-bold tracking-[0.1em] text-gold-800 uppercase hover:bg-gold-200/40"
-                  >
-                    Conhecer plano
-                  </button>
-                )}
-                {!aoEscolher && conversaDoPlano && (
-                  <a
-                    href={conversaDoPlano}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex min-h-[40px] items-center rounded-lg border border-gold-600 px-3.5 text-[12px] font-bold tracking-[0.1em] text-gold-800 uppercase hover:bg-gold-200/40"
-                  >
-                    Conhecer plano
-                  </a>
-                )}
-              </div>
-            )
-          })}
-        </div>
-        <p className="mt-3 text-[13px] leading-relaxed text-noir-500">
-          A assinatura é feita com a equipe no Studio. Fale com a gente no balcão
-          para fazer parte do Club.
-        </p>
+    <LinhaSanfona
+      painel="audax-club"
+      titulo="Audax Club"
+      subtitulo={`${planos.length} ${
+        planos.length === 1 ? 'plano de assinatura' : 'planos de assinatura'
+      }`}
+      aberta={aberto}
+      variante="ouro"
+      aoAlternar={aoAlternar}
+    >
+      <p className="text-[13.5px] leading-relaxed text-noir-600">
+        Assinatura com procedimento ilimitado durante a vigência.
+      </p>
+      <div className="mt-3 flex flex-col gap-3">
+        {planos.map((plano) => {
+          const conversaDoPlano = conversa(plano.rotulo)
+          return (
+            <div
+              key={plano.chave}
+              className="rounded-xl border border-cream-300 bg-cream-50 p-4"
+            >
+              <p className="text-[15px] font-semibold text-noir-900">
+                {plano.rotulo}
+              </p>
+              <ul className="mt-1.5 space-y-0.5">
+                {plano.beneficios.map((b) => (
+                  <li key={b} className="text-[13px] leading-snug text-noir-600">
+                    · {b}
+                  </li>
+                ))}
+              </ul>
+              {aoEscolher && (
+                <button
+                  type="button"
+                  onClick={() => aoEscolher(plano.chave)}
+                  className="mt-3 min-h-[40px] rounded-lg border border-gold-600 px-3.5 text-[12px] font-bold tracking-[0.1em] text-gold-800 uppercase hover:bg-gold-200/40"
+                >
+                  Conhecer plano
+                </button>
+              )}
+              {!aoEscolher && conversaDoPlano && (
+                <a
+                  href={conversaDoPlano}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex min-h-[40px] items-center rounded-lg border border-gold-600 px-3.5 text-[12px] font-bold tracking-[0.1em] text-gold-800 uppercase hover:bg-gold-200/40"
+                >
+                  Conhecer plano
+                </a>
+              )}
+            </div>
+          )
+        })}
       </div>
-    </details>
+      <p className="mt-3 text-[13px] leading-relaxed text-noir-500">
+        A assinatura é feita com a equipe no Studio. Fale com a gente no balcão
+        para fazer parte do Club.
+      </p>
+    </LinhaSanfona>
   )
 }
 

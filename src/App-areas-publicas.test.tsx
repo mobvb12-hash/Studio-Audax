@@ -158,10 +158,10 @@ describe('App — /agendar abre o agendamento público, sem porta de staff', () 
     ficaEm('/agendar')
     render(<App />)
 
-    // A categoria vem fechada, como a do Audax Club: quem abre é quem está
-    // olhando. Então o gesto da pessoa vem antes da conferência do botão.
+    // A linha do serviço vem fechada, como a do Audax Club: quem abre é quem
+    // está olhando. Então o gesto da pessoa vem antes da conferência do botão.
     // `queryAllBy` e não `getAllBy`: `getAll` lança exceção quando não acha.
-    const linha = await screen.findByRole('button', { name: /Cabelo/ })
+    const linha = await screen.findByRole('button', { name: /Corte/ })
     expect(screen.queryAllByText('Escolher')).toHaveLength(0)
     fireEvent.click(linha)
     expect(screen.getAllByText('Escolher').length).toBeGreaterThan(0)

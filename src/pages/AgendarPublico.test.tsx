@@ -102,35 +102,33 @@ function primeiroDia() {
 }
 
 /**
- * Abre uma categoria da sanfona — o mesmo gesto que a pessoa faz.
+ * Abre a LINHA de um serviço — o mesmo gesto que a pessoa faz.
  *
- * As categorias vêm FECHADAS (é o desenho pedido, igual ao do Audax Club). Com
+ * As linhas vêm FECHADAS (é o desenho pedido, igual ao do Audax Club). Com
  * estado controlado, "fechado" significa escondido de verdade, então o teste
  * exercita o caminho real em vez de clicar num botão invisível.
  */
-function abrirGrupo(categoria: string): void {
+function abrirLinha(nome: string): void {
   const botao = screen
     .getAllByRole('button', { expanded: false })
-    .find((b) => (b.textContent ?? '').includes(categoria))
-  if (!botao) throw new Error(`categoria "${categoria}" não está na vitrine`)
+    .find((b) => (b.textContent ?? '').includes(nome))
+  if (!botao) throw new Error(`linha "${nome}" não está na vitrine`)
   fireEvent.click(botao)
 }
 
-/** Fecha a categoria, invertendo o que `abrirGrupo` fez. */
-function fecharGrupo(categoria: string): void {
+/** Fecha a linha, invertendo o que `abrirLinha` fez. */
+function fecharLinha(nome: string): void {
   const botao = screen
     .getAllByRole('button', { expanded: true })
-    .find((b) => (b.textContent ?? '').includes(categoria))
-  if (!botao) throw new Error(`categoria "${categoria}" não está aberta`)
+    .find((b) => (b.textContent ?? '').includes(nome))
+  if (!botao) throw new Error(`linha "${nome}" não está aberta`)
   fireEvent.click(botao)
 }
 
-/** Abre a categoria e escolhe o serviço, como o caminho real da pessoa. */
-function escolherServicoNaVitrine(categoria: string, nome: string): void {
-  abrirGrupo(categoria)
-  fireEvent.click(
-    screen.getByRole('button', { name: new RegExp(`^${nome} - R\\$`) }),
-  )
+/** Abre a linha e escolhe o serviço, como o caminho real da pessoa. */
+function escolherServicoNaVitrine(nome: string): void {
+  abrirLinha(nome)
+  fireEvent.click(screen.getByRole('button', { name: `Agendar ${nome}` }))
 }
 
 function escolherDia(): string {
@@ -163,111 +161,91 @@ describe('vitrine (primeira tela)', () => {
     render(<AgendarPublico />)
 
     expect(await screen.findByText('Agende seu horário')).toBeTruthy()
-    // Destaque do dono: mesmo serviço, botão de agendar.
+    // Toda serviço do catálogo tem a sua linha, fechada, com o nome à mostra.
+    expect(screen.getByRole('button', { expanded: false, name: /Corte Audax/ })).toBeTruthy()
+    expect(screen.getByRole('button', { expanded: false, name: /Luzes/ })).toBeTruthy()
+    // E o destaque do dono aparece no carrossel, com o botão de agendar.
     expect(screen.getByRole('button', { name: 'Agendar Barba' })).toBeTruthy()
-    // Serviço do catálogo, com nome e preço vindos do banco. Está na categoria
-    // Cabelo, então a linha é a que a pessoa lê antes de abrir.
-    abrirGrupo('Cabelo')
-    expect(screen.getByRole('button', { name: /^Corte Audax - R\$/ })).toBeTruthy()
   })
 
-  it('cada serviço da lista tem o botão ESCOLHER escrito', async () => {
-    render(<AgendarPublico />)
-    await screen.findByText('Agende seu horário')
-
-    for (const nome of ['Corte Audax', 'Luzes']) {
-      abrirGrupo(nome === 'Corte Audax' ? 'Cabelo' : 'Tratamento')
-      const cartao = screen.getByRole('button', { name: new RegExp(`^${nome} -`) })
-      expect(cartao.textContent).toContain('Escolher')
-      expect(cartao.textContent).toContain('min')
-    }
-  })
-
-  it('os destaques escolhidos pelo dono têm seção própria', async () => {
-    render(<AgendarPublico />)
-    await screen.findByText('Agende seu horário')
-
-    expect(screen.getByText('Destaques da casa')).toBeTruthy()
-    // O destaque não é repetido na lista de todos.
-    expect(screen.getAllByRole('button', { name: 'Agendar Barba' })).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: /^Barba - R\$/ })).toBeNull()
-  })
-
-  it('o destaque some sem configuração, mas o serviço continua na lista', async () => {
-    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
-    render(<AgendarPublico />)
-    await screen.findByText('Agende seu horário')
-
-    expect(screen.queryByText('Destaques da casa')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Agendar Barba' })).toBeNull()
-    // E o serviço continua disponível na lista completa, dentro do grupo Barba.
-    abrirGrupo('Barba')
-    expect(screen.getByRole('button', { name: /^Barba - R\$/ })).toBeTruthy()
-  })
-
-  it('agrupa pela categoria oficial da casa, com todas fechadas', async () => {
-    /*
-     * Nenhuma categoria começa aberta — é o mesmo desenho do Audax Club: uma
-     * linha fechada, e as opções aparecem abaixo quando a pessoa abre. Abrir
-     * uma é escolha de quem está olhando.
-     */
+  it('uma linha por serviço, na ordem do catálogo', async () => {
     catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
     const linhas = screen.getAllByRole('button', { expanded: false })
     expect(linhas.map((l) => l.textContent ?? '')).toEqual([
-      expect.stringContaining('Cabelo'),
+      expect.stringContaining('Corte Audax'),
       expect.stringContaining('Barba'),
-      expect.stringContaining('Tratamento'),
+      expect.stringContaining('Luzes'),
     ])
   })
 
-  it('as opções do serviço aparecem ABAIXO da linha da categoria', async () => {
+  it('NENHUM serviço some da lista, mesmo quando é destaque', async () => {
+    /*
+     * Regressão do que a tela mostrou: a lista "todos os serviços" escondia os
+     * que já estavam no carrossel de destaques. Com os destaques cobrindo o
+     * catálogo, a lista ficava VAZIA — e era ali que a pessoa procurava o
+     * serviço que não via. Destaque é atalho, não filtro.
+     */
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      destaques: ['Barba', 'Corte Audax', 'Luzes'],
+    })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    const linhas = screen.getAllByRole('button', { expanded: false })
+    expect(linhas).toHaveLength(3)
+    for (const nome of ['Barba', 'Corte Audax', 'Luzes']) {
+      expect(linhas.some((l) => (l.textContent ?? '').includes(nome))).toBe(true)
+    }
+  })
+
+  it('as opções do serviço aparecem ABAIXO da linha, com preço e ESCOLHER', async () => {
     catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
     // Fechado, o serviço não está na tela — nem para quem está lendo a linha.
-    expect(screen.queryByRole('button', { name: /^Corte Audax - R\$/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Agendar Corte Audax' })).toBeNull()
 
-    abrirGrupo('Cabelo')
-    const cartao = screen.getByRole('button', { name: /^Corte Audax - R\$/ })
-    // Aberto, o serviço está DENTRO do painel da categoria, não solto na página.
-    const painel = screen.getByRole('button', { expanded: true, name: /Cabelo/ })
-    const alvo = document.getElementById(painel.getAttribute('aria-controls') ?? '')
-    expect(alvo).not.toBeNull()
+    abrirLinha('Corte Audax')
+    const cartao = screen.getByRole('button', { name: 'Agendar Corte Audax' })
+    expect(cartao.textContent).toContain('Escolher')
+
+    // Aberto, o serviço está DENTRO do painel que a linha declara.
+    const linha = screen.getByRole('button', { expanded: true, name: /Corte Audax/ })
+    const alvo = document.getElementById(linha.getAttribute('aria-controls') ?? '')
     expect(alvo?.contains(cartao)).toBe(true)
+    // Preço e duração no painel; a categoria da casa como contexto.
+    expect(alvo?.textContent).toContain(formatarBRL(30))
+    expect(alvo?.textContent).toContain('Cabelo')
   })
 
-  it('a linha fechada diz quantos serviços tem e a partir de quanto sai', async () => {
+  it('abre e fecha a linha do serviço', async () => {
+    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    abrirLinha('Luzes')
+    expect(screen.getByRole('button', { name: 'Agendar Luzes' })).toBeTruthy()
+
+    fecharLinha('Luzes')
+    expect(screen.queryByRole('button', { name: 'Agendar Luzes' })).toBeNull()
+  })
+
+  it('a linha fechada mostra o nome e a duração do catálogo', async () => {
     catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
     const linhas = screen.getAllByRole('button', { expanded: false })
-    const texto = linhas.map((l) => l.textContent ?? '')
-    // "Cabelo" tem só o Corte; "Tratamento" tem as Luzes. O preço é formatado
-    // pela MESMA função da tela — nada de "R$ 30,00" escrito no teste.
-    expect(texto[0]).toContain(`1 serviço · a partir de ${formatarBRL(30)}`)
-    expect(texto[2]).toContain(`1 serviço · a partir de ${formatarBRL(90)}`)
+    expect(linhas[0].textContent).toContain('Corte Audax')
+    expect(linhas[0].textContent).toContain('30 min')
   })
 
-  it('abre e fecha a sanfona', async () => {
-    catalogo.mockResolvedValue({ ...CATALOGO, destaques: [] })
-    render(<AgendarPublico />)
-    await screen.findByText('Agende seu horário')
-
-    abrirGrupo('Tratamento')
-    expect(
-      screen.getByRole('button', { name: /^Luzes - R\$/ }),
-    ).toBeTruthy()
-
-    fecharGrupo('Tratamento')
-    expect(screen.queryByRole('button', { name: /^Luzes - R\$/ })).toBeNull()
-  })
-
-  it('serviço sem categoria vai para "Outros" em vez de sumir', async () => {
+  it('serviço sem categoria aparece igual, sem grupo "Outros"', async () => {
     catalogo.mockResolvedValue({
       ...CATALOGO,
       destaques: [],
@@ -276,9 +254,9 @@ describe('vitrine (primeira tela)', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    expect(screen.getByText('Outros')).toBeTruthy()
-    abrirGrupo('Outros')
-    expect(screen.getByRole('button', { name: /^Pezinho - R\$/ })).toBeTruthy()
+    // Sem agrupamento, não existe "Outros": a linha é do serviço e só.
+    expect(screen.queryByText('Outros')).toBeNull()
+    expect(screen.getByRole('button', { expanded: false, name: /Pezinho/ })).toBeTruthy()
   })
 
   it('os destaques têm seta, porque sem barra visível o mouse não rola', async () => {
@@ -421,14 +399,12 @@ describe('Audax Club na vitrine', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    const linha = await screen.findByText('Audax Club')
-    const bloco = linha.closest('details') as HTMLDetailsElement
-    expect(bloco).not.toBeNull()
-    expect(bloco.getAttribute('open')).toBeNull()
-    expect(bloco.textContent).toContain('3 planos de assinatura')
+    const linha = await screen.findByRole('button', { name: /Audax Club/ })
+    expect(linha.getAttribute('aria-expanded')).toBe('false')
+    expect(linha.textContent).toContain('3 planos de assinatura')
     // Os planos só existem depois de abrir.
-    fireEvent.click(bloco.querySelector('summary') as HTMLElement)
-    expect(bloco.getAttribute('open')).not.toBeNull()
+    expect(screen.queryByText('Audax Corte')).toBeNull()
+    fireEvent.click(linha)
     expect(await screen.findByText('Audax Corte')).toBeTruthy()
   })
 
@@ -446,7 +422,7 @@ describe('Audax Club na vitrine', () => {
     await screen.findByText('Agende seu horário')
 
     const servicos = screen.getByText('Todos os serviços')
-    const clube = await screen.findByText('Audax Club')
+    const clube = await screen.findByRole('button', { name: /Audax Club/ })
     // `compareDocumentPosition` bit 4 = o Club vem DEPOIS na árvore.
     expect(
       servicos.compareDocumentPosition(clube) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -462,8 +438,7 @@ describe('Audax Club na vitrine', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    const linha = await screen.findByText('Audax Club')
-    fireEvent.click((linha.closest('details') as HTMLElement).querySelector('summary') as HTMLElement)
+    fireEvent.click(await screen.findByRole('button', { name: /Audax Club/ }))
 
     expect(await screen.findByText('Audax Corte')).toBeTruthy()
     expect(screen.getByText(/Corte ilimitado durante a vigência/)).toBeTruthy()
@@ -494,8 +469,7 @@ describe('Audax Club na vitrine', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    const linha = await screen.findByText('Audax Club')
-    fireEvent.click((linha.closest('details') as HTMLElement).querySelector('summary') as HTMLElement)
+    fireEvent.click(await screen.findByRole('button', { name: /Audax Club/ }))
 
     expect(await screen.findByText(/Corte ilimitado durante a vigência/)).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Conhecer plano' })).toBeNull()
@@ -514,7 +488,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
 
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
 
     expect(await screen.findByText('Escolha seu barbeiro')).toBeTruthy()
     // A vitrine some: uma etapa por vez.
@@ -524,7 +498,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('Cleiton e Ítalo aparecem juntos, com ESCOLHER', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
 
     const cleiton = await screen.findByRole('button', { name: 'Escolher Cleiton Silva' })
     const italo = screen.getByRole('button', { name: 'Escolher Italo Santos' })
@@ -535,7 +509,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('escolher o barbeiro abre os DIAS (não os horários)', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
 
     expect(await screen.findByText('Escolha o dia')).toBeTruthy()
@@ -548,7 +522,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('escolher o dia consulta a Agenda e mostra só horários livres', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     const dia = escolherDia()
@@ -566,7 +540,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
     slots.mockResolvedValue([])
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -578,7 +552,7 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   it('escolher o horário abre os complementos', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -592,7 +566,7 @@ describe('voltar', () => {
   it('volta uma etapa sem perder as escolhas', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     const dia = escolherDia()
@@ -612,15 +586,16 @@ describe('voltar', () => {
   it('voltar do barbeiro devolve para a vitrine com o serviço marcado', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     await screen.findByText('Escolha seu barbeiro')
 
     fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
     await waitFor(() => expect(screen.getByText('Agende seu horário')).toBeTruthy())
-    // A vitrine volta como estava: a categoria que a pessoa abriu continua
+    // A vitrine volta como estava: a linha que a pessoa abriu continua
     // aberta, e o serviço continua marcado.
-    expect(screen.getByRole('button', { expanded: true, name: /Cabelo/ })).toBeTruthy()
-    const cartao = screen.getByRole('button', { name: /^Corte Audax - R\$/ })
+    const linha = screen.getByRole('button', { expanded: true, name: /Corte Audax/ })
+    expect(linha).toBeTruthy()
+    const cartao = screen.getByRole('button', { name: 'Agendar Corte Audax' })
     expect(cartao.getAttribute('aria-pressed')).toBe('true')
     expect(cartao.textContent).toContain('Escolhido')
   })
@@ -636,7 +611,7 @@ describe('complementos', () => {
   async function ateComplementos() {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -715,7 +690,7 @@ describe('dados, resumo e confirmação', () => {
   async function ateResumo() {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()
@@ -732,7 +707,7 @@ describe('dados, resumo e confirmação', () => {
   it('não deixa seguir sem nome e telefone', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Cabelo', 'Corte Audax')
+    escolherServicoNaVitrine('Corte Audax')
     fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
     fireEvent.click(await screen.findByText('Escolha o dia'))
     escolherDia()

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  agruparPorCategoria,
   alternarComplemento,
-  CATEGORIA_SEM_ROTULO,
   complementosDisponiveis,
   dadosValidos,
   ETAPAS,
@@ -253,58 +251,5 @@ describe('o caminho feliz completo', () => {
     expect(limpo.servicoNome).toBe('')
     expect(limpo.profissional).toBe('')
     expect(limpo.complementoIds).toEqual([])
-  })
-})
-
-describe('agrupar por categoria (a sanfona da vitrine)', () => {
-  const COM_CATEGORIA: ItemCatalogo[] = [
-    { nome: 'Corte Audax', preco: 30, duracaoMin: 30, categoria: 'Cabelo' },
-    { nome: 'Barba', preco: 20, duracaoMin: 20, categoria: 'Barba' },
-    { nome: 'Platinado', preco: 120, duracaoMin: 90, categoria: 'Cabelo' },
-  ]
-
-  it('agrupa pela categoria oficial da casa, sem reordenar dentro do grupo', () => {
-    const grupos = agruparPorCategoria(COM_CATEGORIA)
-    expect(grupos.map((g) => g.categoria)).toEqual(['Cabelo', 'Barba'])
-    expect(grupos[0].servicos.map((s) => s.nome)).toEqual([
-      'Corte Audax',
-      'Platinado',
-    ])
-    expect(grupos[1].servicos.map((s) => s.nome)).toEqual(['Barba'])
-  })
-
-  it('a ordem dos grupos é a do catálogo, não colada em A-Z', () => {
-    const grupos = agruparPorCategoria([
-      { nome: 'Barba', preco: 20, duracaoMin: 20, categoria: 'Barba' },
-      { nome: 'Corte Audax', preco: 30, duracaoMin: 30, categoria: 'Cabelo' },
-    ])
-    expect(grupos.map((g) => g.categoria)).toEqual(['Barba', 'Cabelo'])
-  })
-
-  it('serviço sem categoria vai para "Outros" em vez de sumir', () => {
-    const grupos = agruparPorCategoria([
-      { nome: 'Corte Audax', preco: 30, duracaoMin: 30, categoria: 'Cabelo' },
-      { nome: 'Pezinho', preco: 15, duracaoMin: 10 },
-      { nome: 'Degradê', preco: 40, duracaoMin: 30, categoria: '   ' },
-    ])
-    expect(grupos.map((g) => g.categoria)).toEqual([
-      'Cabelo',
-      CATEGORIA_SEM_ROTULO,
-    ])
-    // Os dois sem categoria ficam juntos e nenhum é perdido.
-    expect(grupos[1].servicos.map((s) => s.nome)).toEqual(['Pezinho', 'Degradê'])
-  })
-
-  it('catálogo vazio não gera grupo nenhum', () => {
-    expect(agruparPorCategoria([])).toEqual([])
-  })
-
-  it('nenhum serviço é perdido nem repetido', () => {
-    const grupos = agruparPorCategoria([
-      ...COM_CATEGORIA,
-      { nome: 'Pezinho', preco: 15, duracaoMin: 10 },
-    ])
-    const total = grupos.reduce((soma, g) => soma + g.servicos.length, 0)
-    expect(total).toBe(4)
   })
 })

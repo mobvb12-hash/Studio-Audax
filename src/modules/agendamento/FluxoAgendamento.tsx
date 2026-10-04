@@ -24,7 +24,6 @@ import {
 } from '@/services/supabase/agendaPublica'
 import {
   alternarComplemento as alternarComplementoEstado,
-  agruparPorCategoria,
   complementosDisponiveis,
   dadosValidos,
   escolherData as escolherDataEstado,
@@ -56,13 +55,22 @@ import {
   Marca,
   Progresso,
   Resumo,
-  SanfonaServicos,
+  ListaServicos,
   Tela,
   dataPorExtenso,
 } from './ui'
 
 /** Quantos dias à frente oferecemos, na grade de datas. */
 const DIAS_A_FRENTE = 21
+
+/**
+ * Chave da linha do Audax Club dentro de `abertos`.
+ *
+ * Vive no mesmo conjunto das linhas de serviço porque é a MESMA mecânica: uma
+ * linha fechada que abre as opções abaixo. Se um dia o Club virar outro
+ * accordion, esta constante é o único lugar a mudar.
+ */
+const AUDAX_CLUB = '__club__'
 
 /** Próximos dias a partir de hoje — atalho de data sem calendário nativo. */
 function proximosDias(quantidade: number): string[] {
@@ -88,20 +96,20 @@ export default function FluxoAgendamento() {
   const [etapa, setEtapa] = useState<Etapa>('servico')
 
   /*
-   * Categorias que a pessoa abriu na sanfona.
+   * Linhas que a pessoa abriu na vitrine (serviço ou Club).
    *
    * É apresentação, e por isso mora aqui e não na máquina de estados — mas
    * mora NESTE componente, que não desmonta entre etapas. Sem isso, voltar do
-   * barbeiro remontaria a vitrine com todas as categorias fechadas e a pessoa
-   * perderia de vista o serviço que acabou de escolher.
+   * barbeiro remontaria a vitrine com tudo fechado e a pessoa perderia de vista
+   * o serviço que acabou de escolher.
    */
-  const [categoriasAbertas, setCategoriasAbertas] = useState<string[]>([])
+  const [abertos, setAbertos] = useState<string[]>([])
 
-  const alternarCategoria = useCallback((categoria: string) => {
-    setCategoriasAbertas((atual) =>
-      atual.includes(categoria)
-        ? atual.filter((c) => c !== categoria)
-        : [...atual, categoria],
+  const alternarAberto = useCallback((chave: string) => {
+    setAbertos((atual) =>
+      atual.includes(chave)
+        ? atual.filter((c) => c !== chave)
+        : [...atual, chave],
     )
   }, [])
 
@@ -395,8 +403,8 @@ export default function FluxoAgendamento() {
       erro={erro}
       enviando={enviando}
       confirmado={confirmado}
-      categoriasAbertas={categoriasAbertas}
-      aoAlternarCategoria={alternarCategoria}
+      abertos={abertos}
+      aoAlternar={alternarAberto}
       aoEscolherServico={escolherServico}
       aoEscolherProfissional={escolherProfissional}
       aoEscolherData={escolherData}
@@ -440,8 +448,9 @@ type PropsEtapa = {
     valor: number
   } | null
   /** Categorias abertas na sanfona — sobrevive ao `voltar` entre etapas. */
-  categoriasAbertas: string[]
-  aoAlternarCategoria: (categoria: string) => void
+  /** Linhas abertas na vitrine (serviços e Club). Sobrevive ao `voltar`. */
+  abertos: string[]
+  aoAlternar: (chave: string) => void
   aoEscolherServico: (nome: string) => void
   aoEscolherProfissional: (nome: string) => void
   aoEscolherData: (iso: string) => void
@@ -514,14 +523,11 @@ function normalizarDestaques(
 function EtapaServicos({
   catalogo,
   estado,
-  categoriasAbertas,
-  aoAlternarCategoria,
+  abertos,
+  aoAlternar,
   aoEscolherServico,
 }: PropsEtapa) {
   const destaques = normalizarDestaques(catalogo.destaques, catalogo.servicos)
-  const resto = catalogo.servicos.filter(
-    (s) => !destaques.some((d) => d.nome === s.nome),
-  )
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-16 sm:px-6">
@@ -553,17 +559,30 @@ function EtapaServicos({
             <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.12em] text-noir-500 uppercase">
               Todos os serviços
             </h2>
-            <SanfonaServicos
-              grupos={agruparPorCategoria(resto)}
-              abertos={categoriasAbertas}
+            {/*
+             * O CATÁLOGO INTEIRO, sem tirar os destaques.
+             *
+             * A lista anterior escondia os serviços que já apareciam no
+             * carrossel. Quando os destaques cobrem o catálogo — que foi o que
+             * aconteceu — a lista "todos os serviços" ficava vazia, e era
+             * exatamente ali que a pessoa procurava o serviço que não via.
+             * Destaque é atalho, não filtro.
+             */}
+            <ListaServicos
+              servicos={catalogo.servicos}
+              abertos={abertos}
               selecionado={estado.servicoNome}
-              aoAlternar={aoAlternarCategoria}
+              aoAlternar={aoAlternar}
               aoEscolher={aoEscolherServico}
             />
           </section>
 
           <div className="mb-7">
-            <SecaoAudaxClub barbearia={catalogo.barbearia} />
+            <SecaoAudaxClub
+              barbearia={catalogo.barbearia}
+              aberto={abertos.includes(AUDAX_CLUB)}
+              aoAlternar={() => aoAlternar(AUDAX_CLUB)}
+            />
           </div>
 
           <EquipeVitrine profissionais={catalogo.profissionais ?? []} />
