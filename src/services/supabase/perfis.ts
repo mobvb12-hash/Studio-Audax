@@ -6,8 +6,11 @@
 // Supabase, para que a tela possa avisar em vez de tratar a criação do perfil
 // como concluída — mesmo padrão de clientes, profissionais e serviços.
 import { supabase } from '@/lib/supabase'
+import type { PapelPerfil } from '@/modules/auth/tipos'
 
-export type PapelPerfil = 'admin' | 'recepcao' | 'profissional'
+// Mesmo conjunto de papéis do módulo de auth (e do trigger `perfis_guardar_papel`
+// da 017): uma única definição, sem um segundo modelo de papel por aqui.
+export type { PapelPerfil }
 
 export type Perfil = {
   id: string

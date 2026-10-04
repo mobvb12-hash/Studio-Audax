@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import { useAuth } from '@/modules/auth/useAuth'
-import { podeAcessarPagina } from '@/modules/auth/permissoes'
+import { usePodeAcessarPagina } from '@/modules/auth/useAuthPermissao'
 
 export type PaginaId =
   | 'painel'
@@ -25,6 +25,7 @@ export type PaginaId =
   | 'relatorios'
   | 'ia'
   | 'configuracoes'
+  | 'usuarios'
 
 type AppLayoutProps = {
   children: ReactNode
@@ -56,6 +57,7 @@ const SECOES: Secao[] = [
     titulo: 'Negócio',
     itens: [
       { id: 'profissionais', rotulo: 'Profissionais' },
+      { id: 'usuarios', rotulo: 'Usuários e permissões' },
       { id: 'comissoes', rotulo: 'Comissões' },
       { id: 'servicos', rotulo: 'Serviços' },
       { id: 'pacotes', rotulo: 'Pacotes' },
@@ -109,13 +111,15 @@ export default function AppLayout({
 }: AppLayoutProps) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [confirmandoSaida, setConfirmandoSaida] = useState(false)
-  const { sair, saindo, erroSaida, perfil } = useAuth()
-  const papel = perfil?.papel ?? null
+  const { sair, saindo, erroSaida } = useAuth()
+  // Menu e navegação usam a permissão EFETIVA (papel + exceção individual):
+  // o item some da barra e a rota é recusada pela mesma regra.
+  const podeAcessar = usePodeAcessarPagina()
 
-  // Filtrar seções e itens baseado nas permissões do papel
+  // Filtrar seções e itens baseado nas permissões efetivas
   const secoesVisiveis = SECOES.map((secao) => ({
     ...secao,
-    itens: secao.itens.filter((item) => podeAcessarPagina(papel, item.id)),
+    itens: secao.itens.filter((item) => podeAcessar(item.id)),
   })).filter((secao) => secao.itens.length > 0)
 
   // Se a página atual não é acessível, redirecionar para a primeira disponível
@@ -128,7 +132,7 @@ export default function AppLayout({
   }
 
   const navegar = (pagina: PaginaId) => {
-    if (!podeAcessarPagina(papel, pagina)) return
+    if (!podeAcessar(pagina)) return
     setMenuAberto(false)
     onNavegar(pagina)
   }

@@ -4,6 +4,7 @@
 // passava a gravar em colunas inexistentes e a falhar em `dados not null`.
 // Estes testes travam as garantias que a migration 004 precisa manter.
 import { describe, expect, it } from 'vitest'
+import { permissoesDoPapel } from '@/modules/auth/permissoes'
 
 // `?raw` traz o conteúdo como texto (sem executar e sem `node:fs`).
 const scripts = import.meta.glob('../supabase/**/*.sql', {
@@ -153,6 +154,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/039_vitrine_galeria_e_categoria.sql',
   '../supabase/migrations/040_expediente_por_dia.sql',
   '../supabase/migrations/041_perfis_e_conta_do_cliente.sql',
+  '../supabase/migrations/042_perfis_permissoes.sql',
 ])
   })
 
@@ -2064,5 +2066,117 @@ describe('041 · fecha o using (true) que a conta de cliente ainda conseguia ler
 
   it('recarrega o cache do PostgREST para a política nova valer na hora', () => {
     expect(texto).toContain("notify pgrst, 'reload schema';")
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 042 - permissão individual por funcionário, na mesma fonte de antes  */
+/* ------------------------------------------------------------------ */
+
+describe('042 - exceção por pessoa sem criar um segundo modelo de papel', () => {
+  const bruto = sql('../supabase/migrations/042_perfis_permissoes.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('uma tabela só de exceções, presa ao perfis que já existe', () => {
+    expect(texto).toMatch(/create table if not exists public\.perfis_permissoes/)
+    expect(texto).toContain('references public.perfis (id) on delete cascade')
+    // uma linha por (pessoa, ação) — nada de lista duplicada por sessão
+    expect(texto).toContain('primary key (perfil_id, acao)')
+    expect(texto).toContain('enable row level security')
+    // anon não lê exceção nenhuma
+    expect(texto).toContain('revoke all on table public.perfis_permissoes from anon')
+    // sem tabela paralela de equipe/usuário/acesso
+    expect(texto).not.toMatch(
+      /create table if not exists public\.(usuarios|equipe|acessos|permissoes)\b/i,
+    )
+    expect(texto).not.toContain('eh_equipe')
+    expect(texto).not.toContain('auth_uid')
+  })
+
+  it('sem linha gravada nada muda: restrictive não restringe, permissive não concede', () => {
+    // restrictive: coalesce(null, true) → deixa passar igual a hoje
+    expect(texto).toMatch(
+      /coalesce\(public\.current_user_permissao\([^)]*\), true\)/,
+    )
+    // permissive: null is true → false → não concede nada
+    expect(texto).toMatch(/public\.current_user_permissao\([^)]*\) is true/)
+    // E as policies existentes continuam intactas: só as novas são trocadas.
+    expect(texto).not.toMatch(/drop policy if exists \w+_por_papel/)
+    expect(texto).not.toMatch(
+      /alter table public\.(clientes|servicos|profissionais|agendamentos|caixa_lancamentos|produtos|perfis)\b/i,
+    )
+    expect(texto).not.toMatch(/\bdelete from\b/i)
+    expect(texto).not.toMatch(/\bdrop table\b/i)
+    expect(texto).not.toMatch(/\btruncate\b/i)
+  })
+
+  it('revogar e conceder usam a MESMA ação, e é a ação do app', () => {
+    expect(texto).toContain('as restrictive for')
+    expect(texto).toContain('as permissive for')
+    expect(texto).toContain('_limite_por_acao')
+    // par por tabela/comando: um restrict que nega, um permissive que concede
+    expect(texto).toContain("'clientes',             'delete', 'clientes:excluir'")
+    expect(texto).toContain("'agendamentos',         'select', 'agenda:ver_propria'")
+    expect(texto).toContain("'perfis',               'update', 'config:perfis_gerenciar'")
+  })
+
+  it('toda ação gravada no banco existe no mapa único de permissões do app', () => {
+    const conhecidas = new Set<string>(permissoesDoPapel('dono'))
+    const usadas = [...texto.matchAll(/'([a-z0-9_]+:[a-z0-9_]+)'/g)].map(
+      (achado) => achado[1],
+    )
+    expect(usadas.length).toBeGreaterThan(20)
+    for (const acao of usadas) {
+      expect(conhecidas.has(acao), `ação desconhecida: ${acao}`).toBe(true)
+    }
+  })
+
+  it('ninguém escreve nas próprias permissões (anti autoelevação)', () => {
+    // escrita só de admin…
+    expect(texto).toContain('public.current_user_is_admin()')
+    // …com alvo diferente do perfil de quem está gravando…
+    expect(texto.match(/perfil_id <> coalesce\(/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+    // …e nunca apontando para o dono.
+    expect(texto).toContain(") <> 'dono'")
+  })
+
+  it('dono é invariável: o helper devolve null e a própria linha não existe', () => {
+    expect(texto).toContain("when public.current_user_papel() = 'dono' then null")
+    expect(texto).toMatch(/pf\.papel = 'dono'/)
+  })
+
+  it('a função só devolve algo para sessão com uid: sem sessão, null', () => {
+    // o filtro é por auth.uid() — sem sessão não há linha que case.
+    expect(texto).toContain('where pf.user_id = auth.uid()')
+    // e ela só é publicada para a sessão autenticada
+    expect(texto).toContain(
+      'grant execute on function public.current_user_permissao(text) to authenticated',
+    )
+  })
+
+  it('auditoria na própria linha: quem alterou, quando e o valor anterior', () => {
+    expect(texto).toContain('alterado_por uuid')
+    expect(texto).toContain('anterior jsonb')
+    expect(texto).toContain('atualizado_em timestamptz not null default now()')
+    expect(texto).toContain(
+      'create or replace function public.perfis_permissoes_auditar()',
+    )
+    // a trigger assina: o cliente não escolhe quem alterou nem o histórico
+    expect(texto).toContain(
+      'new.alterado_por := coalesce(auth.uid(), new.alterado_por);',
+    )
+    expect(texto).toContain('new.anterior := jsonb_build_object(')
+    expect(texto).toContain("'permitido', old.permitido,")
+    // primeira gravação não tem valor anterior
+    expect(texto).toContain('new.anterior := null;')
+  })
+
+  it('a tabela da exceção tem RLS própria, e a checagem falha alto se faltar', () => {
+    expect(texto).toContain('from pg_policies')
+    expect(texto).toContain("policyname = 'perfis_permissoes_insert'")
+    expect(texto).toContain("tablename = 'clientes'")
+    expect(texto).toContain('raise exception')
+    // se o dono algum dia ganhar linha, o push quebra em vez de segurar
+    expect(texto).toMatch(/perfis_permissoes nao pode ter linha de dono/)
   })
 })

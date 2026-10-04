@@ -7,7 +7,8 @@ import TelaLogin from '@/components/TelaLogin'
 import AppLayout, { type PaginaId } from '@/layouts/AppLayout'
 import { AuthProvider } from '@/modules/auth/AuthProvider'
 import { useAuth } from '@/modules/auth/useAuth'
-import { podeAcessarPagina } from '@/modules/auth/permissoes'
+import { usePodeAcessarPagina } from '@/modules/auth/useAuthPermissao'
+import { PermissoesIndividuaisProvider } from '@/modules/auth/permissoesIndividuais'
 import { AgendaProvider } from '@/modules/agenda/store'
 import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider } from '@/modules/clientes/store'
@@ -49,6 +50,7 @@ const ClubeLazy = lazy(() => import('@/pages/Clube'))
 const PoteLazy = lazy(() => import('@/pages/FechamentoPote'))
 const IaLazy = lazy(() => import('@/pages/Ia'))
 const ConfiguracoesLazy = lazy(() => import('@/pages/Configuracoes'))
+const UsuariosLazy = lazy(() => import('@/pages/UsuariosPermissoes'))
 
 const ROTULOS: Record<PaginaId, string> = {
   painel: 'Painel',
@@ -71,6 +73,7 @@ const ROTULOS: Record<PaginaId, string> = {
   relatorios: 'Relatórios',
   ia: 'Central de IA',
   configuracoes: 'Configurações',
+  usuarios: 'Usuários e permissões',
 }
 
 function ModuloFuturo({ pagina }: { pagina: PaginaId }) {
@@ -107,17 +110,20 @@ const IMPLEMENTADAS: PaginaId[] = [
   'pote',
   'ia',
   'configuracoes',
+  'usuarios',
 ]
 
-import type { PapelPerfil } from '@/modules/auth/tipos'
-
-function PaginaProtegida({ pagina: paginaId, children, papel, onNegado }: {
+function PaginaProtegida({ pagina: paginaId, children, onNegado }: {
   pagina: PaginaId
   children: ReactNode
-  papel: PapelPerfil | null | undefined
   onNegado: () => void
 }) {
-  if (!podeAcessarPagina(papel, paginaId)) {
+  // Mesma regra do menu: papel + permissão individual. Uma URL digitada à
+  // mão passa pelo mesmo crivo do item de navegação (e a RLS do banco
+  // continua valendo por baixo, para o caso de a leitura das exceções
+  // ainda não ter chegado).
+  const podeAcessar = usePodeAcessarPagina()
+  if (!podeAcessar(paginaId)) {
     return <SemPermissao pagina={paginaId} onVoltar={onNegado} />
   }
   return <>{children}</>
@@ -127,8 +133,6 @@ function Conteudo() {
   const [pagina, setPagina] = useState<PaginaId>('painel')
   const [modalAberto, setModalAberto] = useState(false)
   const [inicial, setInicial] = useState<SlotAgendamento | null>(null)
-  const { perfil } = useAuth()
-  const papel = perfil?.papel ?? null
 
   function abrirNovo(slot?: SlotAgendamento) {
     setInicial(slot ?? null)
@@ -143,7 +147,7 @@ function Conteudo() {
           reseta ao trocar de módulo (key). */}
       <ErrorBoundary key={pagina}>
         {pagina === 'painel' && (
-          <PaginaProtegida pagina="painel" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="painel" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Painel…</div>}>
               <DashboardLazy
                 onNovo={() => abrirNovo()}
@@ -161,121 +165,128 @@ function Conteudo() {
           </PaginaProtegida>
         )}
         {pagina === 'agenda' && (
-          <PaginaProtegida pagina="agenda" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="agenda" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Agenda…</div>}>
               <AgendaLazy onNovo={abrirNovo} />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'fila' && (
-          <PaginaProtegida pagina="fila" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="fila" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Fila…</div>}>
               <EsperaLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'caixa' && (
-          <PaginaProtegida pagina="caixa" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="caixa" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Caixa…</div>}>
               <CaixaLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'clientes' && (
-          <PaginaProtegida pagina="clientes" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="clientes" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clientes…</div>}>
               <ClientesLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'crm' && (
-          <PaginaProtegida pagina="crm" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="crm" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando CRM…</div>}>
               <CrmLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'whatsapp' && (
-          <PaginaProtegida pagina="whatsapp" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="whatsapp" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando WhatsApp…</div>}>
               <WhatsLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'servicos' && (
-          <PaginaProtegida pagina="servicos" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="servicos" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Serviços…</div>}>
               <ServicosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'profissionais' && (
-          <PaginaProtegida pagina="profissionais" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="profissionais" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Profissionais…</div>}>
               <ProfissionaisLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'comissoes' && (
-          <PaginaProtegida pagina="comissoes" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="comissoes" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Comissões…</div>}>
               <ComissoesLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'financeiro' && (
-          <PaginaProtegida pagina="financeiro" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="financeiro" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Financeiro…</div>}>
               <FinanceiroLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'relatorios' && (
-          <PaginaProtegida pagina="relatorios" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="relatorios" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Relatórios…</div>}>
               <RelatoriosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'pdv' && (
-          <PaginaProtegida pagina="pdv" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="pdv" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando PDV…</div>}>
               <PDVLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'estoque' && (
-          <PaginaProtegida pagina="estoque" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="estoque" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Estoque…</div>}>
               <ProdutosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'clube' && (
-          <PaginaProtegida pagina="clube" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="clube" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clube…</div>}>
               <ClubeLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'pote' && (
-          <PaginaProtegida pagina="pote" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="pote" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando o fechamento do pote…</div>}>
               <PoteLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'ia' && (
-          <PaginaProtegida pagina="ia" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="ia" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando IA…</div>}>
               <IaLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'configuracoes' && (
-          <PaginaProtegida pagina="configuracoes" papel={papel} onNegado={handleNegado}>
+          <PaginaProtegida pagina="configuracoes" onNegado={handleNegado}>
             <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Configurações…</div>}>
               <ConfiguracoesLazy />
+            </Suspense>
+          </PaginaProtegida>
+        )}
+        {pagina === 'usuarios' && (
+          <PaginaProtegida pagina="usuarios" onNegado={handleNegado}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando usuários…</div>}>
+              <UsuariosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
@@ -385,6 +396,13 @@ function App() {
         </PainelAuthProvider>
       ) : (
         <AreaProtegida>
+        {/*
+          As permissões individuais só existem com sessão: o provedor lê as
+          exceções de QUEM ESTÁ LOGADO (e só as dele — a RLS da 042 não deixa
+          ninguém ler as de outro). Quem não monta este provedor (testes
+          isolados, Área do Cliente) segue exatamente pelo papel.
+        */}
+        <PermissoesIndividuaisProvider>
         <ClientesProvider>
           <ProfissionaisProvider>
             <ProdutosProvider>
@@ -416,6 +434,7 @@ function App() {
             </ProdutosProvider>
           </ProfissionaisProvider>
         </ClientesProvider>
+        </PermissoesIndividuaisProvider>
       </AreaProtegida>
       )}
     </AuthProvider>

@@ -209,6 +209,15 @@ const PERMISSOES_POR_PAPEL: Record<PapelPerfil, AcaoPermissao[]> = {
   ],
 }
 
+/**
+ * Permissões individuais de UMA pessoa (overrides gravados em
+ * `perfis_permissoes`). Ausente a chave = a regra é a do papel.
+ *
+ * É o terceiro nível do sistema: papel (padrão) → override (exceção) →
+ * RLS (banco). O mesmo valor decide a UI, a rota e o acesso de verdade.
+ */
+export type PermissoesIndividuais = Partial<Record<AcaoPermissao, boolean>>
+
 /** Verifica se um papel tem uma permissão específica. */
 export function papelTemPermissao(papel: PapelPerfil, acao: AcaoPermissao): boolean {
   return PERMISSOES_POR_PAPEL[papel]?.includes(acao) ?? false
@@ -217,6 +226,30 @@ export function papelTemPermissao(papel: PapelPerfil, acao: AcaoPermissao): bool
 /** Verifica se o usuário (com papel) tem permissão para uma ação. */
 export function usuarioTemPermissao(papel: PapelPerfil | null | undefined, acao: AcaoPermissao): boolean {
   if (!papel) return false
+  return papelTemPermissao(papel, acao)
+}
+
+/**
+ * Permissão EFETIVA: papel + exceção individual.
+ *
+ * - sem exceção → exatamente a regra do papel (nenhuma mudança para quem
+ *   ainda não gravou override);
+ * - exceção `false` → nega mesmo que o papel permita (revogação);
+ * - exceção `true` → concede mesmo que o papel negue (concessão);
+ * - `dono` → sempre `true`: o dono é invariável e nunca é limitado.
+ *
+ * Sem sessão (`papel` nulo) continua negando — um override nunca cria
+ * acesso sozinho, ele só ajusta quem já tem papel.
+ */
+export function usuarioTemPermissaoEfetiva(
+  papel: PapelPerfil | null | undefined,
+  acao: AcaoPermissao,
+  individuais?: PermissoesIndividuais | null,
+): boolean {
+  if (!papel) return false
+  if (papel === 'dono') return true
+  const sobrescreve = individuais?.[acao]
+  if (sobrescreve !== undefined) return sobrescreve
   return papelTemPermissao(papel, acao)
 }
 
@@ -235,35 +268,52 @@ export function ehPapelOperacional(papel: PapelPerfil): boolean {
   return papel === 'recepcao' || papel === 'profissional'
 }
 
+/** Ações que liberam cada página. Uma página sem restrição específica é aberta. */
+const PAGINAS_ACOES: Record<string, AcaoPermissao[]> = {
+  painel: [],
+  agenda: ['agenda:ver_todas', 'agenda:ver_propria'],
+  fila: ['espera:ver'],
+  pdv: ['pdv:vender'],
+  caixa: ['caixa:ver'],
+  clientes: ['clientes:ver'],
+  crm: ['crm:ver'],
+  whatsapp: ['whatsapp:ver'],
+  profissionais: ['profissionais:ver'],
+  servicos: ['servicos:ver'],
+  comissoes: ['comissoes:ver_todas', 'comissoes:ver_proprias'],
+  clube: ['clube:ver'],
+  pote: ['clube:pote_ver'],
+  estoque: ['estoque:ver'],
+  financeiro: ['financeiro:ver'],
+  relatorios: ['relatorios:ver'],
+  ia: ['ia:ver'],
+  configuracoes: ['config:ver'],
+  usuarios: ['config:permissoes_ver'],
+}
+
 /** Verifica se o usuário pode acessar uma página/rota. */
 export function podeAcessarPagina(papel: PapelPerfil | null | undefined, pagina: string): boolean {
+  return podeAcessarPaginaEfetiva(papel, pagina)
+}
+
+/**
+ * Acesso à página considerando as permissões individuais — é a regra que
+ * o menu e a rota usam, então um item escondido e uma URL digitada à mão
+ * passam pelo mesmo crivo.
+ */
+export function podeAcessarPaginaEfetiva(
+  papel: PapelPerfil | null | undefined,
+  pagina: string,
+  individuais?: PermissoesIndividuais | null,
+): boolean {
   if (!papel) return false
 
-  const mapaPaginaPermissao: Record<string, AcaoPermissao[]> = {
-    painel: [],
-    agenda: ['agenda:ver_todas', 'agenda:ver_propria'],
-    fila: ['espera:ver'],
-    pdv: ['pdv:vender'],
-    caixa: ['caixa:ver'],
-    clientes: ['clientes:ver'],
-    crm: ['crm:ver'],
-    whatsapp: ['whatsapp:ver'],
-    profissionais: ['profissionais:ver'],
-    servicos: ['servicos:ver'],
-    comissoes: ['comissoes:ver_todas', 'comissoes:ver_proprias'],
-    clube: ['clube:ver'],
-  pote: ['clube:pote_ver'],
-    estoque: ['estoque:ver'],
-    financeiro: ['financeiro:ver'],
-    relatorios: ['relatorios:ver'],
-    ia: ['ia:ver'],
-    configuracoes: ['config:ver'],
-  }
-
-  const permissoesNecessarias = mapaPaginaPermissao[pagina]
+  const permissoesNecessarias = PAGINAS_ACOES[pagina]
   if (!permissoesNecessarias || permissoesNecessarias.length === 0) return true // páginas sem restrição específica
 
-  return permissoesNecessarias.some((acao) => usuarioTemPermissao(papel, acao))
+  return permissoesNecessarias.some((acao) =>
+    usuarioTemPermissaoEfetiva(papel, acao, individuais),
+  )
 }
 
 /** Verifica se o profissional pode ver/editar dados de outro profissional. */
