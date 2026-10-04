@@ -33,7 +33,7 @@ function lerFiltroInicial(): FiltroStatus {
 function CardIndicador({
   valor,
   rotulo,
-  cor = 'text-[#1C1A15]',
+  cor = 'text-[#121110]',
 }: {
   valor: string
   rotulo: string
@@ -42,7 +42,7 @@ function CardIndicador({
   return (
     <div className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] px-3 py-3">
       <p className={`text-xl leading-none font-bold ${cor}`}>{valor}</p>
-      <p className="mt-1.5 text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+      <p className="mt-1.5 text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase">
         {rotulo}
       </p>
     </div>
@@ -90,10 +90,10 @@ export default function Produtos() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Produtos
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {movimentacoes.length} movimentação(ões) de estoque · histórico
             completo
           </p>

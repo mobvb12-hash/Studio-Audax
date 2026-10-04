@@ -10,8 +10,8 @@
 export function chipClasse(ativa: boolean): string {
   return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
     ativa
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
+      ? 'border-[#8A6A14] bg-[#C9A24A] text-[#121110]'
+      : 'border-[#E5DCC3] bg-white text-[#3A352C] hover:border-[#8A6A14]'
   }`
 }
 
@@ -97,15 +97,15 @@ export function mascararTelefone(bruto: string): string {
 
 /** Classe padrão dos campos de texto dos formulários/modais. */
 export const CAMPO_FORM =
-  'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
+  'w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#121110] outline-none focus:border-[#8A6A14]'
 
 /** Classe padrão dos selects de filtro em páginas (sem largura full). */
 export const CAMPO_SELECT =
-  'rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]'
+  'rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#121110] outline-none focus:border-[#8A6A14]'
 
 /** Classe padrão dos rótulos (labels) dos formulários/modais. */
 export const ROTULO_FORM =
-  'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase'
+  'mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase'
 
 /**
  * Classes base da ÁREA DO CLIENTE (creme / preto / dourado).

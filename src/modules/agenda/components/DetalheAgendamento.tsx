@@ -66,10 +66,10 @@ export default function DetalheAgendamento({
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               {ag.profissional}
             </p>
-            <h2 className="text-lg font-bold text-[#1C1A15]">{ag.cliente}</h2>
+            <h2 className="text-lg font-bold text-[#121110]">{ag.cliente}</h2>
           </div>
           <span
             className={`rounded-full border px-2.5 py-1 text-xs font-medium ${estiloBadge(ag.status)}`}
@@ -80,35 +80,35 @@ export default function DetalheAgendamento({
 
         <dl className="mt-4 flex flex-col gap-2 text-sm">
           <div className="flex justify-between gap-3">
-            <dt className="text-[#8A8171]">Horário</dt>
-            <dd className="font-medium text-[#1C1A15]">
+            <dt className="text-[#7C7469]">Horário</dt>
+            <dd className="font-medium text-[#121110]">
               {ag.horario} – {somaMinutos(ag.horario, duracao)} ({duracao} min)
             </dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-[#8A8171]">Serviço</dt>
-            <dd className="text-right font-medium text-[#1C1A15]">
+            <dt className="text-[#7C7469]">Serviço</dt>
+            <dd className="text-right font-medium text-[#121110]">
               {ag.servico}
             </dd>
           </div>
           {ag.telefone && (
             <div className="flex justify-between gap-3">
-              <dt className="text-[#8A8171]">Telefone</dt>
-              <dd className="font-medium text-[#1C1A15]">{ag.telefone}</dd>
+              <dt className="text-[#7C7469]">Telefone</dt>
+              <dd className="font-medium text-[#121110]">{ag.telefone}</dd>
             </div>
           )}
           {ag.observacao && (
             <div className="flex justify-between gap-3">
-              <dt className="text-[#8A8171]">Obs.</dt>
-              <dd className="text-right font-medium text-[#1C1A15]">
+              <dt className="text-[#7C7469]">Obs.</dt>
+              <dd className="text-right font-medium text-[#121110]">
                 {ag.observacao}
               </dd>
             </div>
           )}
           {ultimaRemarcacao && (
             <div className="flex justify-between gap-3">
-              <dt className="text-[#8A8171]">Remarcado</dt>
-              <dd className="text-right font-medium text-[#1C1A15]">
+              <dt className="text-[#7C7469]">Remarcado</dt>
+              <dd className="text-right font-medium text-[#121110]">
                 {remarcacoes.length}× — antes{' '}
                 {formatarDataCurta(ultimaRemarcacao.de.data)} às{' '}
                 {ultimaRemarcacao.de.horario} ({ultimaRemarcacao.de.profissional}
@@ -117,7 +117,7 @@ export default function DetalheAgendamento({
             </div>
           )}
           <div className="flex justify-between gap-3">
-            <dt className="text-[#8A8171]">Recebimento</dt>
+            <dt className="text-[#7C7469]">Recebimento</dt>
             <dd
               className={`font-semibold ${pago ? 'text-[#3F6B33]' : 'text-[#8A6A14]'}`}
             >
@@ -135,7 +135,7 @@ export default function DetalheAgendamento({
               <button
                 type="button"
                 onClick={() => setVerFechamento(true)}
-                className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
               >
                 Ver Fechamento
               </button>
@@ -149,7 +149,7 @@ export default function DetalheAgendamento({
                     mudarStatus(ag.id, 'confirmado')
                     onFechar()
                   }}
-                  className="rounded-lg bg-[#8A6A14] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                  className="rounded-lg bg-[#C9A24A] px-3 py-2 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
                 >
                   Confirmar
                 </button>
@@ -158,7 +158,7 @@ export default function DetalheAgendamento({
                 <button
                   type="button"
                   onClick={onPagar}
-                  className="rounded-lg bg-[#5FA83E] px-3 py-2 text-xs font-semibold text-white hover:bg-[#549531]"
+                  className="rounded-lg bg-[#5FA83E] px-3 py-2 text-xs font-semibold text-[#121110] hover:bg-[#549531]"
                 >
                   {ag.status === 'concluido'
                     ? 'Fechar conta'
@@ -173,7 +173,7 @@ export default function DetalheAgendamento({
                   <button
                     type="button"
                     onClick={() => setVerFechamento(true)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                   >
                     Ver Fechamento
                   </button>
@@ -192,7 +192,7 @@ export default function DetalheAgendamento({
                 <button
                   type="button"
                   onClick={onEditar}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                 >
                   Editar
                 </button>
@@ -273,7 +273,7 @@ export default function DetalheAgendamento({
         <button
           type="button"
           onClick={onFechar}
-          className="mt-4 w-full rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+          className="mt-4 w-full rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
         >
           Fechar
         </button>

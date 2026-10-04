@@ -130,14 +130,14 @@ export default function MovimentacoesEstoque({
           <button
             type="button"
             onClick={aoEntrada}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             + Nova entrada
           </button>
           <button
             type="button"
             onClick={aoAjuste}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             + Ajuste
           </button>
@@ -152,7 +152,7 @@ export default function MovimentacoesEstoque({
         <div className="mt-4 overflow-x-auto rounded-xl border border-[#E5DCC3] bg-[#FDFBF3]">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
-              <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+              <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                 <th className="px-3 py-2 font-semibold">Data</th>
                 <th className="px-3 py-2 font-semibold">Produto</th>
                 <th className="px-3 py-2 font-semibold">Tipo</th>
@@ -167,13 +167,13 @@ export default function MovimentacoesEstoque({
             <tbody className="divide-y divide-[#EFE7D3]">
               {movimentacoesFiltradas.map((m) => (
                 <tr key={m.id}>
-                  <td className="px-3 py-2 text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#3A352C]">
                     {m.data} · {m.hora}
                   </td>
-                  <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                  <td className="px-3 py-2 font-medium text-[#121110]">
                     {m.produto}
                   </td>
-                  <td className="px-3 py-2 text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#3A352C]">
                     {ROTULO_TIPO_MOVIMENTACAO[m.tipo]}
                     {m.motivo && ` · ${m.motivo}`}
                   </td>
@@ -185,19 +185,19 @@ export default function MovimentacoesEstoque({
                     {m.quantidade > 0 ? '+' : ''}
                     {m.quantidade}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#4A4436]">
+                  <td className="px-3 py-2 text-right text-[#3A352C]">
                     {m.estoqueAntes}
                   </td>
-                  <td className="px-3 py-2 text-right font-medium text-[#1C1A15]">
+                  <td className="px-3 py-2 text-right font-medium text-[#121110]">
                     {m.estoqueDepois}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#4A4436]">
+                  <td className="px-3 py-2 text-right text-[#3A352C]">
                     {formatarBRL(m.custoUnitario)}
                   </td>
-                  <td className="px-3 py-2 text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#3A352C]">
                     {ORIGEM_ROTULO[m.origem] ?? m.origem}
                   </td>
-                  <td className="max-w-[220px] truncate px-3 py-2 text-[#8A8171]">
+                  <td className="max-w-[220px] truncate px-3 py-2 text-[#7C7469]">
                     {[m.fornecedor, m.observacao].filter(Boolean).join(' · ') ||
                       '—'}
                   </td>

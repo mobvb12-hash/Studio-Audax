@@ -114,17 +114,17 @@ export default function ProfissionalFormModal({
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[#1C1A15]">
+            <h2 className="text-lg font-bold text-[#121110]">
               {editando ? 'Editar profissional' : 'Novo profissional'}
             </h2>
-            <p className="mt-1 text-[13px] text-[#8A8171]">
+            <p className="mt-1 text-[13px] text-[#7C7469]">
               Foto, telefone e e-mail ficam salvos no cadastro.
             </p>
           </div>
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -227,7 +227,7 @@ export default function ProfissionalFormModal({
             "novo agendamento" pode ser um número diferente do contato da
             ficha. Vazio = não recebe aviso, e o agendamento segue normal. */}
         <div className="mt-4 rounded-xl border border-[#E5DCC3] bg-[#FBF8F1] p-3">
-          <p className="text-[13px] font-semibold text-[#4A4436]">
+          <p className="text-[13px] font-semibold text-[#3A352C]">
             Aviso de novo agendamento
           </p>
           <p className="mt-0.5 text-xs text-[#6B6353]">
@@ -248,7 +248,7 @@ export default function ProfissionalFormModal({
                 onChange={(e) => setWhatsappNotificacao(e.target.value)}
               />
             </div>
-            <label className="flex items-center gap-2 pb-2 text-[13px] text-[#4A4436]">
+            <label className="flex items-center gap-2 pb-2 text-[13px] text-[#3A352C]">
               <input
                 id="prof-notificar"
                 type="checkbox"
@@ -270,7 +270,7 @@ export default function ProfissionalFormModal({
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Cancelar
           </button>
@@ -278,7 +278,7 @@ export default function ProfissionalFormModal({
             type="button"
             onClick={salvar}
             disabled={processandoFoto}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:opacity-60"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C] disabled:opacity-60"
           >
             {editando ? 'Salvar alterações' : 'Cadastrar profissional'}
           </button>

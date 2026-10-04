@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
+import { MarcaAudax } from '@/components/MarcaAudax'
 import { useAuth } from '@/modules/auth/useAuth'
 import { usePodeAcessarPagina } from '@/modules/auth/useAuthPermissao'
 
@@ -89,14 +90,14 @@ function BotaoMenu({
       onClick={() => onNavegar(id)}
       className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
         ativo
-          ? 'bg-[#E9DDC0] font-medium text-[#1C1A15]'
-          : 'text-[#4A4436] hover:bg-[#F3ECDA] hover:text-[#1C1A15]'
+          ? 'bg-[#C9A24A] font-medium text-[#121110]'
+          : 'text-[#C9BFA4] hover:bg-[#1A1815] hover:text-[#F7F3EA]'
       }`}
     >
       <span
         aria-hidden="true"
         className={`h-1.5 w-1.5 rounded-full ${
-          ativo ? 'bg-[#8A6A14]' : 'bg-[#C9B98F]'
+          ativo ? 'bg-[#121110]' : 'bg-[#5A5346]'
         }`}
       />
       {rotulo}
@@ -138,15 +139,15 @@ export default function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F3ECDA] text-[#1C1A15]">
+    <div className="flex min-h-screen bg-[#F3ECDA] text-[#121110]">
       {/* Barra superior — apenas mobile */}
-      <header className="fixed inset-x-0 top-0 z-30 flex items-center gap-3 border-b border-[#E9DDC0] bg-[#FAF6EB] px-4 py-3 lg:hidden">
+      <header className="fixed inset-x-0 top-0 z-30 flex items-center gap-3 border-b border-[#2E2A21] bg-[#0C0B0A] px-4 py-3 lg:hidden">
         <button
           type="button"
           onClick={() => setMenuAberto((a) => !a)}
           aria-label={menuAberto ? 'Fechar menu' : 'Abrir menu'}
           aria-expanded={menuAberto}
-          className="rounded-lg border border-[#E5DCC3] bg-white p-2 text-[#1C1A15] hover:bg-[#F3ECDA]"
+          className="rounded-lg border border-[#3A352C] bg-[#15140F] p-2 text-[#F7F3EA] hover:bg-[#1F1D18]"
         >
           <svg
             aria-hidden="true"
@@ -160,8 +161,9 @@ export default function AppLayout({
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <p className="text-[18px] leading-none font-bold tracking-tight">
-          Studio <span className="text-[#8A6A14]">Audax</span>
+        <MarcaAudax className="h-6 w-6 shrink-0 text-[#F7F3EA]" />
+        <p className="text-[18px] leading-none font-bold tracking-tight text-[#F7F3EA]">
+          Studio <span className="text-[#C9A24A]">Audax</span>
         </p>
       </header>
 
@@ -176,23 +178,26 @@ export default function AppLayout({
 
       {/* Sidebar — drawer no mobile, lateral fixa no desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[230px] flex-col border-r border-[#E9DDC0] bg-[#FAF6EB] transition-transform duration-200 lg:static lg:w-[260px] lg:translate-x-0 lg:transition-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[230px] flex-col border-r border-[#2E2A21] bg-[#0C0B0A] transition-transform duration-200 lg:static lg:w-[260px] lg:translate-x-0 lg:transition-none ${
           menuAberto ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="border-b border-[#E9DDC0] px-5 py-5">
-          <p className="text-[22px] leading-none font-bold tracking-tight">
-            Studio <span className="text-[#8A6A14]">Audax</span>
-          </p>
-          <p className="mt-1.5 text-[11px] font-semibold tracking-[0.22em] text-[#8A8171] uppercase">
-            Studio Audax
-          </p>
+        <div className="flex items-center gap-3 border-b border-[#2E2A21] px-5 py-5">
+          <MarcaAudax className="h-9 w-9 shrink-0 text-[#F7F3EA]" />
+          <div className="min-w-0">
+            <p className="text-[21px] leading-none font-bold tracking-tight text-[#F7F3EA]">
+              Studio <span className="text-[#C9A24A]">Audax</span>
+            </p>
+            <p className="mt-1.5 text-[10px] font-semibold tracking-[0.28em] text-[#C9A24A] uppercase">
+              Desde 2024
+            </p>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {secoesVisiveis.map((secao) => (
             <div key={secao.titulo} className="mb-5">
-              <p className="px-3 pb-2 text-[11px] font-semibold tracking-[0.2em] text-[#8A8171] uppercase">
+              <p className="px-3 pb-2 text-[11px] font-semibold tracking-[0.2em] text-[#8E887C] uppercase">
                 {secao.titulo}
               </p>
               <div className="flex flex-col gap-0.5">
@@ -210,8 +215,8 @@ export default function AppLayout({
           ))}
         </nav>
 
-        <div className="border-t border-[#E9DDC0] px-5 py-3">
-          <p className="text-[11px] text-[#A99E85]">
+        <div className="border-t border-[#2E2A21] px-5 py-3">
+          <p className="text-[11px] text-[#8E887C]">
             Dados salvos automaticamente
           </p>
           {erroSaida && (
@@ -226,7 +231,7 @@ export default function AppLayout({
             type="button"
             onClick={() => setConfirmandoSaida(true)}
             disabled={saindo}
-            className="mt-2.5 w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-[12px] font-semibold text-[#1C1A15] hover:bg-[#F3ECDA] disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-2.5 w-full rounded-lg border border-[#3A352C] bg-[#15140F] px-3 py-2 text-[12px] font-semibold text-[#E7E0CB] hover:bg-[#1F1D18] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saindo ? 'Saindo…' : 'Sair'}
           </button>

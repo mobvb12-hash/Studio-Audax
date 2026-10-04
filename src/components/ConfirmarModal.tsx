@@ -56,20 +56,20 @@ export default function ConfirmarModal({
         className="w-full max-w-sm rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-[#1C1A15]">{titulo}</h2>
-        <p className="mt-2 text-sm text-[#4A4436]">{texto}</p>
+        <h2 className="text-lg font-bold text-[#121110]">{titulo}</h2>
+        <p className="mt-2 text-sm text-[#3A352C]">{texto}</p>
 
         {motivoObrigatorio && (
           <div className="mt-4">
             <label
-              className="mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase"
+              className="mb-1 block text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase"
               htmlFor="conf-motivo"
             >
               {rotuloMotivo} *
             </label>
             <textarea
               id="conf-motivo"
-              className="w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+              className="w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#121110] outline-none focus:border-[#8A6A14]"
               rows={3}
               placeholder={placeholderMotivo}
               value={motivo}
@@ -88,17 +88,17 @@ export default function ConfirmarModal({
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Voltar
           </button>
           <button
             type="button"
             onClick={confirmar}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${
+            className={`rounded-lg px-4 py-2 text-sm font-semibold ${
               perigo
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-[#8A6A14] hover:bg-[#6F550F]'
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-[#C9A24A] text-[#121110] hover:bg-[#A8842C]'
             }`}
           >
             {rotuloConfirmar}

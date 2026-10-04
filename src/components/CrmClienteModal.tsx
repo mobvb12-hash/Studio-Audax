@@ -231,7 +231,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-[#1C1A15]">
+            <h2 className="text-lg font-bold text-[#121110]">
               {cliente.nome}
             </h2>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -248,7 +248,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 </span>
               )}
               {cliente.telefone && (
-                <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#4A4436]">
+                <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#3A352C]">
                   {cliente.telefone}
                 </span>
               )}
@@ -262,7 +262,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 perfil.ultimoAtendimento,
                 perfil.frequenciaDias,
               ) && (
-                <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#4A4436]">
+                <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs text-[#3A352C]">
                   Sugestão de retorno:{' '}
                   {formatarDataCurta(
                     proximaDataSugerida(
@@ -278,7 +278,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
             type="button"
             onClick={onFechar}
             aria-label="Fechar"
-            className="rounded-md border border-[#E5DCC3] bg-white px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md border border-[#E5DCC3] bg-white px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
           >
             ×
           </button>
@@ -292,7 +292,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
           <button
             type="button"
             onClick={() => setAgendar(true)}
-            className="rounded-lg bg-[#8A6A14] px-3 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-3 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Agendar
           </button>
@@ -303,7 +303,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
         {/* WhatsApp — mensagens preparadas, nunca enviadas sozinhas */}
         <div className="mt-5 border-t border-[#E5DCC3] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-[#1C1A15]">
+            <h3 className="text-sm font-bold text-[#121110]">
               WhatsApp do cliente
             </h3>
             <span
@@ -326,7 +326,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 type="button"
                 disabled={!disponivel(id)}
                 onClick={() => criarDeTemplate(id)}
-                className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#4A4436] hover:border-[#8A6A14] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#3A352C] hover:border-[#8A6A14] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {rotulo(id)}
               </button>
@@ -336,10 +336,10 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
           {/* Assistente de texto da IA — rascunho revisado pelo humano */}
           <div className="mt-3 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[13px] font-bold text-[#1C1A15]">
+              <p className="text-[13px] font-bold text-[#121110]">
                 Sugestão com IA
               </p>
-              <span className="text-[11px] text-[#8A8171]">
+              <span className="text-[11px] text-[#7C7469]">
                 Texto gerado do perfil real — nada é enviado
               </span>
             </div>
@@ -349,7 +349,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
               </label>
               <select
                 id="ia-template"
-                className="flex-1 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs text-[#4A4436] outline-none focus:border-[#8A6A14]"
+                className="flex-1 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs text-[#3A352C] outline-none focus:border-[#8A6A14]"
                 value={templateIa}
                 disabled={disponiveis.length === 0}
                 onChange={(e) => setIaTemplate(e.target.value as IdTemplate)}
@@ -364,7 +364,7 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                 type="button"
                 onClick={sugerirComIa}
                 disabled={disponiveis.length === 0}
-                className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-[#C9A24A] px-3 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Sugerir com IA
               </button>
@@ -376,19 +376,19 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
             )}
             {iaRascunho && (
               <div className="mt-2 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2">
-                <p className="text-sm text-[#4A4436]">{iaRascunho.texto}</p>
+                <p className="text-sm text-[#3A352C]">{iaRascunho.texto}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={criarIaRascunho}
-                    className="rounded-lg bg-[#8A6A14] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                    className="rounded-lg bg-[#C9A24A] px-2.5 py-1 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
                   >
                     Criar mensagem pendente
                   </button>
                   <button
                     type="button"
                     onClick={() => setIaRascunho(null)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                   >
                     Descartar
                   </button>
@@ -423,11 +423,11 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                     >
                       {STATUS_ROTULO[m.status]}
                     </span>
-                    <span className="text-[11px] font-medium text-[#8A8171]">
+                    <span className="text-[11px] font-medium text-[#7C7469]">
                       {TEMPLATES_ROTULO[m.template]} · {ORIGEM_ROTULO[m.origem]}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-[#4A4436]">{m.texto}</p>
+                  <p className="mt-1 text-sm text-[#3A352C]">{m.texto}</p>
                   {m.motivoFalha && (
                     <p className="mt-1 text-[12px] text-red-700">
                       {m.motivoFalha}
@@ -444,14 +444,14 @@ export default function CrmClienteModal({ cliente, onFechar }: Props) {
                     <button
                       type="button"
                       onClick={() => registrarEnvioManual(m.id)}
-                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                     >
                       Marcar enviada
                     </button>
                     <button
                       type="button"
                       onClick={() => setFalhando(m)}
-                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                      className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                     >
                       Registrar falha
                     </button>

@@ -176,7 +176,7 @@ export default function PainelClube() {
   return (
     <div className="space-y-6">
       <header className="text-center">
-        <h1 className="font-serif-display text-[24px] leading-tight font-semibold text-noir-900">
+        <h1 className="font-display text-[24px] leading-tight font-semibold text-noir-900">
           Meu Audax Club
         </h1>
         <div

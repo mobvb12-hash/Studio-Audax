@@ -45,15 +45,15 @@ export default function ItemCliente({
         {iniciais(cliente.nome)}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-[#1C1A15]">
+        <p className="truncate text-sm font-bold text-[#121110]">
           {cliente.nome}{' '}
           {cliente.telefone && (
-            <span className="ml-1 font-normal text-[#8A8171]">
+            <span className="ml-1 font-normal text-[#7C7469]">
               {cliente.telefone}
             </span>
           )}
         </p>
-        <p className="mt-0.5 truncate text-[13px] text-[#4A4436]">
+        <p className="mt-0.5 truncate text-[13px] text-[#3A352C]">
           {cliente.email && `${cliente.email} · `}
           {cliente.observacao || 'Sem observações'}
         </p>
@@ -83,7 +83,7 @@ export default function ItemCliente({
                 ].toLowerCase()}`}
           </span>
         )}
-        <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436]">
+        <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C]">
           {info?.total ?? 0} atendimento(s)
         </span>
         {info?.ultimo && (
@@ -99,7 +99,7 @@ export default function ItemCliente({
         <button
           type="button"
           onClick={aoAgendar}
-          className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F]"
+          className="rounded-lg bg-[#C9A24A] px-3 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           Agendar
         </button>

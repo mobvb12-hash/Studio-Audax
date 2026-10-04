@@ -151,11 +151,11 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Histórico do cliente
             </p>
             <div className="mt-1 flex items-center gap-2">
-              <h2 className="text-lg font-bold text-[#1C1A15]">
+              <h2 className="text-lg font-bold text-[#121110]">
                 {cliente.nome}
               </h2>
               <span
@@ -168,7 +168,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
                 {cliente.ativo ? 'Ativo' : 'Inativo'}
               </span>
             </div>
-            <p className="text-[13px] text-[#8A8171]">
+            <p className="text-[13px] text-[#7C7469]">
               {cliente.telefone || 'Sem telefone'}
               {cliente.email && ` · ${cliente.email}`}
             </p>
@@ -176,7 +176,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -188,7 +188,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
             <p className="text-lg leading-none font-bold text-[#8A6A14]">
               {historico.length}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Agendamentos
             </p>
           </div>
@@ -196,7 +196,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
             <p className="text-lg leading-none font-bold text-[#8A6A14]">
               {concluidos}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Concluídos
             </p>
           </div>
@@ -204,7 +204,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
             <p className="text-[13px] leading-tight font-bold text-[#8A6A14]">
               {ultimoConcluido ? formatarDataLonga(ultimoConcluido) : '—'}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Último atendimento
             </p>
           </div>
@@ -212,7 +212,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
             <p className="text-lg leading-none font-bold text-[#8A6A14]">
               {formatarBRL(totalGasto)}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Total gasto
             </p>
           </div>
@@ -229,7 +229,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Dados cadastrais
           </p>
           <div className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1">
@@ -239,8 +239,8 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
                   key={d.rotulo}
                   className="flex items-start justify-between gap-3 py-2 text-sm"
                 >
-                  <dt className="shrink-0 text-[#8A8171]">{d.rotulo}</dt>
-                  <dd className="text-right font-medium text-[#1C1A15]">
+                  <dt className="shrink-0 text-[#7C7469]">{d.rotulo}</dt>
+                  <dd className="text-right font-medium text-[#121110]">
                     {d.valor}
                   </dd>
                 </div>
@@ -262,7 +262,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Atendimentos
           </p>
           {historico.length === 0 ? (
@@ -274,10 +274,10 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
               {historico.map((ag) => (
                 <li key={ag.id} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-[#1C1A15]">
+                    <p className="truncate text-sm font-bold text-[#121110]">
                       {formatarDataLonga(ag.data)} · {ag.horario}
                     </p>
-                    <p className="truncate text-xs text-[#8A8171]">
+                    <p className="truncate text-xs text-[#7C7469]">
                       {ag.servico} · {ag.profissional}
                     </p>
                   </div>
@@ -293,7 +293,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Pagamentos de atendimentos
           </p>
           {pagamentosAtendimentos.length === 0 ? (
@@ -305,10 +305,10 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
               {pagamentosAtendimentos.map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#1C1A15]">
+                    <p className="truncate text-sm font-medium text-[#121110]">
                       {l.descricao}
                     </p>
-                    <p className="text-xs text-[#8A8171]">
+                    <p className="text-xs text-[#7C7469]">
                       {formatarDataLonga(l.data)} · {l.hora} ·{' '}
                       {FORMAS_ROTULO[l.formaPagamento]}
                       {l.desconto > 0 && ` · desconto ${formatarBRL(l.desconto)}`}
@@ -329,7 +329,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Compras de produtos
           </p>
           {comprasProdutos.length === 0 ? (
@@ -341,10 +341,10 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
               {comprasProdutos.map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#1C1A15]">
+                    <p className="truncate text-sm font-medium text-[#121110]">
                       {l.descricao}
                     </p>
-                    <p className="text-xs text-[#8A8171]">
+                    <p className="text-xs text-[#7C7469]">
                       {formatarDataLonga(l.data)} · {l.hora}
                     </p>
                   </div>
@@ -358,7 +358,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Assinatura Audax Club
           </p>
           {assinacoes.length === 0 ? (
@@ -375,11 +375,11 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
                     className="flex items-center justify-between gap-2 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-[#1C1A15]">
+                      <p className="truncate text-sm font-bold text-[#121110]">
                         {PLANOS_ROTULO[a.plano]} · {formatarBRL(a.valorMensal)}
                         /mês
                       </p>
-                      <p className="text-xs text-[#8A8171]">
+                      <p className="text-xs text-[#7C7469]">
                         {a.cancelada
                           ? `Cancelada em ${formatarDataLonga(a.canceladaEm ?? a.dataAssinatura)}`
                           : `Desde ${formatarDataLonga(a.dataAssinatura)} · próxima cobrança em ${formatarDataLonga(a.proximoVencimento)}`}
@@ -398,7 +398,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Audax Club (assinaturas)
           </p>
           {pagamentosClube.length === 0 ? (
@@ -410,10 +410,10 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
               {pagamentosClube.map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#1C1A15]">
+                    <p className="truncate text-sm font-medium text-[#121110]">
                       {l.descricao}
                     </p>
-                    <p className="text-xs text-[#8A8171]">
+                    <p className="text-xs text-[#7C7469]">
                       {formatarDataLonga(l.data)} · {l.hora}
                     </p>
                   </div>
@@ -429,7 +429,7 @@ export default function ClienteDetalheModal({ cliente, onFechar }: Props) {
         <button
           type="button"
           onClick={onFechar}
-          className="mt-5 w-full rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+          className="mt-5 w-full rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
         >
           Fechar
         </button>

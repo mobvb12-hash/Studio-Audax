@@ -71,10 +71,10 @@ export default function Profissionais() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Profissionais
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {profissionais.length} profissional(is) ·{' '}
             {profissionais.filter((p) => p.ativo).length} ativo(s) · cada um
             vira uma coluna na Agenda
@@ -86,7 +86,7 @@ export default function Profissionais() {
             setEditando(null)
             setModalAberto(true)
           }}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           + Novo profissional
         </button>
@@ -105,7 +105,7 @@ export default function Profissionais() {
             >
               <Avatar nome={prof.nome} foto={prof.foto} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-[#1C1A15]">
+                <p className="truncate text-sm font-bold text-[#121110]">
                   {prof.nome}
                 </p>
                 {repetidos.has(prof.id) && (
@@ -113,7 +113,7 @@ export default function Profissionais() {
                     Nome repetido · {identificacao(prof)}
                   </p>
                 )}
-                <p className="mt-0.5 text-[13px] text-[#4A4436]">
+                <p className="mt-0.5 text-[13px] text-[#3A352C]">
                   {prof.telefone || 'Sem telefone'}
                   {prof.email ? ` · ${prof.email}` : ''}
                 </p>
@@ -129,7 +129,7 @@ export default function Profissionais() {
                   </span>
                 </div>
               </div>
-              <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-xs font-medium text-[#4A4436]">
+              <span className="shrink-0 rounded-full border border-[#E5DCC3] bg-white px-3 py-1 text-xs font-medium text-[#3A352C]">
                 {contagem.get(prof.nome) ?? 0} atendimento(s)
               </span>
               <div className="flex shrink-0 flex-wrap gap-1.5">

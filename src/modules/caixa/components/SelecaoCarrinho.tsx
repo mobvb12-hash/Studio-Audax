@@ -38,7 +38,7 @@ export default function SelecaoCarrinho({
 }: Props) {
   return (
     <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-      <h2 className="text-[15px] font-bold text-[#1C1A15]">Produtos</h2>
+      <h2 className="text-[15px] font-bold text-[#121110]">Produtos</h2>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label className={rotulo} htmlFor="pdv-produto">
@@ -73,13 +73,13 @@ export default function SelecaoCarrinho({
         <button
           type="button"
           onClick={aoAdicionar}
-          className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+          className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
         >
           Adicionar ao carrinho
         </button>
       </div>
 
-      <h3 className="mt-5 text-[13px] font-bold text-[#1C1A15]">Carrinho</h3>
+      <h3 className="mt-5 text-[13px] font-bold text-[#121110]">Carrinho</h3>
       {carrinho.length === 0 ? (
         <div className="mt-2 rounded-lg border border-dashed border-[#DCCFAF] bg-[#FAF6EB]/60 px-4 py-6 text-center text-sm text-[#A99E85]">
           Carrinho vazio.
@@ -88,7 +88,7 @@ export default function SelecaoCarrinho({
         <div className="mt-2 overflow-x-auto">
           <table className="w-full min-w-[420px] text-left text-sm">
             <thead>
-              <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+              <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                 <th className="px-2 py-2 font-semibold">Produto</th>
                 <th className="px-2 py-2 text-right font-semibold">Qtd</th>
                 <th className="px-2 py-2 text-right font-semibold">Estoque</th>
@@ -100,7 +100,7 @@ export default function SelecaoCarrinho({
             <tbody className="divide-y divide-[#EFE7D3]">
               {carrinho.map((i) => (
                 <tr key={i.produtoId}>
-                  <td className="px-2 py-2 font-medium text-[#1C1A15]">
+                  <td className="px-2 py-2 font-medium text-[#121110]">
                     {i.produto}
                   </td>
                   <td className="px-2 py-2">
@@ -109,7 +109,7 @@ export default function SelecaoCarrinho({
                         type="button"
                         aria-label={`Diminuir ${i.produto}`}
                         onClick={() => aoAlterarQuantidade(i.produtoId, -1)}
-                        className="h-6 w-6 rounded border border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]"
+                        className="h-6 w-6 rounded border border-[#E5DCC3] bg-white text-[#3A352C] hover:bg-[#F3ECDA]"
                       >
                         −
                       </button>
@@ -126,19 +126,19 @@ export default function SelecaoCarrinho({
                         type="button"
                         aria-label={`Aumentar ${i.produto}`}
                         onClick={() => aoAlterarQuantidade(i.produtoId, 1)}
-                        className="h-6 w-6 rounded border border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]"
+                        className="h-6 w-6 rounded border border-[#E5DCC3] bg-white text-[#3A352C] hover:bg-[#F3ECDA]"
                       >
                         +
                       </button>
                     </div>
                   </td>
-                  <td className="px-2 py-2 text-right text-[#8A8171]">
+                  <td className="px-2 py-2 text-right text-[#7C7469]">
                     {i.estoque}
                   </td>
-                  <td className="px-2 py-2 text-right text-[#4A4436]">
+                  <td className="px-2 py-2 text-right text-[#3A352C]">
                     {formatarBRL(i.preco)}
                   </td>
-                  <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                  <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                     {formatarBRL(i.quantidade * i.preco)}
                   </td>
                   <td className="px-2 py-2 text-right">

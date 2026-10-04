@@ -116,10 +116,10 @@ export default function AssinaturaFormModal({ onFechar, assinatura }: Props) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[#1C1A15]">
+            <h2 className="text-lg font-bold text-[#121110]">
               {editando ? 'Editar assinatura' : 'Nova assinatura'}
             </h2>
-            <p className="mt-1 text-[13px] text-[#8A8171]">
+            <p className="mt-1 text-[13px] text-[#7C7469]">
               {editando
                 ? 'Audax Club · cliente, plano e mensalidade. Datas e histórico não mudam.'
                 : 'Audax Club · assinante vigente ganha 10% de desconto em produtos no PDV.'}
@@ -128,7 +128,7 @@ export default function AssinaturaFormModal({ onFechar, assinatura }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -199,7 +199,7 @@ export default function AssinaturaFormModal({ onFechar, assinatura }: Props) {
               <input
                 id="ass-data"
                 type={editando ? 'text' : 'date'}
-                className={`${campo} ${editando ? 'bg-[#F3ECDA] text-[#8A8171]' : ''}`}
+                className={`${campo} ${editando ? 'bg-[#F3ECDA] text-[#7C7469]' : ''}`}
                 value={
                   editando ? formatarDataLonga(assinatura!.dataAssinatura) : data
                 }
@@ -235,7 +235,7 @@ export default function AssinaturaFormModal({ onFechar, assinatura }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Cancelar
           </button>
@@ -243,7 +243,7 @@ export default function AssinaturaFormModal({ onFechar, assinatura }: Props) {
             type="button"
             onClick={confirmar}
             disabled={disponiveis.length === 0}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:bg-[#C9BC94]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:bg-[#C9BC94]"
           >
             {editando ? 'Salvar alterações' : 'Criar assinatura'}
           </button>

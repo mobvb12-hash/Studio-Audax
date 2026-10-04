@@ -43,7 +43,7 @@ export default function FiltrosPeriodo({
             onChange={(e) => aoCustom('inicio', e.target.value)}
             className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
           />
-          <span className="text-sm text-[#8A8171]">até</span>
+          <span className="text-sm text-[#7C7469]">até</span>
           <input
             type="date"
             aria-label="Fim do período"
@@ -57,7 +57,7 @@ export default function FiltrosPeriodo({
         aria-label="Profissional"
         value={profFiltro}
         onChange={(e) => aoProfFiltro(e.target.value)}
-        className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+        className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm text-[#121110] outline-none focus:border-[#8A6A14]"
       >
         <option value="todos">Todos os profissionais</option>
         {opcoesProf.map((nome) => (

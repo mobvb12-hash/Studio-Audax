@@ -15,7 +15,7 @@ export default function PreferenciasBloco({
         <p className={rotulo}>Notificações</p>
         <div className="flex flex-col gap-1.5">
           <label
-            className="flex items-center gap-2 text-sm text-[#1C1A15]"
+            className="flex items-center gap-2 text-sm text-[#121110]"
             htmlFor="cli-notif-email"
           >
             <input
@@ -32,7 +32,7 @@ export default function PreferenciasBloco({
             Cliente recebe e-mails sobre seus agendamentos
           </label>
           <label
-            className="flex items-center gap-2 text-sm text-[#1C1A15]"
+            className="flex items-center gap-2 text-sm text-[#121110]"
             htmlFor="cli-notif-sms"
           >
             <input
@@ -52,7 +52,7 @@ export default function PreferenciasBloco({
         <p className={rotulo}>Campanhas</p>
         <div className="flex flex-col gap-1.5">
           <label
-            className="flex items-center gap-2 text-sm text-[#1C1A15]"
+            className="flex items-center gap-2 text-sm text-[#121110]"
             htmlFor="cli-camp-sms"
           >
             <input
@@ -66,7 +66,7 @@ export default function PreferenciasBloco({
             Cliente recebe SMS marketing
           </label>
           <label
-            className="flex items-center gap-2 text-sm text-[#1C1A15]"
+            className="flex items-center gap-2 text-sm text-[#121110]"
             htmlFor="cli-camp-email"
           >
             <input

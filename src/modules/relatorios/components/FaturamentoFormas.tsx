@@ -69,7 +69,7 @@ export default function FaturamentoFormas({
               />
             </div>
             <div>
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                 Evolução por dia
               </p>
               {fat.evolucao.length === 0 ? (
@@ -82,10 +82,10 @@ export default function FaturamentoFormas({
         )}
         {fat.temDados && fatAnterior.temDados && (
           <div className="mt-4 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] p-3">
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Comparação com o período anterior
             </p>
-            <p className="mt-1 text-xs text-[#8A8171]">
+            <p className="mt-1 text-xs text-[#7C7469]">
               {rotuloPeriodo(anterior)}
             </p>
             <div className="mt-1">
@@ -105,7 +105,7 @@ export default function FaturamentoFormas({
                     ? 'text-[#6B8E5A]'
                     : variacao < 0
                       ? 'text-red-700'
-                      : 'text-[#4A4436]'
+                      : 'text-[#3A352C]'
                 }`}
               >
                 Receita: {variacao > 0 ? '+' : ''}
@@ -124,7 +124,7 @@ export default function FaturamentoFormas({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-sm">
               <thead>
-                <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                   <th className="px-3 py-2 font-semibold">Forma</th>
                   <th className="px-3 py-2 text-right font-semibold">Qtd</th>
                   <th className="px-3 py-2 text-right font-semibold">Valor</th>
@@ -134,29 +134,29 @@ export default function FaturamentoFormas({
               <tbody className="divide-y divide-[#EFE7D3]">
                 {formas.linhas.map((f) => (
                   <tr key={f.forma}>
-                    <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                    <td className="px-3 py-2 font-medium text-[#121110]">
                       {f.rotulo}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {f.qtd}
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
+                    <td className="px-3 py-2 text-right font-semibold text-[#121110]">
                       {formatarBRL(f.valor)}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#8A8171]">
+                    <td className="px-3 py-2 text-right text-[#7C7469]">
                       {f.percentual}%
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-[#FAF6EB] font-semibold">
-                  <td className="px-3 py-2 text-[#1C1A15]">Total</td>
-                  <td className="px-3 py-2 text-right text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#121110]">Total</td>
+                  <td className="px-3 py-2 text-right text-[#3A352C]">
                     {formas.linhas.reduce((t, f) => t + f.qtd, 0)}
                   </td>
                   <td className="px-3 py-2 text-right text-[#8A6A14]">
                     {formatarBRL(formas.total)}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#8A8171]">100%</td>
+                  <td className="px-3 py-2 text-right text-[#7C7469]">100%</td>
                 </tr>
               </tbody>
             </table>

@@ -65,10 +65,10 @@ export default function BloqueiosModal({ onFechar }: Props) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[#1C1A15]">
+            <h2 className="text-lg font-bold text-[#121110]">
               Bloqueios da agenda
             </h2>
-            <p className="mt-1 text-[13px] text-[#8A8171]">
+            <p className="mt-1 text-[13px] text-[#7C7469]">
               Almoço, folga, férias ou ausência impedem novos agendamentos no
               período.
             </p>
@@ -76,7 +76,7 @@ export default function BloqueiosModal({ onFechar }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -195,18 +195,18 @@ export default function BloqueiosModal({ onFechar }: Props) {
           <button
             type="button"
             onClick={criar}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Criar bloqueio
           </button>
         </div>
 
         <div className="mt-5 border-t border-[#E5DCC3] pt-4">
-          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Bloqueios cadastrados
           </p>
           {bloqueios.length === 0 ? (
-            <p className="mt-2 text-sm text-[#4A4436]">
+            <p className="mt-2 text-sm text-[#3A352C]">
               Nenhum bloqueio cadastrado.
             </p>
           ) : (
@@ -217,10 +217,10 @@ export default function BloqueiosModal({ onFechar }: Props) {
                   className="flex items-center justify-between gap-3 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#1C1A15]">
+                    <p className="truncate text-sm font-semibold text-[#121110]">
                       {rotuloBloqueio(b)}
                     </p>
-                    <p className="truncate text-xs text-[#8A8171]">
+                    <p className="truncate text-xs text-[#7C7469]">
                       {b.data}
                       {b.dataFim ? ` a ${b.dataFim}` : ''} · {b.inicio}–
                       {b.fim} · {b.profissional}
@@ -243,7 +243,7 @@ export default function BloqueiosModal({ onFechar }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Fechar
           </button>

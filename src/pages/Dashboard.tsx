@@ -50,7 +50,7 @@ function statusClasse(status: StatusAgendamento): string {
   if (status === 'nao_compareceu')
     return 'border-slate-200 bg-slate-50 text-slate-600'
   if (status === 'cancelado') return 'border-red-200 bg-red-50 text-red-600'
-  return 'border-[#E5DCC3] bg-[#F3ECDA] text-[#4A4436]'
+  return 'border-[#E5DCC3] bg-[#F3ECDA] text-[#3A352C]'
 }
 
 export default function Dashboard({
@@ -154,17 +154,17 @@ export default function Dashboard({
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Painel
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {dataHoje()} · Studio Audax
           </p>
         </div>
         <button
           type="button"
           onClick={onNovo}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C]"
         >
           + Novo agendamento
         </button>
@@ -174,7 +174,7 @@ export default function Dashboard({
         <div className="flex min-w-[900px] divide-x divide-[#E5DCC3]">
           {kpis.map((kpi) => (
             <div key={kpi.rotulo} className="min-w-[150px] flex-1 px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
                 {kpi.rotulo}
               </p>
               <p
@@ -190,7 +190,7 @@ export default function Dashboard({
                 )}
               </p>
               {kpi.sub && kpi.sub !== 'agend.' && (
-                <p className="mt-1.5 text-[11px] leading-snug text-[#8A8171]">
+                <p className="mt-1.5 text-[11px] leading-snug text-[#7C7469]">
                   {kpi.sub}
                 </p>
               )}
@@ -201,7 +201,7 @@ export default function Dashboard({
 
       {onIrPara && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <span className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Acessos rápidos
           </span>
           {ACESSOS.map((acesso) => (
@@ -209,7 +209,7 @@ export default function Dashboard({
               key={acesso.id}
               type="button"
               onClick={() => onIrPara(acesso.id)}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm font-medium text-[#4A4436] transition-colors hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
+              className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm font-medium text-[#3A352C] transition-colors hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
             >
               {acesso.rotulo}
             </button>
@@ -230,10 +230,10 @@ export default function Dashboard({
                     className="flex items-center justify-between gap-2 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-[#1C1A15]">
+                      <p className="truncate text-sm font-bold text-[#121110]">
                         {ag.horario} — {ag.cliente}
                       </p>
-                      <p className="truncate text-xs text-[#8A8171]">
+                      <p className="truncate text-xs text-[#7C7469]">
                         {ag.servico} · {ag.profissional}
                       </p>
                     </div>
@@ -247,7 +247,7 @@ export default function Dashboard({
               </ul>
             )}
             <div className="mt-3 flex items-center justify-between border-t border-[#E9DDC0] pt-3 text-sm">
-              <span className="font-medium text-[#1C1A15]">
+              <span className="font-medium text-[#121110]">
                 Horários disponíveis hoje
               </span>
               <span className="font-semibold text-[#8A6A14]">
@@ -255,7 +255,7 @@ export default function Dashboard({
                 {disponibilidade.vagas} vaga(s)
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-[#8A8171]">
+            <p className="mt-1 text-[11px] text-[#7C7469]">
               {disponibilidade.horarios.length === 0
                 ? 'Sem vagas no expediente de hoje.'
                 : `Próximos: ${disponibilidade.horarios.slice(0, 4).join(', ')}`}
@@ -275,10 +275,10 @@ export default function Dashboard({
                     className="flex items-center justify-between gap-2 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-[#1C1A15]">
+                      <p className="truncate text-sm font-bold text-[#121110]">
                         #{posicao} {pedido.cliente}
                       </p>
-                      <p className="truncate text-xs text-[#8A8171]">
+                      <p className="truncate text-xs text-[#7C7469]">
                         {pedido.servico} · {pedido.profissional || 'qualquer'}
                       </p>
                     </div>
@@ -287,7 +287,7 @@ export default function Dashboard({
               </ul>
             )}
             {fila.length > 4 && (
-              <p className="mt-2 text-[11px] text-[#8A8171]">
+              <p className="mt-2 text-[11px] text-[#7C7469]">
                 + {fila.length - 4} na fila (ver Fila de espera)
               </p>
             )}
@@ -300,25 +300,25 @@ export default function Dashboard({
             contador={diaFechado(hojeISO()) ? 'fechado' : 'aberto'}
           >
             <div className="flex items-center justify-between py-1.5 text-sm">
-              <span className="font-medium text-[#1C1A15]">Recebido hoje</span>
+              <span className="font-medium text-[#121110]">Recebido hoje</span>
               <span className="font-semibold text-[#8A6A14]">
                 {formatarBRL(resumoHoje.totalRecebido)}
               </span>
             </div>
             <div className="flex items-center justify-between border-t border-[#EFE7D3] py-1.5 text-sm">
-              <span className="font-medium text-[#1C1A15]">Despesas hoje</span>
+              <span className="font-medium text-[#121110]">Despesas hoje</span>
               <span className="font-semibold text-red-700">
                 {formatarBRL(resumoHoje.despesas)}
               </span>
             </div>
             <div className="flex items-center justify-between border-t border-[#EFE7D3] py-1.5 text-sm">
-              <span className="font-medium text-[#1C1A15]">Resultado</span>
+              <span className="font-medium text-[#121110]">Resultado</span>
               <span className="font-semibold text-[#6B8E5A]">
                 {formatarBRL(resumoHoje.liquido)}
               </span>
             </div>
             <div className="mt-3 border-t border-[#E9DDC0] pt-3">
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                 Por forma de pagamento
               </p>
               <ul className="mt-1.5 divide-y divide-[#EFE7D3]">
@@ -327,8 +327,8 @@ export default function Dashboard({
                     key={f}
                     className="flex items-center justify-between py-1.5 text-[13px]"
                   >
-                    <span className="text-[#4A4436]">{FORMAS_ROTULO[f]}</span>
-                    <span className="font-medium text-[#1C1A15]">
+                    <span className="text-[#3A352C]">{FORMAS_ROTULO[f]}</span>
+                    <span className="font-medium text-[#121110]">
                       {formatarBRL(resumoHoje.porForma[f])}
                     </span>
                   </li>
@@ -337,7 +337,7 @@ export default function Dashboard({
             </div>
             {resumoHoje.porProfissional.length > 0 && (
               <div className="mt-3 border-t border-[#E9DDC0] pt-3">
-                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                   Por profissional
                 </p>
                 <ul className="mt-1.5 divide-y divide-[#EFE7D3]">
@@ -346,13 +346,13 @@ export default function Dashboard({
                       key={p.nome}
                       className="flex items-center justify-between py-1.5 text-[13px]"
                     >
-                      <span className="text-[#4A4436]">
+                      <span className="text-[#3A352C]">
                         {p.nome}{' '}
-                        <span className="text-xs text-[#8A8171]">
+                        <span className="text-xs text-[#7C7469]">
                           ({p.qtd})
                         </span>
                       </span>
-                      <span className="font-medium text-[#1C1A15]">
+                      <span className="font-medium text-[#121110]">
                         {formatarBRL(p.valor)}
                       </span>
                     </li>
@@ -375,7 +375,7 @@ export default function Dashboard({
                       key={p.id}
                       className="flex items-center justify-between gap-2 py-2 text-sm"
                     >
-                      <span className="truncate text-[#1C1A15]">{p.nome}</span>
+                      <span className="truncate text-[#121110]">{p.nome}</span>
                       <span
                         className={`shrink-0 font-semibold ${
                           p.estoque <= 0
@@ -388,14 +388,14 @@ export default function Dashboard({
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-[11px] text-[#8A8171]">
+                <p className="mt-2 text-[11px] text-[#7C7469]">
                   {estoqueZerado.length} com estoque zerado
                 </p>
                 {onIrParaEstoque && (
                   <button
                     type="button"
                     onClick={onIrParaEstoque}
-                    className="mt-3 w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-medium text-[#4A4436] hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
+                    className="mt-3 w-full rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm font-medium text-[#3A352C] hover:border-[#8A6A14] hover:bg-[#F3ECDA]"
                   >
                     Ver estoque →
                   </button>
@@ -435,11 +435,11 @@ export default function Dashboard({
                           foto={prof.foto}
                           tamanho="sm"
                         />
-                        <p className="truncate text-sm font-bold text-[#1C1A15]">
+                        <p className="truncate text-sm font-bold text-[#121110]">
                           {prof.nome}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs font-medium text-[#8A8171]">
+                      <span className="shrink-0 text-xs font-medium text-[#7C7469]">
                         {hoje} hoje
                       </span>
                     </li>
@@ -451,31 +451,31 @@ export default function Dashboard({
 
           <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-[15px] font-bold text-[#1C1A15]">
+              <h2 className="text-[15px] font-bold text-[#121110]">
                 Assinaturas
               </h2>
-              <span className="text-[13px] text-[#8A8171]">
+              <span className="text-[13px] text-[#7C7469]">
                 {situacoes.ativas} ativa(s)
               </span>
             </div>
             <div className="mt-4 flex items-center justify-between py-2 text-sm">
-              <span className="font-medium text-[#1C1A15]">
+              <span className="font-medium text-[#121110]">
                 Receita recorrente prevista/mês
               </span>
-              <span className="font-semibold text-[#1C1A15]">
+              <span className="font-semibold text-[#121110]">
                 {formatarBRL(receitaPrevista)}
               </span>
             </div>
             <div className="flex items-center justify-between border-t border-[#E9DDC0] py-2 text-sm">
-              <span className="font-medium text-[#1C1A15]">
+              <span className="font-medium text-[#121110]">
                 Pagamentos do clube este mês
               </span>
-              <span className="font-semibold text-[#1C1A15]">
+              <span className="font-semibold text-[#121110]">
                 {formatarBRL(pagamentosClubeMes)}
               </span>
             </div>
             <div className="mt-3 border-t border-[#E9DDC0] pt-3">
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                 Situações de vencimento
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">

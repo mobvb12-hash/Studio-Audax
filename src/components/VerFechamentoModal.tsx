@@ -229,22 +229,22 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               FECHAMENTO DE CONTA
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+            <h2 className="mt-1 text-lg font-bold text-[#121110]">
               {agendamento.cliente}
             </h2>
-            <p className="text-[13px] text-[#8A8171]">
+            <p className="text-[13px] text-[#7C7469]">
               {telefone ? `${telefone} · ` : ''}
               {agendamento.profissional} · {agendamento.horario}
             </p>
-            <p className="text-[13px] text-[#8A8171]">
+            <p className="text-[13px] text-[#7C7469]">
               {agendamento.servico} · {agendamento.data}
             </p>
-            {email && <p className="text-[13px] text-[#8A8171]">{email}</p>}
+            {email && <p className="text-[13px] text-[#7C7469]">{email}</p>}
             {lancamento && (
-              <p className="mt-1 text-[12px] text-[#4A4436]">
+              <p className="mt-1 text-[12px] text-[#3A352C]">
                 Fechado em {formatarISO(lancamento.criadoEm)}
               </p>
             )}
@@ -260,7 +260,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
               <button
                 type="button"
                 onClick={onFechar}
-                className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
               >
                 Voltar
               </button>
@@ -304,7 +304,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
               <div className="mt-2 overflow-hidden rounded-lg border border-[#E5DCC3]">
                 <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="bg-[#FAF6EB] text-[11px] tracking-wide text-[#8A8171] uppercase">
+                    <tr className="bg-[#FAF6EB] text-[11px] tracking-wide text-[#7C7469] uppercase">
                       <th className="px-2 py-1.5 text-left font-semibold">
                         Item
                       </th>
@@ -323,49 +323,49 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                     {itensServico ? (
                       itensServico.map((s, idx) => (
                         <tr key={`${s.servicoId ?? 'sv'}-${idx}`}>
-                          <td className="px-2 py-2 text-[#1C1A15]">
+                          <td className="px-2 py-2 text-[#121110]">
                             Serviço · {s.servico}
                           </td>
-                          <td className="px-2 py-2 text-right text-[#4A4436]">
+                          <td className="px-2 py-2 text-right text-[#3A352C]">
                             {formatarBRL(s.preco)}
                           </td>
                           <td className="px-2 py-2 text-right text-xs text-[#A99E85]">
                             —
                           </td>
-                          <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                          <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                             {formatarBRL(s.preco)}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td className="px-2 py-2 text-[#1C1A15]">
+                        <td className="px-2 py-2 text-[#121110]">
                           Serviço · {lancamento.servico ?? agendamento.servico}
                         </td>
-                        <td className="px-2 py-2 text-right text-[#4A4436]">
+                        <td className="px-2 py-2 text-right text-[#3A352C]">
                           {formatarBRL(lancamento.valor)}
                         </td>
-                        <td className="px-2 py-2 text-right text-[#4A4436]">
+                        <td className="px-2 py-2 text-right text-[#3A352C]">
                           − {formatarBRL(lancamento.desconto)}
                         </td>
-                        <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                        <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                           {formatarBRL(lancamento.valorLiquido)}
                         </td>
                       </tr>
                     )}
                     {vendasVinculadas.map((v) => (
                       <tr key={v.id}>
-                        <td className="px-2 py-2 text-[#1C1A15]">
+                        <td className="px-2 py-2 text-[#121110]">
                           Produto · {v.produto ?? 'item'}
                           {v.quantidade ? ` ×${v.quantidade}` : ''}
                         </td>
-                        <td className="px-2 py-2 text-right text-[#4A4436]">
+                        <td className="px-2 py-2 text-right text-[#3A352C]">
                           {formatarBRL(v.valor)}
                         </td>
-                        <td className="px-2 py-2 text-right text-[#4A4436]">
+                        <td className="px-2 py-2 text-right text-[#3A352C]">
                           − {formatarBRL(v.desconto)}
                         </td>
-                        <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                        <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                           {formatarBRL(v.valorLiquido)}
                         </td>
                       </tr>
@@ -376,27 +376,27 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
 
               <div className="mt-3 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB]/60 px-3 py-2 text-sm">
                 <div className="flex justify-between gap-3">
-                  <span className="text-[#8A8171]">Subtotal</span>
-                  <span className="font-medium text-[#4A4436]">
+                  <span className="text-[#7C7469]">Subtotal</span>
+                  <span className="font-medium text-[#3A352C]">
                     {formatarBRL(totalValor)}
                   </span>
                 </div>
                 {vendasVinculadas.length > 0 && (
                   <div className="flex justify-between gap-3">
-                    <span className="text-[#8A8171]">Produtos</span>
-                    <span className="font-medium text-[#4A4436]">
+                    <span className="text-[#7C7469]">Produtos</span>
+                    <span className="font-medium text-[#3A352C]">
                       {formatarBRL(somaProdutos.liquido)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between gap-3">
-                  <span className="text-[#8A8171]">Descontos</span>
+                  <span className="text-[#7C7469]">Descontos</span>
                   <span className="font-medium text-[#6B8E5A]">
                     − {formatarBRL(totalDesconto)}
                   </span>
                 </div>
                 <div className="mt-1 flex justify-between gap-3 border-t border-[#E5DCC3] pt-1">
-                  <span className="font-semibold text-[#1C1A15]">
+                  <span className="font-semibold text-[#121110]">
                     Total final
                   </span>
                   <span className="font-bold text-[#8A6A14]">
@@ -408,7 +408,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
               {/* §5.2 — vendas antigas sem dono: vincular sem destruir nada */}
               {!lancamento.estornado && candidatas.length > 0 && (
                 <div className="mt-3 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB]/60 px-3 py-2 text-sm">
-                  <p className="text-[11px] font-semibold tracking-wide text-[#8A8171] uppercase">
+                  <p className="text-[11px] font-semibold tracking-wide text-[#7C7469] uppercase">
                     Vendas deste dia sem vínculo
                   </p>
                   <p className="mt-0.5 text-xs text-[#A99E85]">
@@ -420,13 +420,13 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                       key={v.id}
                       className="mt-1.5 flex items-center justify-between gap-3"
                     >
-                      <span className="min-w-0 truncate text-[#4A4436]">
+                      <span className="min-w-0 truncate text-[#3A352C]">
                         {v.descricao} · {formatarBRL(v.valorLiquido)}
                       </span>
                       <button
                         type="button"
                         onClick={() => vincular(v.id)}
-                        className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-semibold text-[#4A4436] hover:bg-[#F3ECDA]"
+                        className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-semibold text-[#3A352C] hover:bg-[#F3ECDA]"
                       >
                         Vincular à conta
                       </button>
@@ -457,46 +457,46 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
               <p className={rotulo}>Pagamento</p>
               <dl className="mt-2 flex flex-col gap-1.5 text-sm">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Forma de pagamento</dt>
-                  <dd className="font-medium text-[#1C1A15]">
+                  <dt className="text-[#7C7469]">Forma de pagamento</dt>
+                  <dd className="font-medium text-[#121110]">
                     {FORMAS_ROTULO[lancamento.formaPagamento]}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Total pago</dt>
-                  <dd className="font-semibold text-[#1C1A15]">
+                  <dt className="text-[#7C7469]">Total pago</dt>
+                  <dd className="font-semibold text-[#121110]">
                     {formatarBRL(totalLiquido)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Recebido</dt>
-                  <dd className="font-medium text-[#1C1A15]">
+                  <dt className="text-[#7C7469]">Recebido</dt>
+                  <dd className="font-medium text-[#121110]">
                     {lancamento.recebido !== undefined
                       ? formatarBRL(lancamento.recebido)
                       : '—'}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Troco</dt>
-                  <dd className="font-medium text-[#1C1A15]">
+                  <dt className="text-[#7C7469]">Troco</dt>
+                  <dd className="font-medium text-[#121110]">
                     {formatarBRL(lancamento.troco ?? 0)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Falta</dt>
+                  <dt className="text-[#7C7469]">Falta</dt>
                   <dd
                     className={
                       (lancamento.falta ?? 0) > 0
                         ? 'font-semibold text-red-700'
-                        : 'font-medium text-[#1C1A15]'
+                        : 'font-medium text-[#121110]'
                     }
                   >
                     {formatarBRL(lancamento.falta ?? 0)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Gorjeta</dt>
-                  <dd className="font-medium text-[#1C1A15]">
+                  <dt className="text-[#7C7469]">Gorjeta</dt>
+                  <dd className="font-medium text-[#121110]">
                     {formatarBRL(lancamento.gorjeta ?? 0)}
                   </dd>
                 </div>
@@ -507,15 +507,15 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
               <p className={rotulo}>Identificação</p>
               <dl className="mt-2 flex flex-col gap-1.5 text-sm">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[#8A8171]">Data e hora do fechamento</dt>
-                  <dd className="font-medium text-[#1C1A15]">
+                  <dt className="text-[#7C7469]">Data e hora do fechamento</dt>
+                  <dd className="font-medium text-[#121110]">
                     {formatarISO(lancamento.criadoEm)}
                   </dd>
                 </div>
                 {lancamento.observacao && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-[#8A8171]">Comentário</dt>
-                    <dd className="text-right font-medium text-[#1C1A15]">
+                    <dt className="text-[#7C7469]">Comentário</dt>
+                    <dd className="text-right font-medium text-[#121110]">
                       {lancamento.observacao}
                     </dd>
                   </div>
@@ -534,10 +534,10 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                     className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm"
                   >
                     <div className="flex justify-between gap-3">
-                      <span className="text-[#4A4436]">
+                      <span className="text-[#3A352C]">
                         Fechado em {formatarISO(h.criadoEm)}
                       </span>
-                      <span className="font-semibold text-[#1C1A15]">
+                      <span className="font-semibold text-[#121110]">
                         {formatarBRL(h.valorLiquido)}
                       </span>
                     </div>
@@ -590,7 +590,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                     <select
                       id="reabrir-motivo"
                       aria-label="Motivo da reabertura"
-                      className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm text-[#1C1A15]"
+                      className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm text-[#121110]"
                       value={motivoEscolha}
                       onChange={(e) => {
                         setMotivoEscolha(e.target.value)
@@ -618,7 +618,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                           id="reabrir-motivo-texto"
                           aria-label="Descreva o motivo da reabertura"
                           rows={2}
-                          className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm text-[#1C1A15]"
+                          className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm text-[#121110]"
                           value={motivoTexto}
                           onChange={(e) => {
                             setMotivoTexto(e.target.value)
@@ -638,7 +638,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                       <button
                         type="button"
                         onClick={cancelarReabertura}
-                        className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-medium text-[#4A4436] hover:bg-amber-100"
+                        className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-medium text-[#3A352C] hover:bg-amber-100"
                       >
                         Cancelar
                       </button>
@@ -671,7 +671,7 @@ export default function VerFechamentoModal({ agendamento, onFechar }: Props) {
                 <button
                   type="button"
                   onClick={onFechar}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                  className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                 >
                   Voltar
                 </button>

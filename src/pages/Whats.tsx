@@ -170,10 +170,10 @@ export default function Whats() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             WhatsApp
           </h1>
-          <p className="mt-2 max-w-2xl text-[13px] text-[#4A4436]">
+          <p className="mt-2 max-w-2xl text-[13px] text-[#3A352C]">
             Central de mensagens: prepare novas mensagens, acompanhe o que está
             pendente ou enviado e abra o histórico de cada cliente. Tudo é salvo
             automaticamente.
@@ -192,7 +192,7 @@ export default function Whats() {
         </span>
       </div>
 
-      <p className="mt-3 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2.5 text-[13px] text-[#4A4436]">
+      <p className="mt-3 rounded-lg border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-2.5 text-[13px] text-[#3A352C]">
         Estrutura pronta para a API oficial do WhatsApp Business: configure um
         provedor oficial para habilitar o envio real. Sem integração, as
         mensagens ficam registradas como pendentes.
@@ -204,7 +204,7 @@ export default function Whats() {
             key={kpi.rotulo}
             className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5"
           >
-            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="text-[10px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase">
               {kpi.rotulo}
             </p>
             <p className="mt-1 text-lg leading-none font-bold text-[#8A6A14]">
@@ -236,22 +236,22 @@ export default function Whats() {
               onClick={() => setFiltro(f.id)}
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                 filtro === f.id
-                  ? 'border-[#8A6A14] bg-[#E9DDC0] text-[#1C1A15]'
-                  : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:bg-[#F3ECDA]'
+                  ? 'border-[#8A6A14] bg-[#E9DDC0] text-[#121110]'
+                  : 'border-[#E5DCC3] bg-white text-[#3A352C] hover:bg-[#F3ECDA]'
               }`}
             >
               {f.rotulo}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-[12px] font-medium text-[#4A4436]">
+        <label className="flex items-center gap-2 text-[12px] font-medium text-[#3A352C]">
           Buscar cliente
           <input
             type="search"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Nome do cliente"
-            className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm text-[#121110] outline-none focus:border-[#8A6A14]"
           />
         </label>
       </div>

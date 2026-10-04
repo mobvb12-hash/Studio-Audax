@@ -61,17 +61,17 @@ export default function ConfigComissaoModal({
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Configurar comissão
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+            <h2 className="mt-1 text-lg font-bold text-[#121110]">
               {profissionalNome}
             </h2>
           </div>
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -91,7 +91,7 @@ export default function ConfigComissaoModal({
               value={percentual}
               onChange={(e) => setPercentual(e.target.value)}
             />
-            <p className="mt-1 text-xs text-[#8A8171]">
+            <p className="mt-1 text-xs text-[#7C7469]">
               Calculado sobre a produção líquida de serviços do período.
             </p>
           </div>
@@ -103,11 +103,11 @@ export default function ConfigComissaoModal({
               onChange={(e) => setAtivo(e.target.checked)}
               className="h-4 w-4 accent-[#8A6A14]"
             />
-            <span className="font-medium text-[#1C1A15]">
+            <span className="font-medium text-[#121110]">
               Profissional ativo no programa de comissão
             </span>
           </label>
-          <p className="text-xs text-[#8A8171]">
+          <p className="text-xs text-[#7C7469]">
             Desativar preserva todo o histórico e as comissões já fechadas.
           </p>
         </div>
@@ -122,14 +122,14 @@ export default function ConfigComissaoModal({
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={salvar}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Salvar configuração
           </button>

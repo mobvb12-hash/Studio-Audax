@@ -72,10 +72,10 @@ export default function Caixa() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Caixa
           </h1>
-          <p className="mt-2 flex items-center gap-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 flex items-center gap-2 text-[13px] text-[#3A352C]">
             {formatarDataLonga(data)}
             <span
               className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
@@ -122,7 +122,7 @@ export default function Caixa() {
               <button
                 type="button"
                 onClick={() => setFechamentoAberto(true)}
-                className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+                className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
               >
                 Fechar caixa
               </button>
@@ -162,7 +162,7 @@ export default function Caixa() {
           onChange={(e) => e.target.value && setData(e.target.value)}
           className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
         />
-        <span className="ml-auto text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+        <span className="ml-auto text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
           {fechado ? 'Lançamentos bloqueados' : 'Lançamentos liberados'}
         </span>
       </div>
@@ -209,10 +209,10 @@ export default function Caixa() {
                   key={forma}
                   className="flex items-center justify-between py-2 text-sm"
                 >
-                  <span className="text-[#4A4436]">
+                  <span className="text-[#3A352C]">
                     {FORMAS_ROTULO[forma as keyof typeof FORMAS_ROTULO]}
                   </span>
-                  <span className="font-semibold text-[#1C1A15]">
+                  <span className="font-semibold text-[#121110]">
                     {formatarBRL(valor)}
                   </span>
                 </li>
@@ -233,13 +233,13 @@ export default function Caixa() {
                     key={p.nome}
                     className="flex items-center justify-between py-2 text-sm"
                   >
-                    <span className="text-[#4A4436]">
+                    <span className="text-[#3A352C]">
                       {p.nome}{' '}
-                      <span className="text-xs text-[#8A8171]">
+                      <span className="text-xs text-[#7C7469]">
                         ({p.qtd} recebimento(s))
                       </span>
                     </span>
-                    <span className="font-semibold text-[#1C1A15]">
+                    <span className="font-semibold text-[#121110]">
                       {formatarBRL(p.valor)}
                     </span>
                   </li>
@@ -251,8 +251,8 @@ export default function Caixa() {
           {fechado && fechamento ? (
             <Cartao titulo="Fechamento registrado">
               <div className="flex items-center justify-between border-b border-[#EFE7D3] pb-2 text-sm">
-                <span className="text-[#4A4436]">Fechado em</span>
-                <span className="font-medium text-[#1C1A15]">
+                <span className="text-[#3A352C]">Fechado em</span>
+                <span className="font-medium text-[#121110]">
                   {new Date(fechamento.fechadoEm).toLocaleString('pt-BR', {
                     dateStyle: 'short',
                     timeStyle: 'short',
@@ -260,7 +260,7 @@ export default function Caixa() {
                 </span>
               </div>
               <div className="flex items-center justify-between py-2 text-sm">
-                <span className="text-[#4A4436]">Resultado líquido</span>
+                <span className="text-[#3A352C]">Resultado líquido</span>
                 <span className="font-bold text-[#8A6A14]">
                   {formatarBRL(fechamento.resumo.liquido)}
                 </span>
@@ -292,11 +292,11 @@ export default function Caixa() {
               <ul className="divide-y divide-[#EFE7D3]">
                 {auditoriaDoDia.map((ev) => (
                   <li key={ev.id} className="py-2.5">
-                    <p className="text-sm font-medium text-[#1C1A15]">
+                    <p className="text-sm font-medium text-[#121110]">
                       {ev.acao === 'estorno' ? 'Estorno' : 'Reabertura'} ·{' '}
                       {ev.descricao}
                     </p>
-                    <p className="text-xs text-[#8A8171]">
+                    <p className="text-xs text-[#7C7469]">
                       {new Date(ev.criadoEm).toLocaleString('pt-BR', {
                         dateStyle: 'short',
                         timeStyle: 'short',

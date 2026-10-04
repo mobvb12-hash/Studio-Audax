@@ -1,6 +1,7 @@
 import { useEffect, useState, Suspense, lazy } from 'react'
 import type { ReactNode } from 'react'
 import AvisoPersistencia from '@/components/AvisoPersistencia'
+import { MarcaAudax } from '@/components/MarcaAudax'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import SemPermissao from '@/components/SemPermissao'
 import TelaLogin from '@/components/TelaLogin'
@@ -79,14 +80,14 @@ const ROTULOS: Record<PaginaId, string> = {
 function ModuloFuturo({ pagina }: { pagina: PaginaId }) {
   return (
     <div className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-8 text-center">
-      <h1 className="text-[22px] font-bold text-[#1C1A15]">
+      <h1 className="text-[22px] font-bold text-[#121110]">
         {ROTULOS[pagina]}
       </h1>
-      <p className="mx-auto mt-2 max-w-md text-sm text-[#8A8171]">
+      <p className="mx-auto mt-2 max-w-md text-sm text-[#7C7469]">
         Este módulo ainda não foi implementado. O layout já está pronto nas
         cores do Studio Audax — a regra de negócio entra na próxima etapa.
       </p>
-      <div className="mx-auto mt-5 h-px w-16 bg-[#8A6A14]" aria-hidden="true" />
+      <div className="mx-auto mt-5 h-px w-16 bg-[#C9A24A]" aria-hidden="true" />
     </div>
   )
 }
@@ -148,7 +149,7 @@ function Conteudo() {
       <ErrorBoundary key={pagina}>
         {pagina === 'painel' && (
           <PaginaProtegida pagina="painel" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Painel…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Painel…</div>}>
               <DashboardLazy
                 onNovo={() => abrirNovo()}
                 onIrPara={setPagina}
@@ -166,126 +167,126 @@ function Conteudo() {
         )}
         {pagina === 'agenda' && (
           <PaginaProtegida pagina="agenda" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Agenda…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Agenda…</div>}>
               <AgendaLazy onNovo={abrirNovo} />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'fila' && (
           <PaginaProtegida pagina="fila" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Fila…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Fila…</div>}>
               <EsperaLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'caixa' && (
           <PaginaProtegida pagina="caixa" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Caixa…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Caixa…</div>}>
               <CaixaLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'clientes' && (
           <PaginaProtegida pagina="clientes" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clientes…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Clientes…</div>}>
               <ClientesLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'crm' && (
           <PaginaProtegida pagina="crm" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando CRM…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando CRM…</div>}>
               <CrmLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'whatsapp' && (
           <PaginaProtegida pagina="whatsapp" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando WhatsApp…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando WhatsApp…</div>}>
               <WhatsLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'servicos' && (
           <PaginaProtegida pagina="servicos" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Serviços…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Serviços…</div>}>
               <ServicosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'profissionais' && (
           <PaginaProtegida pagina="profissionais" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Profissionais…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Profissionais…</div>}>
               <ProfissionaisLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'comissoes' && (
           <PaginaProtegida pagina="comissoes" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Comissões…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Comissões…</div>}>
               <ComissoesLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'financeiro' && (
           <PaginaProtegida pagina="financeiro" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Financeiro…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Financeiro…</div>}>
               <FinanceiroLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'relatorios' && (
           <PaginaProtegida pagina="relatorios" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Relatórios…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Relatórios…</div>}>
               <RelatoriosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'pdv' && (
           <PaginaProtegida pagina="pdv" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando PDV…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando PDV…</div>}>
               <PDVLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'estoque' && (
           <PaginaProtegida pagina="estoque" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Estoque…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Estoque…</div>}>
               <ProdutosLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'clube' && (
           <PaginaProtegida pagina="clube" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Clube…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Clube…</div>}>
               <ClubeLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'pote' && (
           <PaginaProtegida pagina="pote" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando o fechamento do pote…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando o fechamento do pote…</div>}>
               <PoteLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'ia' && (
           <PaginaProtegida pagina="ia" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando IA…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando IA…</div>}>
               <IaLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'configuracoes' && (
           <PaginaProtegida pagina="configuracoes" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando Configurações…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando Configurações…</div>}>
               <ConfiguracoesLazy />
             </Suspense>
           </PaginaProtegida>
         )}
         {pagina === 'usuarios' && (
           <PaginaProtegida pagina="usuarios" onNegado={handleNegado}>
-            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#8A8171]">Carregando usuários…</div>}>
+            <Suspense fallback={<div className="flex h-64 items-center justify-center text-[#7C7469]">Carregando usuários…</div>}>
               <UsuariosLazy />
             </Suspense>
           </PaginaProtegida>
@@ -313,16 +314,19 @@ function SupabaseAusente() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] px-4">
       <div className="w-full max-w-md rounded-xl border border-[#E5DCC3] bg-white p-8">
-        <h1 className="text-center text-xl font-bold text-[#1C1A15]">Studio Audax</h1>
+        <div className="mb-4 flex justify-center">
+          <MarcaAudax className="h-12 w-12 text-[#121110]" />
+        </div>
+        <h1 className="text-center text-xl font-bold text-[#121110]">Studio Audax</h1>
         <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
+          className="mx-auto mt-3 h-px w-16 bg-[#C9A24A]"
           aria-hidden="true"
         />
-        <p role="alert" className="mt-4 text-sm text-[#8A8171]">
+        <p role="alert" className="mt-4 text-sm text-[#7C7469]">
           O Studio Audax está configurado para exigir login, mas o Supabase não
           foi encontrado.
         </p>
-        <p className="mt-3 text-[13px] text-[#8A8171]">
+        <p className="mt-3 text-[13px] text-[#7C7469]">
           Sem <span className="font-mono">VITE_SUPABASE_URL</span> e{' '}
           <span className="font-mono">VITE_SUPABASE_ANON_KEY</span> não existe
           sessão para validar, então o painel permanece fechado. Configure as
@@ -347,7 +351,7 @@ function AreaProtegida({ children }: { children: ReactNode }) {
   if (estado.status === 'autenticado') return <>{children}</>
   if (estado.status === 'carregando') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] text-sm text-[#8A8171]">
+      <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] text-sm text-[#7C7469]">
         Verificando a sessão…
       </div>
     )

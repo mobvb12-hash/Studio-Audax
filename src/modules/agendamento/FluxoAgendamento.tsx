@@ -525,7 +525,7 @@ export default function FluxoAgendamento() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream-100 px-4">
         <div className="w-full max-w-md rounded-2xl border border-cream-300 bg-cream-50 p-6 text-center">
-          <h1 className="font-serif-display text-[20px] font-semibold text-noir-900">
+          <h1 className="font-display text-[20px] font-semibold text-noir-900">
             Studio Audax
           </h1>
           <p className="mt-2 text-[14px] text-noir-500">
@@ -764,7 +764,7 @@ function EtapaServicos({
       </div>
 
       <header className="mb-7">
-        <h1 className="font-serif-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[34px]">
+        <h1 className="font-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[34px]">
           Agende seu horário
         </h1>
         <p className="mt-2 max-w-md text-[14.5px] leading-relaxed text-noir-500">

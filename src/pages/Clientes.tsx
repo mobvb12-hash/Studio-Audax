@@ -136,10 +136,10 @@ export default function Clientes() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Clientes
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {resumo.total} cliente(s) cadastrado(s) ·{' '}
             {filtrados.length === resumo.total
               ? 'todos'
@@ -149,7 +149,7 @@ export default function Clientes() {
         <button
           type="button"
           onClick={abrirNovo}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           + Novo cliente
         </button>

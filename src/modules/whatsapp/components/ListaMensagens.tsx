@@ -66,13 +66,13 @@ export default function ListaMensagens({
                   >
                     {STATUS_ROTULO[m.status]}
                   </span>
-                  <p className="text-sm font-bold text-[#1C1A15]">{m.cliente}</p>
-                  <span className="text-[11px] font-medium text-[#8A8171]">
+                  <p className="text-sm font-bold text-[#121110]">{m.cliente}</p>
+                  <span className="text-[11px] font-medium text-[#7C7469]">
                     {TEMPLATES_ROTULO[m.template]} · {ORIGEM_ROTULO[m.origem]}{' '}
                     · {formatarISO(m.criadoEm)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-[#4A4436]">{m.texto}</p>
+                <p className="mt-1 text-sm text-[#3A352C]">{m.texto}</p>
                 {ag && (
                   <p className="mt-1 text-[12px] text-[#8A6A14]">
                     Agendamento · {formatarDataLonga(ag.data)} às {ag.horario}
@@ -92,14 +92,14 @@ export default function ListaMensagens({
                   <button
                     type="button"
                     onClick={() => aoMarcarEnviada(m.id)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                   >
                     Marcar enviada
                   </button>
                   <button
                     type="button"
                     onClick={() => aoRegistrarFalha(m)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                   >
                     Registrar falha
                   </button>
@@ -110,7 +110,7 @@ export default function ListaMensagens({
                       const cliente = clientes.find((c) => c.id === m.clienteId)
                       if (cliente) aoVerHistorico(cliente)
                     }}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                   >
                     Ver histórico
                   </button>

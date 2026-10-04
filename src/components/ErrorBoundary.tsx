@@ -28,10 +28,10 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex min-h-[60vh] w-full items-center justify-center p-6">
           <div className="w-full max-w-md rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-6 text-center shadow-sm">
-            <h1 className="text-lg font-bold text-[#1C1A15]">
+            <h1 className="text-lg font-bold text-[#121110]">
               Algo deu errado
             </h1>
-            <p className="mt-2 text-sm text-[#4A4436]">
+            <p className="mt-2 text-sm text-[#3A352C]">
               A tela encontrou um erro inesperado. Seus dados locais continuam
               salvos — tente novamente ou recarregue a página.
             </p>
@@ -42,14 +42,14 @@ export default class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={this.tentarDeNovo}
-                className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
               >
                 Tentar novamente
               </button>
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+                className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
               >
                 Recarregar página
               </button>

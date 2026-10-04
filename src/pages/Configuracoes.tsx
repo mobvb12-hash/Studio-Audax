@@ -49,8 +49,8 @@ function Botao({
       disabled={desabilitado}
       className={
         secundario
-          ? 'rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA] disabled:opacity-50'
-          : 'rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:opacity-50'
+          ? 'rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA] disabled:opacity-50'
+          : 'rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C] disabled:opacity-50'
       }
     >
       {children}
@@ -79,7 +79,7 @@ function Caixa({
     <section className="rounded-xl border border-[#E5DCC3] bg-white p-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-[#1C1A15]">{titulo}</h2>
+          <h2 className="text-base font-semibold text-[#121110]">{titulo}</h2>
           <p className="mt-0.5 max-w-xl text-[13px] text-[#6B6353]">{descricao}</p>
         </div>
         <Botao onClick={aoSalvar} desabilitado={salvando}>
@@ -261,7 +261,7 @@ export default function Configuracoes() {
 
   if (carregando) {
     return (
-      <div className="flex h-64 items-center justify-center text-[#8A8171]">
+      <div className="flex h-64 items-center justify-center text-[#7C7469]">
         Carregando configurações…
       </div>
     )
@@ -270,7 +270,7 @@ export default function Configuracoes() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-xl font-bold text-[#1C1A15]">Configurações</h1>
+        <h1 className="text-xl font-bold text-[#121110]">Configurações</h1>
         <p className="mt-1 max-w-2xl text-sm text-[#6B6353]">
           Uma fonte única para links, avaliação, avisos automáticos e o comportamento
           da IA do WhatsApp. O servidor, a agenda e a IA leem estes mesmos valores.
@@ -368,7 +368,7 @@ export default function Configuracoes() {
         {servicosDisponiveis.length > 0 && (
           <div className="mt-4 rounded-lg border border-[#E5DCC3] p-4">
             <p className={ROTULO_FORM}>Destaques na página de agendamento</p>
-            <p className="mt-1 text-xs text-[#8A8171]">
+            <p className="mt-1 text-xs text-[#7C7469]">
               Os serviços marcados aparecem primeiro para quem chega pelo
               Instagram ou pelo link. Sem marcar nenhum, a página mostra só a
               lista completa.
@@ -395,7 +395,7 @@ export default function Configuracoes() {
                           )
                         }
                       />
-                      <span className="truncate text-sm text-[#1C1A15]">{nome}</span>
+                      <span className="truncate text-sm text-[#121110]">{nome}</span>
                     </label>
                     {marcado && (
                       <span className="flex shrink-0 items-center gap-1">
@@ -404,7 +404,7 @@ export default function Configuracoes() {
                           aria-label={`Subir ${nome} na vitrine`}
                           disabled={posicao === 0}
                           onClick={() => moverDestaque(nome, -1)}
-                          className="min-h-[32px] rounded border border-[#E5DCC3] px-2 text-[#4A4436] disabled:opacity-40"
+                          className="min-h-[32px] rounded border border-[#E5DCC3] px-2 text-[#3A352C] disabled:opacity-40"
                         >
                           ↑
                         </button>
@@ -413,7 +413,7 @@ export default function Configuracoes() {
                           aria-label={`Descer ${nome} na vitrine`}
                           disabled={posicao === dados.barbearia.destaques.length - 1}
                           onClick={() => moverDestaque(nome, 1)}
-                          className="min-h-[32px] rounded border border-[#E5DCC3] px-2 text-[#4A4436] disabled:opacity-40"
+                          className="min-h-[32px] rounded border border-[#E5DCC3] px-2 text-[#3A352C] disabled:opacity-40"
                         >
                           ↓
                         </button>
@@ -440,7 +440,7 @@ export default function Configuracoes() {
           */}
         <div className="mt-4 rounded-lg border border-[#E5DCC3] p-4">
           <p className={ROTULO_FORM}>Horário de funcionamento</p>
-          <p className="mt-1 text-xs text-[#8A8171]">
+          <p className="mt-1 text-xs text-[#7C7469]">
             Dia que ficar em branco usa o expediente geral da Agenda. O que você
             escrever aqui é o que o cliente lê no site E o que o sistema oferece
             para agendar.
@@ -475,7 +475,7 @@ export default function Configuracoes() {
                         definirBarbearia('horarios', proximos)
                       }}
                     />
-                    <span className="text-sm text-[#1C1A15]">{dia.nome}</span>
+                    <span className="text-sm text-[#121110]">{dia.nome}</span>
                   </label>
                   {marcado && atual && (
                     <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -519,7 +519,7 @@ export default function Configuracoes() {
           </ul>
         </div>
 
-        <p className="text-xs text-[#8A8171]">
+        <p className="text-xs text-[#7C7469]">
           O telefone é o botão de WhatsApp da página pública e a resposta da IA.
           Enquanto estiver vazio, nenhum dos dois mostra número — o sistema não
           inventa telefone. O mapa, se vazio, é montado a partir do endereço.
@@ -538,7 +538,7 @@ export default function Configuracoes() {
         */}
         <div className="mt-4 rounded-lg border border-[#E5DCC3] p-4">
           <p className={ROTULO_FORM}>Fotos da barbearia</p>
-          <p className="mt-1 text-xs text-[#8A8171]">
+          <p className="mt-1 text-xs text-[#7C7469]">
             Até 8 links de fotos da casa, na ordem em que devem aparecer.
             Sem nenhuma, a página de agendamento abre direto nos serviços.
           </p>
@@ -555,7 +555,7 @@ export default function Configuracoes() {
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="flex h-12 w-16 shrink-0 items-center justify-center rounded border border-[#E5DCC3] text-[10px] text-[#8A8171]"
+                      className="flex h-12 w-16 shrink-0 items-center justify-center rounded border border-[#E5DCC3] text-[10px] text-[#7C7469]"
                     >
                       sem foto
                     </span>
@@ -571,7 +571,7 @@ export default function Configuracoes() {
                     type="button"
                     aria-label={`Remover foto ${indice + 1}`}
                     onClick={() => removerFoto(indice)}
-                    className="min-h-[32px] shrink-0 rounded border border-[#E5DCC3] px-2 text-[#4A4436]"
+                    className="min-h-[32px] shrink-0 rounded border border-[#E5DCC3] px-2 text-[#3A352C]"
                   >
                     Remover
                   </button>
@@ -585,7 +585,7 @@ export default function Configuracoes() {
               onClick={() =>
                 definirBarbearia('fotos', [...dados.barbearia.fotos, ''])
               }
-              className="mt-3 min-h-[36px] rounded-lg border border-[#E5DCC3] px-3 text-[13px] font-semibold text-[#4A4436]"
+              className="mt-3 min-h-[36px] rounded-lg border border-[#E5DCC3] px-3 text-[13px] font-semibold text-[#3A352C]"
             >
               + Adicionar foto
             </button>
@@ -651,7 +651,7 @@ export default function Configuracoes() {
             ['avaliacao', 'Enviar link de avaliação depois do atendimento'],
           ] as const
         ).map(([chave, rotulo]) => (
-          <label key={chave} className="flex items-center gap-2 text-[13px] text-[#4A4436]">
+          <label key={chave} className="flex items-center gap-2 text-[13px] text-[#3A352C]">
             <input
               type="checkbox"
               checked={dados.notificacoes[chave]}
@@ -660,7 +660,7 @@ export default function Configuracoes() {
             {rotulo}
           </label>
         ))}
-        <p className="sm:col-span-2 text-xs text-[#8A8171]">
+        <p className="sm:col-span-2 text-xs text-[#7C7469]">
           O número do profissional é configurado na tela Profissionais, em cada
           ficha. Sem número configurado, o agendamento continua normalmente.
         </p>
@@ -736,7 +736,7 @@ export default function Configuracoes() {
 
         {/* ------------------------------------------- POTE DO CLUB (028) */}
         <div className="sm:col-span-2 mt-2 rounded-lg border border-[#E5DCC3] p-4">
-          <h3 className="text-[13px] font-semibold text-[#1C1A15]">
+          <h3 className="text-[13px] font-semibold text-[#121110]">
             Pote do Audax Club
           </h3>
           <p className="mt-1 text-[12.5px] text-[#6B6353]">
@@ -812,7 +812,7 @@ export default function Configuracoes() {
               }
             />
           </Campo>
-          <p className="text-xs text-[#8A8171]">
+          <p className="text-xs text-[#7C7469]">
             Lista vazia = nenhum desconto químico. Sobrancelha e produtos ficam
             fora dos planos: só entram como.Normal.
           </p>
@@ -844,7 +844,7 @@ export default function Configuracoes() {
             onChange={(e) => definirIa('maxSugestoes', Number(e.target.value))}
           />
         </Campo>
-        <label className="flex items-center gap-2 text-[13px] text-[#4A4436] sm:col-span-2">
+        <label className="flex items-center gap-2 text-[13px] text-[#3A352C] sm:col-span-2">
           <input
             type="checkbox"
             checked={dados.ia.botoesInterativos}
@@ -855,7 +855,7 @@ export default function Configuracoes() {
         </label>
       </Caixa>
 
-      <p className="pb-4 text-xs text-[#8A8171]">
+      <p className="pb-4 text-xs text-[#7C7469]">
         Chaves disponíveis: {CHAVES_CONFIG.join(', ')}. Toda alteração é validada
         novamente pelo servidor antes de gravar.
       </p>

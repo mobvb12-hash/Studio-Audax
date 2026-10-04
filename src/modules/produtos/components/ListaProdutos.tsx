@@ -66,7 +66,7 @@ export default function ListaProdutos({
         <button
           type="button"
           onClick={aoNovo}
-          className="rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+          className="rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           + Novo produto
         </button>
@@ -86,7 +86,7 @@ export default function ListaProdutos({
               className="flex flex-col gap-3 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4 sm:flex-row sm:items-center"
             >
               <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-1.5 text-sm font-bold text-[#1C1A15]">
+                <p className="flex flex-wrap items-center gap-1.5 text-sm font-bold text-[#121110]">
                   <span className="truncate">{produto.nome}</span>
                   <span
                     className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${badgeStatus(produto)}`}
@@ -103,7 +103,7 @@ export default function ListaProdutos({
                     {produto.ativo ? 'Ativo' : 'Inativo'}
                   </span>
                 </p>
-                <p className="mt-0.5 text-[13px] text-[#4A4436]">
+                <p className="mt-0.5 text-[13px] text-[#3A352C]">
                   Venda: {formatarBRL(produto.preco)} · Custo:{' '}
                   {formatarBRL(produto.custo)} · Estoque: {produto.estoque} un
                   (mín. {produto.estoqueMinimo})

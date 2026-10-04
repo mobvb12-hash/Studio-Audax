@@ -181,8 +181,8 @@ function Botao({
         perigo
           ? 'rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50'
           : secundario
-            ? 'rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA] disabled:opacity-50'
-            : 'rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:opacity-50'
+            ? 'rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA] disabled:opacity-50'
+            : 'rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C] disabled:opacity-50'
       }
     >
       {children}
@@ -196,7 +196,7 @@ function Selo({ children, tom }: { children: React.ReactNode; tom: 'ativo' | 'in
       ? 'bg-emerald-50 text-emerald-700'
       : tom === 'excecao'
         ? 'bg-amber-50 text-amber-800'
-        : 'bg-[#F3ECDA] text-[#8A8171]'
+        : 'bg-[#F3ECDA] text-[#7C7469]'
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cores}`}>
       {children}
@@ -383,7 +383,7 @@ export default function UsuariosPermissoes() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-bold text-[#1C1A15]">
+          <h1 className="text-[22px] font-bold text-[#121110]">
             Usuários e permissões
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-[#6B6353]">
@@ -410,7 +410,7 @@ export default function UsuariosPermissoes() {
 
       {novoAberto && podeGerenciar && (
         <section className="rounded-xl border border-[#E5DCC3] bg-white p-5">
-          <h2 className="text-base font-semibold text-[#1C1A15]">Novo usuário</h2>
+          <h2 className="text-base font-semibold text-[#121110]">Novo usuário</h2>
           <p className="mt-0.5 max-w-xl text-[13px] text-[#6B6353]">
             Cria o acesso de entrada e a linha de equipe ao mesmo tempo. A senha
             só é definida aqui — não fica guardada no painel.
@@ -496,7 +496,7 @@ export default function UsuariosPermissoes() {
       )}
 
       {carregando && (
-        <p className="rounded-xl border border-[#E5DCC3] bg-white p-5 text-sm text-[#8A8171]">
+        <p className="rounded-xl border border-[#E5DCC3] bg-white p-5 text-sm text-[#7C7469]">
           Carregando equipe…
         </p>
       )}
@@ -504,7 +504,7 @@ export default function UsuariosPermissoes() {
       {!carregando && !perfilSelecionado && (
         <section className="space-y-3">
           {perfis.length === 0 && (
-            <p className="rounded-xl border border-[#E5DCC3] bg-white p-5 text-sm text-[#8A8171]">
+            <p className="rounded-xl border border-[#E5DCC3] bg-white p-5 text-sm text-[#7C7469]">
               Nenhum usuário com acesso ao painel.
             </p>
           )}
@@ -518,10 +518,10 @@ export default function UsuariosPermissoes() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-[#1C1A15]">
+                    <p className="truncate text-[15px] font-semibold text-[#121110]">
                       {p.nome}
                       {p.id === perfilLogado?.id && (
-                        <span className="ml-2 text-[11px] font-normal text-[#8A8171]">(você)</span>
+                        <span className="ml-2 text-[11px] font-normal text-[#7C7469]">(você)</span>
                       )}
                     </p>
                     <p className="truncate text-[13px] text-[#6B6353]">{p.email}</p>
@@ -583,7 +583,7 @@ export default function UsuariosPermissoes() {
         <section className="rounded-xl border border-[#E5DCC3] bg-white p-5">
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-[#1C1A15]">
+              <h2 className="text-base font-semibold text-[#121110]">
                 Permissões de {perfilSelecionado.nome}
               </h2>
               <p className="mt-0.5 max-w-2xl text-[13px] text-[#6B6353]">
@@ -601,7 +601,7 @@ export default function UsuariosPermissoes() {
           <div className="mt-4 space-y-5">
             {grupos.map((grupo) => (
               <div key={grupo.nome}>
-                <p className="text-[11px] font-semibold tracking-[0.18em] text-[#8A8171] uppercase">
+                <p className="text-[11px] font-semibold tracking-[0.18em] text-[#7C7469] uppercase">
                   {grupo.nome}
                 </p>
                 <div className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2">
@@ -617,7 +617,7 @@ export default function UsuariosPermissoes() {
                           trava ? 'opacity-70' : 'cursor-pointer'
                         }`}
                       >
-                        <span className="text-[13px] text-[#4A4436]">
+                        <span className="text-[13px] text-[#3A352C]">
                           {ACOES[acao].rotulo}
                           {ehExcecao && (
                             <span className="ml-2 text-[11px] font-semibold text-amber-700">

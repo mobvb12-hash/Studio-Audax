@@ -453,24 +453,24 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       >
         <div className="flex items-start justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Fechar conta
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+            <h2 className="mt-1 text-lg font-bold text-[#121110]">
               {agendamento.cliente}
             </h2>
-            <p className="text-[13px] text-[#8A8171]">
+            <p className="text-[13px] text-[#7C7469]">
               {agendamento.telefone ? `${agendamento.telefone} · ` : ''}
               {agendamento.profissional} · {agendamento.horario}
             </p>
-            <p className="text-[13px] text-[#8A8171]">
+            <p className="text-[13px] text-[#7C7469]">
               {agendamento.servico} · {agendamento.data}
             </p>
             {cliente && (
               <button
                 type="button"
                 onClick={() => setEditandoCliente(true)}
-                className="mt-2 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                className="mt-2 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
               >
                 Editar cliente
               </button>
@@ -479,7 +479,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -491,7 +491,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           <div className="mt-2 overflow-hidden rounded-lg border border-[#E5DCC3]">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-[#FAF6EB] text-[11px] tracking-wide text-[#8A8171] uppercase">
+                <tr className="bg-[#FAF6EB] text-[11px] tracking-wide text-[#7C7469] uppercase">
                   <th className="px-2 py-1.5 text-left font-semibold">Item</th>
                   <th className="px-2 py-1.5 text-right font-semibold">
                     Preço
@@ -506,7 +506,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
               </thead>
               <tbody className="divide-y divide-[#EFE7D3]">
                 <tr>
-                  <td className="px-2 py-2 text-[#1C1A15]">
+                  <td className="px-2 py-2 text-[#121110]">
                     Serviço · {agendamento.servico}
                   </td>
                   <td className="px-2 py-2 text-right">
@@ -531,7 +531,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                       onChange={(e) => setDesconto(e.target.value)}
                     />
                   </td>
-                  <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                  <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                     {formatarBRL(servicoLiquido)}
                   </td>
                 </tr>
@@ -541,7 +541,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                     Number.isFinite(bruto) && bruto > 0 ? bruto : 0
                   return (
                     <tr key={x.chave}>
-                      <td className="px-2 py-2 text-[#1C1A15]">
+                      <td className="px-2 py-2 text-[#121110]">
                         <span className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate">
                             Serviço · {x.servico}
@@ -571,7 +571,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                       <td className="px-2 py-2 text-right text-xs text-[#A99E85]">
                         —
                       </td>
-                      <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                      <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                         {formatarBRL(brutoValido)}
                       </td>
                     </tr>
@@ -579,7 +579,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                 })}
                 {carrinho.map((i) => (
                   <tr key={i.produtoId}>
-                    <td className="px-2 py-2 text-[#1C1A15]">
+                    <td className="px-2 py-2 text-[#121110]">
                       <span className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate">
                           {i.quantidade}× {i.produto}
@@ -594,7 +594,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                         </button>
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-right text-[#4A4436]">
+                    <td className="px-2 py-2 text-right text-[#3A352C]">
                       {formatarBRL(i.quantidade * i.preco)}
                     </td>
                     <td className="px-2 py-2 text-right">
@@ -609,7 +609,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                         }
                       />
                     </td>
-                    <td className="px-2 py-2 text-right font-semibold text-[#1C1A15]">
+                    <td className="px-2 py-2 text-right font-semibold text-[#121110]">
                       {formatarBRL(apagarDoItem(i))}
                     </td>
                   </tr>
@@ -617,10 +617,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
               </tbody>
               <tfoot>
                 <tr className="border-t border-[#E5DCC3] bg-[#FAF6EB]/60 text-xs">
-                  <td className="px-2 py-1.5 text-[#8A8171]" colSpan={1}>
+                  <td className="px-2 py-1.5 text-[#7C7469]" colSpan={1}>
                     Subtotal
                   </td>
-                  <td className="px-2 py-1.5 text-right font-medium text-[#4A4436]">
+                  <td className="px-2 py-1.5 text-right font-medium text-[#3A352C]">
                     {formatarBRL(subtotal)}
                   </td>
                   <td className="px-2 py-1.5 text-right font-medium text-[#6B8E5A]">
@@ -663,7 +663,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
             <button
               type="button"
               onClick={adicionarServico}
-              className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+              className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
             >
               Incluir serviço
             </button>
@@ -703,7 +703,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
             <button
               type="button"
               onClick={adicionarAoCarrinho}
-              className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+              className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
             >
               Adicionar
             </button>
@@ -766,7 +766,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
 
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-[#E5DCC3] bg-[#F3ECDA] px-2 py-1.5">
-              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+              <p className="text-[10px] tracking-wide text-[#7C7469] uppercase">
                 Total
               </p>
               <p className="text-sm font-bold text-[#8A6A14]">
@@ -774,10 +774,10 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
               </p>
             </div>
             <div className="rounded-lg border border-[#E5DCC3] bg-white px-2 py-1.5">
-              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+              <p className="text-[10px] tracking-wide text-[#7C7469] uppercase">
                 Recebido
               </p>
-              <p className="text-sm font-bold text-[#1C1A15]">
+              <p className="text-sm font-bold text-[#121110]">
                 {formatarBRL(recebido)}
               </p>
             </div>
@@ -788,20 +788,20 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
                   : 'border-[#E5DCC3] bg-white'
               }`}
             >
-              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+              <p className="text-[10px] tracking-wide text-[#7C7469] uppercase">
                 Falta
               </p>
               <p
-                className={`text-sm font-bold ${falta > 0 ? 'text-red-700' : 'text-[#1C1A15]'}`}
+                className={`text-sm font-bold ${falta > 0 ? 'text-red-700' : 'text-[#121110]'}`}
               >
                 {formatarBRL(falta)}
               </p>
             </div>
             <div className="rounded-lg border border-[#E5DCC3] bg-white px-2 py-1.5">
-              <p className="text-[10px] tracking-wide text-[#8A8171] uppercase">
+              <p className="text-[10px] tracking-wide text-[#7C7469] uppercase">
                 Troco
               </p>
-              <p className="text-sm font-bold text-[#1C1A15]">
+              <p className="text-sm font-bold text-[#121110]">
                 {formatarBRL(troco)}
               </p>
             </div>
@@ -844,14 +844,14 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={salvar}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Fechar Conta {formatarBRL(total)}
           </button>

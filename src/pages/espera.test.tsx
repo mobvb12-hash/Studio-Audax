@@ -280,7 +280,7 @@ describe('Fila de Espera — encaixes compatíveis com a Agenda', () => {
     ).toBe('Cleiton Silva')
     // horário é um grupo de chips — o selecionado usa o destaque dourado
     const chipHora = within(painel).getByRole('button', { name: '09:00' })
-    expect(chipHora.className).toContain('bg-[#8A6A14]')
+    expect(chipHora.className).toContain('bg-[#C9A24A]')
   })
 })
 

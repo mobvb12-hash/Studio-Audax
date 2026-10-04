@@ -119,7 +119,7 @@ export function Tela({
           <p className="text-[11px] font-semibold tracking-[0.22em] text-gold-700 uppercase">
             {ETAPA_ROTULO[etapa]}
           </p>
-          <h1 className="mt-1 font-serif-display text-[24px] leading-tight font-semibold text-noir-900">
+          <h1 className="mt-1 font-display text-[24px] leading-tight font-semibold text-noir-900">
             {titulo}
           </h1>
           {descricao && (
@@ -225,7 +225,7 @@ export function CartaoProfissional({
       ) : (
         <span
           aria-hidden="true"
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-cream-200 font-serif-display text-[16px] font-semibold text-noir-600"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-cream-200 font-display text-[16px] font-semibold text-noir-600"
         >
           {nome.trim().charAt(0).toUpperCase()}
         </span>
@@ -678,7 +678,7 @@ export function LinhaSanfona({
           <span
             className={`block leading-snug font-semibold ${
               variante === 'ouro'
-                ? 'font-serif-display text-[19px] text-noir-900'
+                ? 'font-display text-[19px] text-noir-900'
                 : 'text-[15.5px] text-noir-900'
             }`}
           >
@@ -793,7 +793,7 @@ export function EquipeVitrine({ profissionais }: { profissionais: PessoaVitrine[
             ) : (
               <span
                 aria-hidden="true"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream-200 font-serif-display text-[15px] font-semibold text-noir-600"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream-200 font-display text-[15px] font-semibold text-noir-600"
               >
                 {p.nome.trim().charAt(0).toUpperCase()}
               </span>

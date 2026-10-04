@@ -61,7 +61,7 @@ export default function AgendaCrm({
             <Vazio texto="Nenhum cliente cadastrado." />
           ) : (
             <>
-              <p className="text-[13px] text-[#4A4436]">
+              <p className="text-[13px] text-[#3A352C]">
                 {profFiltro === 'todos'
                   ? 'Classificação atual dos clientes — não muda com o período selecionado.'
                   : `Classificação dos clientes atendidos por ${profFiltro} — não muda com o período selecionado.`}

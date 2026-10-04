@@ -218,10 +218,10 @@ export default function Relatorios() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Relatórios
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {rotuloPeriodo(periodo)} · {resumo.qtdAtendimentosPagos}{' '}
             atendimento(s) pago(s) · {formas.linhas.length} forma(s) de
             pagamento

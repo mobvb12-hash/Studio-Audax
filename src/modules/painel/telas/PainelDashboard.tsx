@@ -106,7 +106,7 @@ export default function PainelDashboard() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="font-serif-display text-[24px] leading-tight font-semibold text-noir-900">
+        <h1 className="font-display text-[24px] leading-tight font-semibold text-noir-900">
           {primeiroNome ? `Olá, ${primeiroNome}!` : 'Seu painel'}
         </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-noir-500">

@@ -23,14 +23,14 @@ export function LinhaLancamento({
       className={`flex items-center justify-between gap-3 py-2.5 ${l.estornado ? 'opacity-50' : ''}`}
     >
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-[#1C1A15]">
+        <p className="truncate text-sm font-medium text-[#121110]">
           {despesa ? '' : `${formatarHora(l.criadoEm)} · `}
           {l.descricao}
           {l.profissional && (
-            <span className="text-[#8A8171]"> · {l.profissional}</span>
+            <span className="text-[#7C7469]"> · {l.profissional}</span>
           )}
         </p>
-        <p className="text-xs text-[#8A8171]">
+        <p className="text-xs text-[#7C7469]">
           {FORMAS_ROTULO[l.formaPagamento]}
           {despesa && l.categoria && ` · ${l.categoria}`}
           {l.desconto > 0 && ` · desconto ${formatarBRL(l.desconto)}`}

@@ -78,7 +78,7 @@ export default function ClubeComissoes({
               />
             </div>
             {profFiltro !== 'todos' && (
-              <p className="mt-3 text-[13px] text-[#4A4436]">
+              <p className="mt-3 text-[13px] text-[#3A352C]">
                 Visão geral da barbearia — assinaturas do Audax Club não são
                 filtradas por profissional.
               </p>
@@ -111,7 +111,7 @@ export default function ClubeComissoes({
               </div>
             </div>
             {comisAbertas < -0.005 && (
-              <p className="mt-3 text-[13px] text-[#4A4436]">
+              <p className="mt-3 text-[13px] text-[#3A352C]">
                 Produção atual diferente do fechamento: fechadas no período{' '}
                 {formatarBRL(comisFech.totalFechado)} contra{' '}
                 {formatarBRL(comisTotais.comissao)} de produção atual. Os
@@ -121,7 +121,7 @@ export default function ClubeComissoes({
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                     <th className="px-3 py-2 font-semibold">Profissional</th>
                     <th className="px-3 py-2 text-right font-semibold">%</th>
                     <th className="px-3 py-2 text-right font-semibold">
@@ -135,13 +135,13 @@ export default function ClubeComissoes({
                 <tbody className="divide-y divide-[#EFE7D3]">
                   {profLinhas.map((p) => (
                     <tr key={p.chave}>
-                      <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                      <td className="px-3 py-2 font-medium text-[#121110]">
                         {p.nome}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#8A8171]">
+                      <td className="px-3 py-2 text-right text-[#7C7469]">
                         {p.percentual}%
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {formatarBRL(p.producao)}
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-[#8A6A14]">
@@ -154,7 +154,7 @@ export default function ClubeComissoes({
             </div>
             {comisFech.lista.length > 0 && (
               <div className="mt-4 border-t border-[#EFE7D3] pt-3">
-                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                   Comissões fechadas
                 </p>
                 <ul className="mt-1.5 divide-y divide-[#EFE7D3]">
@@ -163,11 +163,11 @@ export default function ClubeComissoes({
                       key={f.id}
                       className="flex items-center justify-between py-2 text-sm"
                     >
-                      <span className="text-[#4A4436]">
+                      <span className="text-[#3A352C]">
                         {f.profissionalNome} · {dataCurta(f.periodo.inicio)} a{' '}
                         {dataCurta(f.periodo.fim)}
                       </span>
-                      <span className="font-semibold text-[#1C1A15]">
+                      <span className="font-semibold text-[#121110]">
                         {formatarBRL(f.comissao)}
                       </span>
                     </li>

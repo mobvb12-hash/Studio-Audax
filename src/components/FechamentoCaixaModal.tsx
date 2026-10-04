@@ -13,8 +13,8 @@ type Props = {
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
     <div className="flex items-center justify-between border-t border-[#EFE7D3] py-2 text-sm">
-      <span className="text-[#4A4436]">{rotulo}</span>
-      <span className="font-semibold text-[#1C1A15]">{valor}</span>
+      <span className="text-[#3A352C]">{rotulo}</span>
+      <span className="font-semibold text-[#121110]">{valor}</span>
     </div>
   )
 }
@@ -52,17 +52,17 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Fechamento de caixa
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+            <h2 className="mt-1 text-lg font-bold text-[#121110]">
               {formatarDataLonga(data)}
             </h2>
           </div>
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -70,7 +70,7 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Resumo do dia
           </p>
           <Linha
@@ -101,7 +101,7 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
           )}
           <Linha rotulo="Despesas" valor={formatarBRL(resumo.despesas)} />
           <div className="flex items-center justify-between border-t-2 border-[#E5DCC3] py-2.5 text-sm">
-            <span className="font-bold text-[#1C1A15]">Resultado líquido</span>
+            <span className="font-bold text-[#121110]">Resultado líquido</span>
             <span className="text-base font-bold text-[#8A6A14]">
               {formatarBRL(resumo.liquido)}
             </span>
@@ -109,7 +109,7 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Por forma de pagamento
           </p>
           {FORMAS_PAGAMENTO.map((f) => (
@@ -123,7 +123,7 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
 
         {resumo.porProfissional.length > 0 && (
           <div className="mt-4">
-            <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Por profissional
             </p>
             {resumo.porProfissional.map((p) => (
@@ -136,7 +136,7 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
           </div>
         )}
 
-        <p className="mt-4 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#4A4436]">
+        <p className="mt-4 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#3A352C]">
           Ao confirmar, o caixa do dia fica somente leitura. Novos lançamentos
           exigirão reabertura com motivo, que fica registrado na auditoria.
         </p>
@@ -151,14 +151,14 @@ export default function FechamentoCaixaModal({ data, onFechar }: Props) {
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Voltar
           </button>
           <button
             type="button"
             onClick={confirmar}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Confirmar fechamento
           </button>

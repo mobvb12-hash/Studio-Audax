@@ -28,9 +28,9 @@ export function Cartao({
   return (
     <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-bold text-[#1C1A15]">{titulo}</h2>
+        <h2 className="text-[15px] font-bold text-[#121110]">{titulo}</h2>
         {contador && (
-          <span className="text-sm font-semibold text-[#8A8171]">{contador}</span>
+          <span className="text-sm font-semibold text-[#7C7469]">{contador}</span>
         )}
       </div>
       <div className="mt-4">{children}</div>
@@ -47,7 +47,7 @@ export function Secao({
 }) {
   return (
     <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-      <h2 className="text-[15px] font-bold text-[#1C1A15]">{titulo}</h2>
+      <h2 className="text-[15px] font-bold text-[#121110]">{titulo}</h2>
       <div className="mt-4">{children}</div>
     </section>
   )
@@ -64,7 +64,7 @@ export function CelulaKpi({
 }) {
   return (
     <div className="min-w-[150px] flex-1 px-4 py-4">
-      <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+      <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
         {rotulo}
       </p>
       <p
@@ -87,8 +87,8 @@ export function LinhaDetalhe({
 }) {
   return (
     <div className="flex items-center justify-between border-t border-[#EFE7D3] py-2 text-sm first:border-t-0">
-      <span className="text-[#4A4436]">{rotulo}</span>
-      <span className="font-semibold text-[#1C1A15]">{valor}</span>
+      <span className="text-[#3A352C]">{rotulo}</span>
+      <span className="font-semibold text-[#121110]">{valor}</span>
     </div>
   )
 }
@@ -106,17 +106,17 @@ export function BarraEvolucao({
           key={d.data}
           className="flex items-center gap-3 py-2 text-[13px]"
         >
-          <span className="w-20 shrink-0 text-[#8A8171]">
+          <span className="w-20 shrink-0 text-[#7C7469]">
             {dataCurta(d.data)}
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex items-center gap-2">
               <div
-                className="h-2 rounded-full bg-[#8A6A14]"
+                className="h-2 rounded-full bg-[#C9A24A]"
                 style={{ width: `${(d.receita / maximo) * 100}%` }}
                 aria-hidden="true"
               />
-              <span className="shrink-0 font-medium text-[#1C1A15]">
+              <span className="shrink-0 font-medium text-[#121110]">
                 {formatarBRL(d.receita)}
               </span>
             </div>
@@ -126,7 +126,7 @@ export function BarraEvolucao({
                 style={{ width: `${(d.despesa / maximo) * 100}%` }}
                 aria-hidden="true"
               />
-              <span className="shrink-0 text-xs text-[#8A8171]">
+              <span className="shrink-0 text-xs text-[#7C7469]">
                 {formatarBRL(d.despesa)}
               </span>
             </div>

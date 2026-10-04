@@ -59,18 +59,18 @@ export default function ResumoPagamento({
 }: Props) {
   return (
     <section className="rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-      <h2 className="text-[15px] font-bold text-[#1C1A15]">Pagamento</h2>
+      <h2 className="text-[15px] font-bold text-[#121110]">Pagamento</h2>
 
       <div className="mt-4 divide-y divide-[#EFE7D3]">
         <div className="flex items-center justify-between py-2 text-sm">
-          <span className="text-[#4A4436]">Subtotal</span>
-          <span className="font-semibold text-[#1C1A15]">
+          <span className="text-[#3A352C]">Subtotal</span>
+          <span className="font-semibold text-[#121110]">
             {formatarBRL(subtotal)}
           </span>
         </div>
         {descontoAssinante > 0 && (
           <div className="flex items-center justify-between py-2 text-sm">
-            <span className="text-[#4A4436]">
+            <span className="text-[#3A352C]">
               Desconto assinante Audax Club (10%)
             </span>
             <span className="font-semibold text-[#6B8E5A]">
@@ -79,7 +79,7 @@ export default function ResumoPagamento({
           </div>
         )}
         <div className="flex items-center justify-between gap-3 py-2 text-sm">
-          <label className="text-[#4A4436]" htmlFor="pdv-desconto">
+          <label className="text-[#3A352C]" htmlFor="pdv-desconto">
             Desconto (R$)
           </label>
           <input
@@ -91,7 +91,7 @@ export default function ResumoPagamento({
           />
         </div>
         <div className="flex items-center justify-between py-2 text-sm">
-          <span className="font-bold text-[#1C1A15]">Total da venda</span>
+          <span className="font-bold text-[#121110]">Total da venda</span>
           <span className="text-lg leading-none font-bold text-[#8A6A14]">
             {formatarBRL(total)}
           </span>
@@ -173,7 +173,7 @@ export default function ResumoPagamento({
         type="button"
         onClick={aoFinalizar}
         disabled={caixaFechado || !temItens}
-        className="mt-4 w-full rounded-lg bg-[#8A6A14] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:bg-[#C9BC94]"
+        className="mt-4 w-full rounded-lg bg-[#C9A24A] px-4 py-3 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:bg-[#C9BC94]"
       >
         Finalizar venda
       </button>

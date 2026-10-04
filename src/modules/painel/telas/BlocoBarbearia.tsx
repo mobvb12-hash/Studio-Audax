@@ -50,7 +50,7 @@ export default function BlocoBarbearia({
           </svg>
         </span>
         <div className="min-w-0">
-          <h2 className="font-serif-display text-[19px] leading-tight font-semibold text-noir-900">
+          <h2 className="font-display text-[19px] leading-tight font-semibold text-noir-900">
             Studio Audax
           </h2>
           {barbearia.endereco && (

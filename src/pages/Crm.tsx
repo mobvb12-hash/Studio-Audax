@@ -125,10 +125,10 @@ export default function Crm() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             CRM
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {perfis.length} cliente(s) analisado(s) ·{' '}
             {filtrados.length === perfis.length
               ? 'todos'
@@ -158,7 +158,7 @@ export default function Crm() {
         <div className="flex min-w-[640px] divide-x divide-[#E5DCC3]">
           {kpis.map((kpi) => (
             <div key={kpi.rotulo} className="min-w-[120px] flex-1 px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
                 {kpi.rotulo}
               </p>
               <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
@@ -246,15 +246,15 @@ export default function Crm() {
                   {iniciais(cliente.nome)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-[#1C1A15]">
+                  <p className="truncate text-sm font-bold text-[#121110]">
                     {cliente.nome}{' '}
                     {cliente.telefone && (
-                      <span className="ml-1 font-normal text-[#8A8171]">
+                      <span className="ml-1 font-normal text-[#7C7469]">
                         {cliente.telefone}
                       </span>
                     )}
                   </p>
-                  <p className="mt-0.5 truncate text-[13px] text-[#4A4436]">
+                  <p className="mt-0.5 truncate text-[13px] text-[#3A352C]">
                     {perfil.ultimoAtendimento
                       ? `Última: ${formatarDataLonga(perfil.ultimoAtendimento)} · `
                       : 'Nunca atendido · '}
@@ -301,7 +301,7 @@ export default function Crm() {
                       {vigente ? 'Assinante' : 'Assinatura pendente'}
                     </span>
                   )}
-                  <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436]">
+                  <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C]">
                     {perfil.totalAtendimentos} atendimento(s)
                   </span>
                   <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2.5 py-1 text-xs font-medium text-[#8A6A14]">
@@ -310,7 +310,7 @@ export default function Crm() {
                   {perfil.servicos.slice(0, 2).map((s) => (
                     <span
                       key={s.nome}
-                      className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs text-[#4A4436]"
+                      className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs text-[#3A352C]"
                     >
                       {s.nome} ({s.qtd})
                     </span>
@@ -330,7 +330,7 @@ export default function Crm() {
                   <button
                     type="button"
                     onClick={() => setAgendarPara(cliente)}
-                    className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                    className="rounded-lg bg-[#C9A24A] px-3 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
                   >
                     Agendar
                   </button>

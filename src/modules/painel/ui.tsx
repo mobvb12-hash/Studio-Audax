@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { MarcaAudax } from '@/components/MarcaAudax'
 
 /**
  * Kit visual do ÁREA DO CLIENTE (Painel do Cliente e agendamento público).
@@ -16,16 +17,25 @@ import type { ReactNode } from 'react'
  * `CX_CLIENTE` (@/lib/apresentacao), o que preserva o Fast Refresh.
  */
 
-/** Marca do Studio Audax — serifa discreta, sem exuberância. */
+/** Marca do Studio Audax — símbolo da arte final ao lado do wordmark. */
 export function Marca({ compacta = false }: { compacta?: boolean }) {
   return (
-    <div className={compacta ? 'text-center' : 'text-center'}>
-      <p className="font-serif-display text-[11px] font-semibold tracking-[0.34em] text-gold-600 uppercase">
-        Studio
-      </p>
-      <p className="font-serif-display text-[22px] leading-none font-semibold tracking-[0.18em] text-noir-900 uppercase">
-        Audax
-      </p>
+    <div className="flex items-center justify-center gap-2.5">
+      <MarcaAudax
+        className={
+          compacta
+            ? 'h-7 w-7 shrink-0 text-noir-900'
+            : 'h-9 w-9 shrink-0 text-noir-900'
+        }
+      />
+      <div className="text-center">
+        <p className="font-display text-[11px] font-semibold tracking-[0.34em] text-gold-600 uppercase">
+          Studio
+        </p>
+        <p className="font-display text-[22px] leading-none font-semibold tracking-[0.18em] text-noir-900 uppercase">
+          Audax
+        </p>
+      </div>
     </div>
   )
 }
@@ -55,7 +65,7 @@ export function Cabecalho({
           </div>
         )
       )}
-      <h1 className="font-serif-display text-[26px] leading-tight font-semibold text-noir-900 sm:text-[30px]">
+      <h1 className="font-display text-[26px] leading-tight font-semibold text-noir-900 sm:text-[30px]">
         {titulo}
       </h1>
       {subtitulo && (
@@ -520,7 +530,7 @@ export function EstadoVazio({
       role={alerta ? 'alert' : undefined}
       className="rounded-2xl border border-dashed border-cream-400 bg-cream-50 px-5 py-8 text-center"
     >
-      <p className="font-serif-display text-[17px] font-semibold text-noir-800">
+      <p className="font-display text-[17px] font-semibold text-noir-800">
         {titulo}
       </p>
       {texto && <p className="mt-1.5 text-[13.5px] text-noir-500">{texto}</p>}
@@ -646,7 +656,7 @@ export function Confirmacao({
             />
           </svg>
         </span>
-        <h1 className="mt-4 font-serif-display text-[24px] leading-tight font-semibold text-noir-900">
+        <h1 className="mt-4 font-display text-[24px] leading-tight font-semibold text-noir-900">
           {titulo}
         </h1>
         {frase && (

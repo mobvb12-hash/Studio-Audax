@@ -21,7 +21,7 @@ export default function AvisoPersistencia() {
       <div className="flex items-start gap-3">
         <div className="flex-1 space-y-1.5">
           {mensagens.map((mensagem) => (
-            <p key={mensagem} className="text-[13px] text-[#4A4436]">
+            <p key={mensagem} className="text-[13px] text-[#3A352C]">
               {mensagem}
             </p>
           ))}

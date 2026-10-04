@@ -41,10 +41,10 @@ export default function Servicos() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Serviços
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {servicos.length} serviço(s) · {ativos} ativo(s) · {inativos}{' '}
             inativo(s) · preço e duração usados na Agenda
           </p>
@@ -52,7 +52,7 @@ export default function Servicos() {
         <button
           type="button"
           onClick={abrirNovo}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           + Novo serviço
         </button>
@@ -89,10 +89,10 @@ export default function Servicos() {
                 <span className="text-[10px] font-medium">min</span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-[#1C1A15]">
+                <p className="truncate text-sm font-bold text-[#121110]">
                   {servico.nome}
                 </p>
-                <p className="mt-0.5 text-[13px] text-[#4A4436]">
+                <p className="mt-0.5 text-[13px] text-[#3A352C]">
                   Duração de {servico.duracaoMin} minutos
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -106,7 +106,7 @@ export default function Servicos() {
                     {servico.ativo ? 'Ativo' : 'Inativo'}
                   </span>
                   {servico.categoria && (
-                    <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs font-medium text-[#4A4436]">
+                    <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs font-medium text-[#3A352C]">
                       {servico.categoria}
                     </span>
                   )}

@@ -12,10 +12,10 @@ export default function HistoricoCliente({
   return (
     <div className="mt-5 border-t border-[#E5DCC3] pt-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-[#1C1A15]">
+        <h3 className="text-sm font-bold text-[#121110]">
           Histórico completo
         </h3>
-        <span className="text-[11px] text-[#8A8171]">
+        <span className="text-[11px] text-[#7C7469]">
           {historico.length} evento(s)
         </span>
       </div>
@@ -33,10 +33,10 @@ export default function HistoricoCliente({
                 className="flex items-start justify-between gap-2 py-2"
               >
                 <div className="min-w-0">
-                  <p className="text-[11px] text-[#8A8171]">
+                  <p className="text-[11px] text-[#7C7469]">
                     {formatarDataLonga(evento.data)} · {evento.hora}
                   </p>
-                  <p className="mt-0.5 text-sm text-[#4A4436]">
+                  <p className="mt-0.5 text-sm text-[#3A352C]">
                     {evento.titulo}
                   </p>
                 </div>

@@ -61,13 +61,13 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Histórico da assinatura
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+            <h2 className="mt-1 text-lg font-bold text-[#121110]">
               {assinatura.cliente}
             </h2>
-            <p className="mt-0.5 text-[13px] text-[#8A8171]">
+            <p className="mt-0.5 text-[13px] text-[#7C7469]">
               {PLANOS_ROTULO[assinatura.plano]} ·{' '}
               {formatarBRL(assinatura.valorMensal)}/mês
             </p>
@@ -75,7 +75,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -87,7 +87,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
             <p className="text-[13px] leading-tight font-bold text-[#8A6A14]">
               {STATUS_ROTULO[status]}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Status
             </p>
           </div>
@@ -95,7 +95,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
             <p className="text-[13px] leading-tight font-bold text-[#8A6A14]">
               {formatarDataLonga(assinatura.proximoVencimento)}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Próximo venc.
             </p>
           </div>
@@ -103,7 +103,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
             <p className="text-[13px] leading-tight font-bold text-[#8A6A14]">
               {formatarBRL(totalPago)}
             </p>
-            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <p className="mt-1 text-[10px] tracking-[0.1em] text-[#7C7469] uppercase">
               Total pago
             </p>
           </div>
@@ -112,7 +112,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
         <div className="mt-4 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1">
           <dl className="divide-y divide-[#EFE7D3] text-sm">
             <div className="flex items-center justify-between gap-3 py-2">
-              <dt className="text-[#8A8171]">Situação</dt>
+              <dt className="text-[#7C7469]">Situação</dt>
               <dd>
                 <span
                   className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasse(status)}`}
@@ -122,26 +122,26 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3 py-2">
-              <dt className="text-[#8A8171]">Cliente</dt>
-              <dd className="font-medium text-[#1C1A15]">
+              <dt className="text-[#7C7469]">Cliente</dt>
+              <dd className="font-medium text-[#121110]">
                 {assinatura.cliente}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3 py-2">
-              <dt className="text-[#8A8171]">Desde</dt>
-              <dd className="font-medium text-[#1C1A15]">
+              <dt className="text-[#7C7469]">Desde</dt>
+              <dd className="font-medium text-[#121110]">
                 {formatarDataLonga(assinatura.dataAssinatura)}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3 py-2">
-              <dt className="text-[#8A8171]">Benefício</dt>
-              <dd className="font-medium text-[#1C1A15]">
+              <dt className="text-[#7C7469]">Benefício</dt>
+              <dd className="font-medium text-[#121110]">
                 {vigente ? '10% em produtos (PDV)' : 'Sem desconto (não vigente)'}
               </dd>
             </div>
             {assinatura.cancelada && (
               <div className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-[#8A8171]">Cancelada em</dt>
+                <dt className="text-[#7C7469]">Cancelada em</dt>
                 <dd className="font-medium text-red-700">
                   {assinatura.canceladaEm
                     ? formatarDataLonga(assinatura.canceladaEm)
@@ -155,7 +155,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+          <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
             Pagamentos ({pagamentos.length})
           </p>
           {pagamentos.length === 0 ? (
@@ -174,7 +174,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
                     className="flex items-center justify-between gap-2 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-[#1C1A15]">
+                      <p className="truncate text-sm font-medium text-[#121110]">
                         {formatarDataLonga(p.data)} ·{' '}
                         {FORMAS_ROTULO[p.formaPagamento]}
                         {estornado && (
@@ -183,7 +183,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-[#8A8171]">Renovação do ciclo</p>
+                      <p className="text-xs text-[#7C7469]">Renovação do ciclo</p>
                     </div>
                     <span
                       className={`shrink-0 text-sm font-semibold ${
@@ -211,7 +211,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Fechar
           </button>
@@ -227,7 +227,7 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
               <button
                 type="button"
                 onClick={() => setPagamentoAberto(true)}
-                className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+                className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
               >
                 + Registrar pagamento
               </button>

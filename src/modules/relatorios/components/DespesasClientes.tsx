@@ -29,7 +29,7 @@ export default function DespesasClientes({
             <div>
               <div className="flex gap-4 text-sm">
                 <div>
-                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                     Total
                   </p>
                   <p className="mt-1 text-[22px] leading-none font-bold text-red-700">
@@ -37,10 +37,10 @@ export default function DespesasClientes({
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                     Lançamentos
                   </p>
-                  <p className="mt-1 text-[22px] leading-none font-bold text-[#1C1A15]">
+                  <p className="mt-1 text-[22px] leading-none font-bold text-[#121110]">
                     {despesas.qtd}
                   </p>
                 </div>
@@ -51,11 +51,11 @@ export default function DespesasClientes({
                     key={c.categoria}
                     className="flex items-center justify-between py-2 text-sm"
                   >
-                    <span className="text-[#4A4436]">
+                    <span className="text-[#3A352C]">
                       {c.categoria}{' '}
-                      <span className="text-xs text-[#8A8171]">({c.qtd})</span>
+                      <span className="text-xs text-[#7C7469]">({c.qtd})</span>
                     </span>
-                    <span className="font-medium text-[#1C1A15]">
+                    <span className="font-medium text-[#121110]">
                       {formatarBRL(c.valor)}
                     </span>
                   </li>
@@ -63,7 +63,7 @@ export default function DespesasClientes({
               </ul>
             </div>
             <div>
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
                 Evolução das despesas
               </p>
               <ul className="mt-2 divide-y divide-[#EFE7D3]">
@@ -72,8 +72,8 @@ export default function DespesasClientes({
                     key={d.data}
                     className="flex items-center justify-between py-2 text-sm"
                   >
-                    <span className="text-[#8A8171]">{dataCurta(d.data)}</span>
-                    <span className="font-medium text-[#1C1A15]">
+                    <span className="text-[#7C7469]">{dataCurta(d.data)}</span>
+                    <span className="font-medium text-[#121110]">
                       {formatarBRL(d.valor)}
                     </span>
                   </li>
@@ -121,7 +121,7 @@ export default function DespesasClientes({
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[380px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                     <th className="px-3 py-2 font-semibold">Cliente</th>
                     <th className="px-3 py-2 text-right font-semibold">
                       Atendimentos
@@ -134,13 +134,13 @@ export default function DespesasClientes({
                 <tbody className="divide-y divide-[#EFE7D3]">
                   {cli.linhas.slice(0, 10).map((c) => (
                     <tr key={c.chave}>
-                      <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                      <td className="px-3 py-2 font-medium text-[#121110]">
                         {c.nome}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {c.atendimentos}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {formatarBRL(c.gasto)}
                       </td>
                     </tr>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MarcaAudax } from '@/components/MarcaAudax'
 import { usePainelAuth } from '../usePainelAuth'
 import { navegarPainel, rotaPainelAtual } from '../regras'
 import TelaCadastrarPainel from './TelaCadastrarPainel'
@@ -21,6 +22,9 @@ function SemSupabase() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-cream-50 px-4">
       <div className="w-full max-w-md rounded-xl border border-cream-300 bg-white p-8">
+        <div className="mb-4 flex justify-center">
+          <MarcaAudax className="h-12 w-12 text-noir-900" />
+        </div>
         <h1 className="text-center text-xl font-bold text-noir-900">
           Studio Audax
         </h1>

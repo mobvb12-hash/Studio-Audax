@@ -97,8 +97,8 @@ export default function AutomacoesModal({ onFechar }: Props) {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-[#1C1A15]">Automações</h2>
-            <p className="mt-1 text-[13px] text-[#8A8171]">
+            <h2 className="text-lg font-bold text-[#121110]">Automações</h2>
+            <p className="mt-1 text-[13px] text-[#7C7469]">
               Nada é enviado automaticamente: cada preparo cria uma mensagem
               PENDENTE para você revisar. Ignorar marca a automação como
               tratada e ela não volta a aparecer.
@@ -108,7 +108,7 @@ export default function AutomacoesModal({ onFechar }: Props) {
             type="button"
             onClick={onFechar}
             aria-label="Fechar"
-            className="rounded-md border border-[#E5DCC3] bg-white px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md border border-[#E5DCC3] bg-white px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
           >
             ×
           </button>
@@ -117,7 +117,7 @@ export default function AutomacoesModal({ onFechar }: Props) {
         <div className="mt-4 grid grid-cols-3 divide-x divide-[#E5DCC3] rounded-lg border border-[#E5DCC3] bg-white">
           {kpis.map((kpi) => (
             <div key={kpi.rotulo} className="px-3 py-2.5">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+              <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
                 {kpi.rotulo}
               </p>
               <p className="mt-1 text-lg leading-none font-bold text-[#8A6A14]">
@@ -134,7 +134,7 @@ export default function AutomacoesModal({ onFechar }: Props) {
         )}
 
         <div className="mt-4 border-t border-[#E5DCC3] pt-4">
-          <h3 className="text-sm font-bold text-[#1C1A15]">
+          <h3 className="text-sm font-bold text-[#121110]">
             Sugestões prontas
           </h3>
           {sugestoes.length === 0 ? (
@@ -155,7 +155,7 @@ export default function AutomacoesModal({ onFechar }: Props) {
                       <span className="rounded-full border border-[#F3ECDA] bg-[#F3ECDA] px-2.5 py-0.5 text-[11px] font-semibold text-[#8A6A14]">
                         {AUTOMACOES_ROTULO[sugestao.tipo]}
                       </span>
-                      <p className="text-sm font-bold text-[#1C1A15]">
+                      <p className="text-sm font-bold text-[#121110]">
                         {sugestao.cliente}
                       </p>
                     </div>
@@ -163,20 +163,20 @@ export default function AutomacoesModal({ onFechar }: Props) {
                       <button
                         type="button"
                         onClick={() => preparar(sugestao)}
-                        className="rounded-lg bg-[#8A6A14] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                        className="rounded-lg bg-[#C9A24A] px-2.5 py-1 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
                       >
                         Preparar mensagem
                       </button>
                       <button
                         type="button"
                         onClick={() => marcarTratada(sugestao.chave)}
-                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                       >
                         Ignorar
                       </button>
                     </div>
                   </div>
-                  <p className="mt-2 rounded-md bg-[#FDFBF3] px-2.5 py-2 text-[13px] text-[#4A4436]">
+                  <p className="mt-2 rounded-md bg-[#FDFBF3] px-2.5 py-2 text-[13px] text-[#3A352C]">
                     {sugestao.texto}
                   </p>
                 </li>

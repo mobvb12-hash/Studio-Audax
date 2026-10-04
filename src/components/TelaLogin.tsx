@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '@/modules/auth/useAuth'
+import { MarcaAudax, SeloDesde2024 } from '@/components/MarcaAudax'
 
 /**
  * Tela de login do Studio Audax — só aparece quando o Supabase está
  * configurado (sem variáveis, o app continua local como sempre).
- * Usa a paleta aprovada do sistema; não altera o layout interno.
+ * Repaginada com a identidade da barbearia: fundo preto, marca em dourado
+ * e botão dourado com texto preto (mesma leitura das postagens).
  */
 export default function TelaLogin() {
   const { estado, erroEntrada, entrando, entrar } = useAuth()
@@ -20,16 +22,16 @@ export default function TelaLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#FDFBF3] px-4">
-      <div className="w-full max-w-sm rounded-xl border border-[#E5DCC3] bg-white p-8">
-        <h1 className="text-center text-xl font-bold text-[#1C1A15]">
+    <div className="flex min-h-screen items-center justify-center bg-[#0C0B0A] px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-[#2E2A21] bg-[#141311] p-8 shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
+        <div className="flex justify-center">
+          <MarcaAudax className="h-16 w-16 text-[#F7F3EA]" />
+        </div>
+        <h1 className="mt-4 text-center font-display text-xl font-extrabold tracking-[0.2em] text-[#F7F3EA] uppercase">
           Studio Audax
         </h1>
-        <div
-          className="mx-auto mt-3 h-px w-16 bg-[#8A6A14]"
-          aria-hidden="true"
-        />
-        <p className="mt-4 text-center text-sm text-[#8A8171]">
+        <SeloDesde2024 className="mt-3" />
+        <p className="mt-4 text-center text-sm text-[#A99E85]">
           Entre com seu acesso para abrir o painel.
         </p>
 
@@ -37,7 +39,7 @@ export default function TelaLogin() {
           <div>
             <label
               htmlFor="login-email"
-              className="block text-[13px] font-medium text-[#4A4436]"
+              className="block text-[13px] font-medium text-[#C9BFA4]"
             >
               E-mail
             </label>
@@ -48,13 +50,13 @@ export default function TelaLogin() {
               autoComplete="email"
               value={email}
               onChange={(evento) => setEmail(evento.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#E5DCC3] px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+              className="mt-1 w-full rounded-lg border border-[#3A352C] bg-[#0C0B0A] px-3 py-2 text-sm text-[#F7F3EA] outline-none placeholder:text-[#5A5346] focus:border-[#C9A24A]"
             />
           </div>
           <div>
             <label
               htmlFor="login-senha"
-              className="block text-[13px] font-medium text-[#4A4436]"
+              className="block text-[13px] font-medium text-[#C9BFA4]"
             >
               Senha
             </label>
@@ -65,13 +67,13 @@ export default function TelaLogin() {
               autoComplete="current-password"
               value={senha}
               onChange={(evento) => setSenha(evento.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#E5DCC3] px-3 py-2 text-sm text-[#1C1A15] outline-none focus:border-[#8A6A14]"
+              className="mt-1 w-full rounded-lg border border-[#3A352C] bg-[#0C0B0A] px-3 py-2 text-sm text-[#F7F3EA] outline-none placeholder:text-[#5A5346] focus:border-[#C9A24A]"
             />
           </div>
           <button
             type="submit"
             disabled={entrando}
-            className="w-full rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {entrando ? 'Entrando…' : 'Entrar'}
           </button>

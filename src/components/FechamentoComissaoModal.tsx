@@ -18,8 +18,8 @@ type Props = {
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
     <div className="flex items-center justify-between border-t border-[#EFE7D3] py-2 text-sm">
-      <span className="text-[#4A4436]">{rotulo}</span>
-      <span className="font-semibold text-[#1C1A15]">{valor}</span>
+      <span className="text-[#3A352C]">{rotulo}</span>
+      <span className="font-semibold text-[#121110]">{valor}</span>
     </div>
   )
 }
@@ -71,10 +71,10 @@ export default function FechamentoComissaoModal({
         className="w-full max-w-sm rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+        <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
           Fechamento de comissão
         </p>
-        <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+        <h2 className="mt-1 text-lg font-bold text-[#121110]">
           {profissionalNome}
         </h2>
 
@@ -90,14 +90,14 @@ export default function FechamentoComissaoModal({
           />
           <Linha rotulo="Percentual" valor={`${percentual}%`} />
           <div className="flex items-center justify-between border-t-2 border-[#E5DCC3] py-2.5 text-sm">
-            <span className="font-bold text-[#1C1A15]">Comissão a pagar</span>
+            <span className="font-bold text-[#121110]">Comissão a pagar</span>
             <span className="text-base font-bold text-[#8A6A14]">
               {formatarBRL(comissao)}
             </span>
           </div>
         </div>
 
-        <p className="mt-3 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#4A4436]">
+        <p className="mt-3 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#3A352C]">
           Ao confirmar, o valor é congelado no histórico. Alterações futuras de
           produção ou percentual não mudam este fechamento — qualquer correção
           exige reabertura explícita com motivo, registrada na auditoria.
@@ -113,14 +113,14 @@ export default function FechamentoComissaoModal({
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Voltar
           </button>
           <button
             type="button"
             onClick={confirmar}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Confirmar fechamento
           </button>

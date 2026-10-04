@@ -169,16 +169,16 @@ export default function Agenda({ onNovo }: Props) {
   const chipToggle =
     'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors'
   const botaoToolbar =
-    'rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]'
+    'rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]'
 
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Agenda
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {visual === 'dia'
               ? `${formatarDataLonga(data)} · ${doDia.length} atendimento(s) · ${pendentes} pendente(s) · ${confirmados} confirmado(s)`
               : `Semana de ${formatarDataCurta(diasSemana[0])} a ${formatarDataCurta(diasSemana[6])} · ${doSemana.length} atendimento(s)`}
@@ -187,7 +187,7 @@ export default function Agenda({ onNovo }: Props) {
         <button
           type="button"
           onClick={() => onNovo()}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           + Agendar
         </button>
@@ -231,8 +231,8 @@ export default function Agenda({ onNovo }: Props) {
               onClick={() => setVisual('dia')}
               className={`${chipToggle} ${
                 visual === 'dia'
-                  ? 'bg-[#8A6A14] text-white'
-                  : 'text-[#4A4436] hover:bg-[#F3ECDA]'
+                  ? 'bg-[#C9A24A] text-[#121110]'
+                  : 'text-[#3A352C] hover:bg-[#F3ECDA]'
               }`}
             >
               Dia
@@ -242,8 +242,8 @@ export default function Agenda({ onNovo }: Props) {
               onClick={() => setVisual('semana')}
               className={`${chipToggle} ${
                 visual === 'semana'
-                  ? 'bg-[#8A6A14] text-white'
-                  : 'text-[#4A4436] hover:bg-[#F3ECDA]'
+                  ? 'bg-[#C9A24A] text-[#121110]'
+                  : 'text-[#3A352C] hover:bg-[#F3ECDA]'
               }`}
             >
               Semana
@@ -266,7 +266,7 @@ export default function Agenda({ onNovo }: Props) {
         </div>
       </div>
 
-      <p className="mt-2 text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+      <p className="mt-2 text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
         Clique em um horário vazio para agendar
       </p>
 
@@ -288,10 +288,10 @@ export default function Agenda({ onNovo }: Props) {
               >
                 <Avatar nome={col.nome} foto={col.foto} tamanho="sm" />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-[#1C1A15]">
+                  <p className="truncate text-sm font-bold text-[#121110]">
                     {col.nome}
                   </p>
-                  <p className="text-[10px] text-[#8A8171]">
+                  <p className="text-[10px] text-[#7C7469]">
                     Barbeiro(a)
                     {profissionalInativo(col.nome) ? ' · inativo' : ''}
                   </p>
@@ -303,7 +303,7 @@ export default function Agenda({ onNovo }: Props) {
             {slots.map((slot, i) => (
               <div
                 key={`hora-${slot.hora}`}
-                className="flex items-start justify-end border-r border-b border-[#E5DCC3] bg-[#FAF6EB] pr-2 pt-1.5 text-[11px] font-semibold text-[#8A8171]"
+                className="flex items-start justify-end border-r border-b border-[#E5DCC3] bg-[#FAF6EB] pr-2 pt-1.5 text-[11px] font-semibold text-[#7C7469]"
                 style={{ gridColumn: 1, gridRow: i + 2 }}
               >
                 {slot.hora}
@@ -399,7 +399,7 @@ export default function Agenda({ onNovo }: Props) {
                         gridRow: `${linha + 2} / span ${span}`,
                       }}
                     >
-                      <span className="w-full truncate text-[11px] leading-tight font-semibold text-[#8A8171]">
+                      <span className="w-full truncate text-[11px] leading-tight font-semibold text-[#7C7469]">
                         {rotuloBloqueio(b)}
                       </span>
                       <span className="text-[10px] leading-tight text-[#A99E85]">
@@ -467,7 +467,7 @@ export default function Agenda({ onNovo }: Props) {
                   dia === hojeISO() ? 'bg-[#F7F1E2]' : 'bg-[#FAF6EB]'
                 }`}
               >
-                <p className="text-[11px] font-bold text-[#1C1A15]">
+                <p className="text-[11px] font-bold text-[#121110]">
                   {rotuloDia(dia)} · {formatarDataCurta(dia)}
                 </p>
                 {dia === hojeISO() && (
@@ -482,7 +482,7 @@ export default function Agenda({ onNovo }: Props) {
             {slots.map((slot, i) => (
               <div
                 key={`w-hora-${slot.hora}`}
-                className="flex items-start justify-end border-r border-b border-[#E5DCC3] bg-[#FAF6EB] pr-2 pt-1.5 text-[11px] font-semibold text-[#8A8171]"
+                className="flex items-start justify-end border-r border-b border-[#E5DCC3] bg-[#FAF6EB] pr-2 pt-1.5 text-[11px] font-semibold text-[#7C7469]"
                 style={{ gridColumn: 1, gridRow: i + 2 }}
               >
                 {slot.hora}
@@ -535,7 +535,7 @@ export default function Agenda({ onNovo }: Props) {
                     {iniciando.map((b) => (
                       <span
                         key={b.id}
-                        className="truncate rounded border border-dashed border-[#C9BFA4] bg-[#EDE5D2] px-1 text-[9px] leading-tight font-medium text-[#8A8171]"
+                        className="truncate rounded border border-dashed border-[#C9BFA4] bg-[#EDE5D2] px-1 text-[9px] leading-tight font-medium text-[#7C7469]"
                       >
                         {rotuloBloqueio(b)} · {b.inicio}–{b.fim}
                       </span>
@@ -587,7 +587,7 @@ export default function Agenda({ onNovo }: Props) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A6A14]">
             Fora do expediente atual ({expediente.inicio} às {expediente.fim})
           </p>
-          <p className="mt-1 text-xs text-[#8A8171]">
+          <p className="mt-1 text-xs text-[#7C7469]">
             Estes agendamentos não aparecem na grade porque caem fora do
             horário configurado. Clique para abrir ou remarcar.
           </p>

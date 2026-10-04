@@ -54,10 +54,10 @@ export default function MarketingModal({ onFechar }: Props) {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-[#1C1A15]">
+            <h2 className="text-lg font-bold text-[#121110]">
               Marketing e campanhas
             </h2>
-            <p className="mt-1 text-[13px] text-[#8A8171]">
+            <p className="mt-1 text-[13px] text-[#7C7469]">
               Públicos calculados dos dados reais — nada é copiado e nenhum
               envio acontece automaticamente.
             </p>
@@ -66,7 +66,7 @@ export default function MarketingModal({ onFechar }: Props) {
             type="button"
             onClick={onFechar}
             aria-label="Fechar"
-            className="rounded-md border border-[#E5DCC3] bg-white px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md border border-[#E5DCC3] bg-white px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
           >
             ×
           </button>
@@ -80,19 +80,19 @@ export default function MarketingModal({ onFechar }: Props) {
               className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5"
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-bold text-[#1C1A15]">{p.rotulo}</p>
+                <p className="text-sm font-bold text-[#121110]">{p.rotulo}</p>
                 <span className="rounded-full border border-[#F3ECDA] bg-[#F3ECDA] px-2.5 py-0.5 text-xs font-semibold text-[#8A6A14]">
                   {p.clientes.length} cliente(s)
                 </span>
               </div>
-              <p className="mt-0.5 text-[12px] text-[#8A8171]">{p.descricao}</p>
+              <p className="mt-0.5 text-[12px] text-[#7C7469]">{p.descricao}</p>
             </div>
           ))}
         </div>
 
         {/* Criar lista */}
         <div className="mt-5 border-t border-[#E5DCC3] pt-4">
-          <h3 className="text-sm font-bold text-[#1C1A15]">
+          <h3 className="text-sm font-bold text-[#121110]">
             Criar lista de público
           </h3>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -124,7 +124,7 @@ export default function MarketingModal({ onFechar }: Props) {
             <button
               type="button"
               onClick={criar}
-              className="h-fit rounded-lg bg-[#8A6A14] px-3 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+              className="h-fit rounded-lg bg-[#C9A24A] px-3 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
             >
               Criar lista
             </button>
@@ -138,7 +138,7 @@ export default function MarketingModal({ onFechar }: Props) {
 
         {/* Listas salvas */}
         <div className="mt-4 border-t border-[#E5DCC3] pt-4">
-          <h3 className="text-sm font-bold text-[#1C1A15]">
+          <h3 className="text-sm font-bold text-[#121110]">
             Listas de público
           </h3>
           {listas.length === 0 ? (
@@ -158,20 +158,20 @@ export default function MarketingModal({ onFechar }: Props) {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-bold text-[#1C1A15]">
+                        <p className="text-sm font-bold text-[#121110]">
                           {lista.nome}
                         </p>
                         <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2 py-0.5 text-[11px] font-semibold text-[#8A6A14]">
                           {PUBLICOS_ROTULO[lista.publico]}
                         </span>
-                        <span className="text-[12px] text-[#8A8171]">
+                        <span className="text-[12px] text-[#7C7469]">
                           {membros.length} cliente(s)
                         </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => removerLista(lista.id)}
-                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:border-red-300 hover:bg-red-50 hover:text-red-700"
                       >
                         Remover
                       </button>
@@ -181,13 +181,13 @@ export default function MarketingModal({ onFechar }: Props) {
                         {membros.slice(0, 8).map((c) => (
                           <span
                             key={c.id}
-                            className="rounded-full border border-[#E5DCC3] bg-[#FDFBF3] px-2 py-0.5 text-[11px] text-[#4A4436]"
+                            className="rounded-full border border-[#E5DCC3] bg-[#FDFBF3] px-2 py-0.5 text-[11px] text-[#3A352C]"
                           >
                             {c.nome}
                           </span>
                         ))}
                         {membros.length > 8 && (
-                          <span className="text-[11px] text-[#8A8171]">
+                          <span className="text-[11px] text-[#7C7469]">
                             + {membros.length - 8} cliente(s)
                           </span>
                         )}

@@ -36,7 +36,7 @@ export default function InteracoesBloco({
 
   return (
     <div className="mt-5 border-t border-[#E5DCC3] pt-4">
-      <h3 className="text-sm font-bold text-[#1C1A15]">
+      <h3 className="text-sm font-bold text-[#121110]">
         Interações e notas
       </h3>
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -95,7 +95,7 @@ export default function InteracoesBloco({
               <p className="text-[11px] font-semibold text-[#8A6A14]">
                 {TIPOS_INTERACAO_ROTULO[i.tipo]} · {formatarISO(i.criadoEm)}
               </p>
-              <p className="mt-0.5 text-sm text-[#4A4436]">{i.texto}</p>
+              <p className="mt-0.5 text-sm text-[#3A352C]">{i.texto}</p>
             </li>
           ))}
         </ul>

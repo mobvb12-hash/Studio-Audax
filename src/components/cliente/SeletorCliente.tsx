@@ -77,10 +77,10 @@ export default function SeletorCliente({
       {selecionado && !aberto ? (
         <div className="flex items-center gap-2">
           <div className="flex min-h-[52px] flex-1 items-center justify-between gap-2 rounded-xl border border-[#E5DCC3] bg-white px-4">
-            <span className="min-w-0 truncate text-[15px] text-[#1C1A15]">
+            <span className="min-w-0 truncate text-[15px] text-[#121110]">
               {selecionado.nome}
             </span>
-            <span className="shrink-0 text-[12px] text-[#8A8171]">
+            <span className="shrink-0 text-[12px] text-[#7C7469]">
               {auxiliarCliente(selecionado)}
             </span>
           </div>
@@ -90,7 +90,7 @@ export default function SeletorCliente({
               aoEscolher('')
               setAberto(true)
             }}
-            className="min-h-[52px] shrink-0 rounded-xl border border-[#E5DCC3] px-3 text-[13px] font-medium text-[#4A4436] hover:border-[#8A6A14]"
+            className="min-h-[52px] shrink-0 rounded-xl border border-[#E5DCC3] px-3 text-[13px] font-medium text-[#3A352C] hover:border-[#8A6A14]"
           >
             Trocar
           </button>
@@ -115,7 +115,7 @@ export default function SeletorCliente({
               setRealce(0)
             }}
             onKeyDown={aoTeclar}
-            className="min-h-[52px] w-full rounded-xl border border-[#E5DCC3] bg-white px-4 text-[15px] text-[#1C1A15] outline-none placeholder:text-[#A99E85] focus:border-[#8A6A14] focus:ring-1 focus:ring-[#8A6A14]"
+            className="min-h-[52px] w-full rounded-xl border border-[#E5DCC3] bg-white px-4 text-[15px] text-[#121110] outline-none placeholder:text-[#A99E85] focus:border-[#8A6A14] focus:ring-1 focus:ring-[#8A6A14]"
           />
 
           {aberto && (
@@ -125,7 +125,7 @@ export default function SeletorCliente({
               className="absolute z-30 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-[#E5DCC3] bg-white py-1 shadow-lg"
             >
               {resultados.length === 0 ? (
-                <li className="px-4 py-3 text-[13px] text-[#8A8171]">
+                <li className="px-4 py-3 text-[13px] text-[#7C7469]">
                   Nenhum cliente ativo encontrado para “{busca}”.
                 </li>
               ) : (
@@ -139,12 +139,12 @@ export default function SeletorCliente({
                       onClick={() => escolher(cliente)}
                       className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-[14px] ${
                         indice === realce
-                          ? 'bg-[#F3ECDA] text-[#1C1A15]'
-                          : 'text-[#4A4436]'
+                          ? 'bg-[#F3ECDA] text-[#121110]'
+                          : 'text-[#3A352C]'
                       }`}
                     >
                       <span className="min-w-0 truncate">{cliente.nome}</span>
-                      <span className="shrink-0 text-[12px] text-[#8A8171]">
+                      <span className="shrink-0 text-[12px] text-[#7C7469]">
                         {auxiliarCliente(cliente)}
                       </span>
                     </button>

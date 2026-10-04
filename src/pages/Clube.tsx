@@ -93,10 +93,10 @@ export default function Clube() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Audax Club
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             Assinaturas · planos Cabelo, Barba e Cabelo + Barba · 10% de
             desconto em produtos para assinantes vigentes
           </p>
@@ -104,7 +104,7 @@ export default function Clube() {
         <button
           type="button"
           onClick={() => setNovoAberto(true)}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C]"
         >
           + Nova assinatura
         </button>

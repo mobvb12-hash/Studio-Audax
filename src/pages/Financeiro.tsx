@@ -64,10 +64,10 @@ export default function Financeiro() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Financeiro
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {rotuloPeriodo(periodo)} · {resumo.qtdAtendimentosPagos}{' '}
             atendimento(s) pago(s) · Resultado{' '}
             {formatarBRL(resumo.resultado)}
@@ -96,7 +96,7 @@ export default function Financeiro() {
               onChange={(e) => aplicarCustom('inicio', e.target.value)}
               className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
             />
-            <span className="text-sm text-[#8A8171]">até</span>
+            <span className="text-sm text-[#7C7469]">até</span>
             <input
               type="date"
               aria-label="Fim do período"
@@ -158,10 +158,10 @@ export default function Financeiro() {
             <Vazio texto="Sem lançamentos no período." />
           ) : (
             <>
-              <div className="flex flex-wrap gap-4 text-xs text-[#8A8171]">
+              <div className="flex flex-wrap gap-4 text-xs text-[#7C7469]">
                 <span className="flex items-center gap-1.5">
                   <span
-                    className="h-2 w-2 rounded-full bg-[#8A6A14]"
+                    className="h-2 w-2 rounded-full bg-[#C9A24A]"
                     aria-hidden="true"
                   />
                   Receita
@@ -187,7 +187,7 @@ export default function Financeiro() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                     <th className="px-3 py-2 font-semibold">Forma</th>
                     <th className="px-3 py-2 text-right font-semibold">Qtd</th>
                     <th className="px-3 py-2 text-right font-semibold">Valor</th>
@@ -197,29 +197,29 @@ export default function Financeiro() {
                 <tbody className="divide-y divide-[#EFE7D3]">
                   {formas.linhas.map((f) => (
                     <tr key={f.forma}>
-                      <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                      <td className="px-3 py-2 font-medium text-[#121110]">
                         {f.rotulo}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {f.qtd}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
+                      <td className="px-3 py-2 text-right font-semibold text-[#121110]">
                         {formatarBRL(f.valor)}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#8A8171]">
+                      <td className="px-3 py-2 text-right text-[#7C7469]">
                         {f.percentual}%
                       </td>
                     </tr>
                   ))}
                   <tr className="bg-[#FAF6EB] font-semibold">
-                    <td className="px-3 py-2 text-[#1C1A15]">Total</td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-[#121110]">Total</td>
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {formas.linhas.reduce((t, f) => t + f.qtd, 0)}
                     </td>
                     <td className="px-3 py-2 text-right text-[#8A6A14]">
                       {formatarBRL(formas.total)}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#8A8171]">100%</td>
+                    <td className="px-3 py-2 text-right text-[#7C7469]">100%</td>
                   </tr>
                 </tbody>
               </table>

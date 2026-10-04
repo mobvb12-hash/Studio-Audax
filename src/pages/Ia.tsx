@@ -78,10 +78,10 @@ export default function Ia() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Central de IA
           </h1>
-          <p className="mt-2 max-w-2xl text-[13px] text-[#4A4436]">
+          <p className="mt-2 max-w-2xl text-[13px] text-[#3A352C]">
             A IA analisa apenas dados reais já cadastrados (clientes, agenda,
             caixa e serviços) e propõe sugestões. Nada é alterado, enviado ou
             cobrado automaticamente — toda ação exige sua confirmação.
@@ -90,7 +90,7 @@ export default function Ia() {
         <button
           type="button"
           onClick={analisar}
-          className="shrink-0 rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
         >
           Analisar dados
         </button>
@@ -136,17 +136,17 @@ export default function Ia() {
                   >
                     {TIPOS_SUGESTAO_ROTULO[s.tipo]}
                   </span>
-                  <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs font-medium text-[#4A4436]">
+                  <span className="rounded-full border border-[#E5DCC3] bg-white px-2.5 py-0.5 text-xs font-medium text-[#3A352C]">
                     {s.cliente}
                   </span>
                 </div>
-                <p className="mt-1.5 text-sm font-bold text-[#1C1A15]">
+                <p className="mt-1.5 text-sm font-bold text-[#121110]">
                   {s.titulo}
                 </p>
-                <p className="mt-0.5 text-[13px] text-[#4A4436]">
+                <p className="mt-0.5 text-[13px] text-[#3A352C]">
                   {s.descricao}
                 </p>
-                <p className="mt-1 text-[12px] italic text-[#8A8171]">
+                <p className="mt-1 text-[12px] italic text-[#7C7469]">
                   Ação proposta:{' '}
                   {s.acao.tipo === 'mensagem'
                     ? 'preparar mensagem de reativação (fica pendente — não envia agora)'
@@ -158,7 +158,7 @@ export default function Ia() {
                 <button
                   type="button"
                   onClick={() => setConfirmando(s)}
-                  className="rounded-lg bg-[#8A6A14] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                  className="rounded-lg bg-[#C9A24A] px-3 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
                 >
                   Confirmar ação
                 </button>

@@ -226,10 +226,10 @@ const online = Boolean(supabase())
 
   return (
     <div>
-      <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+      <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
         AUDAX CLUB — FECHAMENTO DO POTE
       </h1>
-      <p className="mt-2 max-w-3xl text-[13px] text-[#4A4436]">
+      <p className="mt-2 max-w-3xl text-[13px] text-[#3A352C]">
         Receita de assinaturas do período, dividida proporcionalmente pela
         produção de cada profissional. O horário mostrado é sempre o que a Agenda
         e o Caixa registraram —{' '}
@@ -270,7 +270,7 @@ const online = Boolean(supabase())
               type="button"
               onClick={() => void calcular()}
               disabled={carregando || filtroInvalido}
-              className="w-full rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {carregando ? 'Calculando...' : 'CALCULAR FECHAMENTO'}
             </button>
@@ -279,7 +279,7 @@ const online = Boolean(supabase())
             <button
               type="button"
               onClick={() => setPeriodo(mesCorrente(hoje))}
-              className="w-full rounded-lg border border-[#E5DCC3] px-4 py-2.5 text-sm font-medium text-[#4A4436] transition-colors hover:border-[#8A6A14]"
+              className="w-full rounded-lg border border-[#E5DCC3] px-4 py-2.5 text-sm font-medium text-[#3A352C] transition-colors hover:border-[#8A6A14]"
             >
               Mês atual
             </button>
@@ -313,7 +313,7 @@ const online = Boolean(supabase())
       {/* --------------------------------------------------- RESUMO */}
       {resultado && (
         <>
-          <p className="mt-4 text-[12px] text-[#8A8171]">
+          <p className="mt-4 text-[12px] text-[#7C7469]">
             {dataCurta(periodo.inicio)} até {dataCurta(periodo.fim)}
           </p>
           <div className="mt-2 overflow-x-auto border-y border-[#E5DCC3]">
@@ -329,13 +329,13 @@ const online = Boolean(supabase())
             </div>
           </div>
           {resultado.producaoTotal > 0 && (
-            <p className="mt-1.5 text-[12px] text-[#8A8171]">
+            <p className="mt-1.5 text-[12px] text-[#7C7469]">
               Valor de referência da produção: {formatarBRL(resultado.producaoTotal)}
             </p>
           )}
 
           {resultado.fichasTotal <= 0 ? (
-            <p className="mt-4 rounded-lg border border-dashed border-[#E5DCC3] px-4 py-3 text-[13px] text-[#8A8171]">
+            <p className="mt-4 rounded-lg border border-dashed border-[#E5DCC3] px-4 py-3 text-[13px] text-[#7C7469]">
               Nenhuma ficha de Club no período. O pote fica parado: sem produção
               não há quem divida.
             </p>
@@ -346,10 +346,10 @@ const online = Boolean(supabase())
                 <table className="w-full min-w-[640px] border-collapse text-sm">
 <thead>
                     <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-left">
-                      <th className="px-3 py-2 font-semibold text-[#4A4436]">Profissional</th>
-                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Fichas</th>
-                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">Participação</th>
-                      <th className="px-3 py-2 text-right font-semibold text-[#4A4436]">
+                      <th className="px-3 py-2 font-semibold text-[#3A352C]">Profissional</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A352C]">Fichas</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A352C]">Participação</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A352C]">
                         Parcela do Pote
                       </th>
                       <th className="px-3 py-2 text-right font-semibold text-[#8A6A14]">
@@ -366,16 +366,16 @@ const online = Boolean(supabase())
                           setDetalhe({ nome: p.profissional, id: p.profissionalId })
                         }
                       >
-                        <td className="px-3 py-2 font-medium text-[#1C1A15]">{p.profissional}</td>
+                        <td className="px-3 py-2 font-medium text-[#121110]">{p.profissional}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{p.fichas}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-[#4A4436]">
+                        <td className="px-3 py-2 text-right tabular-nums text-[#3A352C]">
                           {p.participacao.toLocaleString('pt-BR', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                           %
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-[#1C1A15]">
+                        <td className="px-3 py-2 text-right tabular-nums text-[#121110]">
                           {formatarBRL(p.valor)}
                         </td>
                         <td className="px-3 py-2 text-right font-bold tabular-nums text-[#8A6A14]">
@@ -421,11 +421,11 @@ const online = Boolean(supabase())
                     type="button"
                     onClick={() => setConfirmando(true)}
                     disabled={!poteAtivo}
-                    className="rounded-lg bg-[#8A6A14] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#6F550F] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-[#C9A24A] px-5 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     FECHAR PERÍODO
                   </button>
-                  <p className="mt-2 text-[12px] text-[#8A8171]">
+                  <p className="mt-2 text-[12px] text-[#7C7469]">
                     Fechar grava receita, pote, produção e a parte de cada
                     profissional — com a comissão e a receita da empresa — como
                     registro imutável, com auditoria.
@@ -450,10 +450,10 @@ const online = Boolean(supabase())
         <div className="mt-6 rounded-lg border border-[#E5DCC3] bg-white p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-[15px] font-semibold text-[#1C1A15]">
+              <h2 className="text-[15px] font-semibold text-[#121110]">
                 Produção de {detalhe.nome}
               </h2>
-              <p className="mt-1 text-[12.5px] text-[#8A8171]">
+              <p className="mt-1 text-[12.5px] text-[#7C7469]">
                 {parte?.fichas ?? 0} fichas · {parte?.participacao.toFixed(2) ?? '0,00'}% ·{' '}
                 {formatarBRL(parte?.valor ?? 0)} a receber · referência{' '}
                 {formatarBRL(parte?.producaoReferencia ?? 0)}
@@ -473,7 +473,7 @@ const online = Boolean(supabase())
               {Object.entries(resultado.porServico).map(([servico, dados]) => (
                 <li
                   key={servico}
-                  className="rounded-full border border-[#E5DCC3] px-3 py-1 text-[12px] text-[#4A4436]"
+                  className="rounded-full border border-[#E5DCC3] px-3 py-1 text-[12px] text-[#3A352C]"
                 >
                   {servico}: <strong>{dados.atendimentos}</strong> ·{' '}
                   {formatarBRL(dados.producaoReferencia)}
@@ -485,7 +485,7 @@ const online = Boolean(supabase())
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[620px] border-collapse text-[13px]">
               <thead>
-                <tr className="border-b border-[#E5DCC3] text-left text-[#4A4436]">
+                <tr className="border-b border-[#E5DCC3] text-left text-[#3A352C]">
                   <th className="px-2 py-1.5 font-semibold">Data</th>
                   <th className="px-2 py-1.5 font-semibold">Cliente</th>
                   <th className="px-2 py-1.5 font-semibold">Serviço</th>
@@ -497,12 +497,12 @@ const online = Boolean(supabase())
               <tbody>
                 {atendimentosDetalhe.map((f) => (
                   <tr key={f.id ?? `${f.data}-${f.horario}-${f.servico}`} className="border-b border-[#EFEAE0] last:border-0">
-                    <td className="px-2 py-1.5 tabular-nums text-[#4A4436]">
+                    <td className="px-2 py-1.5 tabular-nums text-[#3A352C]">
                       {dataCurta(f.data)} {f.horario}
                     </td>
-                    <td className="px-2 py-1.5 text-[#1C1A15]">{f.cliente}</td>
-                    <td className="px-2 py-1.5 text-[#4A4436]">{f.servico}</td>
-                    <td className="px-2 py-1.5 text-[#4A4436]">
+                    <td className="px-2 py-1.5 text-[#121110]">{f.cliente}</td>
+                    <td className="px-2 py-1.5 text-[#3A352C]">{f.servico}</td>
+                    <td className="px-2 py-1.5 text-[#3A352C]">
                       {servicoCobertoPeloPlano('', f.plano, {})
                         ? 'Club'
                         : normalizarTexto(f.plano) || '—'}
@@ -524,7 +524,7 @@ const online = Boolean(supabase())
       {/* ----------------------------------------------- HISTÓRICO */}
       {fechados.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-[15px] font-semibold text-[#1C1A15]">
+          <h2 className="text-[15px] font-semibold text-[#121110]">
             Fechamentos do pote
           </h2>
           <ul className="mt-2 flex flex-col gap-2">
@@ -534,11 +534,11 @@ const online = Boolean(supabase())
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5DCC3] bg-white px-4 py-3"
               >
                 <div className="min-w-0">
-                  <p className="text-[13.5px] font-medium text-[#1C1A15]">
+                  <p className="text-[13.5px] font-medium text-[#121110]">
                     {dataCurta(f.periodoInicio)} até {dataCurta(f.periodoFim)} ·{' '}
                     {formatarBRL(f.pote)} · {f.fichasTotal} fichas
                   </p>
-                  <p className="mt-0.5 text-[12px] text-[#8A8171]">
+                  <p className="mt-0.5 text-[12px] text-[#7C7469]">
                     {formatarBRL(f.receita)} de receita · comissão{' '}
                     {Math.round((f.comissaoPercentual ?? 0) * 100)}% (
                     {formatarBRL(f.comissaoTotal)}) · empresa{' '}

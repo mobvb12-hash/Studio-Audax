@@ -32,8 +32,8 @@ const ROTULO_TIPO: Record<TipoPreenchido, string> = {
 function chipPeriodo(ativo: boolean): string {
   return `rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
     ativo
-      ? 'border-[#8A6A14] bg-[#8A6A14] text-white'
-      : 'border-[#E5DCC3] bg-white text-[#4A4436] hover:border-[#8A6A14]'
+      ? 'border-[#8A6A14] bg-[#C9A24A] text-[#121110]'
+      : 'border-[#E5DCC3] bg-white text-[#3A352C] hover:border-[#8A6A14]'
   }`
 }
 
@@ -94,10 +94,10 @@ export default function Comissoes() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Comissões
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {rotuloPeriodo(periodo)} · {linhas.length} profissional(is) ·{' '}
             {totalQtd} atendimento(s) pagos
           </p>
@@ -132,7 +132,7 @@ export default function Comissoes() {
               onChange={(e) => aplicarCustom('inicio', e.target.value)}
               className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-2 text-sm outline-none focus:border-[#8A6A14]"
             />
-            <span className="text-sm text-[#8A8171]">até</span>
+            <span className="text-sm text-[#7C7469]">até</span>
             <input
               type="date"
               aria-label="Fim do período"
@@ -142,7 +142,7 @@ export default function Comissoes() {
             />
           </span>
         )}
-        <span className="ml-auto text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+        <span className="ml-auto text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
           Calculado sobre os pagamentos do Caixa
         </span>
       </div>
@@ -171,7 +171,7 @@ export default function Comissoes() {
       <div className="mt-5 overflow-x-auto rounded-xl border border-[#E5DCC3] bg-[#FDFBF3]">
         <table className="w-full min-w-[760px] text-left">
           <thead>
-            <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+            <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
               <th className="px-4 py-3 font-semibold">Barbeiro</th>
               <th className="px-4 py-3 text-right font-semibold">
                 Atendimentos
@@ -209,7 +209,7 @@ export default function Comissoes() {
                     >
                       <Avatar nome={linha.nome} foto={linha.foto} tamanho="sm" />
                       <span>
-                        <span className="block text-sm font-bold text-[#1C1A15]">
+                        <span className="block text-sm font-bold text-[#121110]">
                           {linha.nome}
                         </span>
                         <span className="flex gap-1.5">
@@ -226,7 +226,7 @@ export default function Comissoes() {
                           {fechamento &&
                             Math.abs(linha.comissao - fechamento.comissao) >
                               0.005 && (
-                              <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2 py-0.5 text-[10px] font-semibold text-[#4A4436]">
+                              <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-2 py-0.5 text-[10px] font-semibold text-[#3A352C]">
                                 Produção atual diferente do fechamento
                               </span>
                             )}
@@ -234,13 +234,13 @@ export default function Comissoes() {
                       </span>
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm font-medium text-[#1C1A15]">
+                  <td className="px-4 py-3 text-right text-sm font-medium text-[#121110]">
                     {linha.qtd}
                   </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-[#1C1A15]">
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-[#121110]">
                     {formatarBRL(linha.producao)}
                   </td>
-                  <td className="px-4 py-3 text-right text-sm text-[#4A4436]">
+                  <td className="px-4 py-3 text-right text-sm text-[#3A352C]">
                     {linha.percentual}%
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-[#8A6A14]">
@@ -277,7 +277,7 @@ export default function Comissoes() {
                         <button
                           type="button"
                           onClick={() => setFechando(linha)}
-                          className="rounded-lg bg-[#8A6A14] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#6F550F]"
+                          className="rounded-lg bg-[#C9A24A] px-2.5 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
                         >
                           Fechar
                         </button>
@@ -290,7 +290,7 @@ export default function Comissoes() {
           </tbody>
           {linhas.length > 0 && (
             <tfoot>
-              <tr className="border-t-2 border-[#E5DCC3] bg-[#FAF6EB] text-sm font-bold text-[#1C1A15]">
+              <tr className="border-t-2 border-[#E5DCC3] bg-[#FAF6EB] text-sm font-bold text-[#121110]">
                 <td className="px-4 py-3">Total geral</td>
                 <td className="px-4 py-3 text-right">{totalQtd}</td>
                 <td className="px-4 py-3 text-right">
@@ -307,7 +307,7 @@ export default function Comissoes() {
         </table>
       </div>
 
-      <p className="mt-3 text-[13px] text-[#8A8171]">
+      <p className="mt-3 text-[13px] text-[#7C7469]">
         Clique no nome do barbeiro para ver os atendimentos que formaram a
         produção. Vendas de produtos ficam separadas (visíveis no
         detalhamento) e ainda não entram na comissão.
@@ -316,17 +316,17 @@ export default function Comissoes() {
       {/* Auditoria */}
       {auditoriaVisivel.length > 0 && (
         <div className="mt-5 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-          <h2 className="text-[15px] font-bold text-[#1C1A15]">
+          <h2 className="text-[15px] font-bold text-[#121110]">
             Auditoria de comissões
           </h2>
           <ul className="mt-3 divide-y divide-[#EFE7D3]">
             {auditoriaVisivel.map((ev) => (
               <li key={ev.id} className="py-2.5">
-                <p className="text-sm font-medium text-[#1C1A15]">
+                <p className="text-sm font-medium text-[#121110]">
                   {ev.acao === 'fechamento' ? 'Fechamento' : 'Reabertura'} ·{' '}
                   {ev.descricao}
                 </p>
-                <p className="text-xs text-[#8A8171]">
+                <p className="text-xs text-[#7C7469]">
                   {new Date(ev.criadoEm).toLocaleString('pt-BR', {
                     dateStyle: 'short',
                     timeStyle: 'short',

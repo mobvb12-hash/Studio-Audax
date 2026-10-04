@@ -32,17 +32,17 @@ export default function SemPermissao({ acao, pagina, onVoltar }: Props) {
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
         </div>
-        <h1 className="mt-4 text-xl font-bold text-[#1C1A15]">
+        <h1 className="mt-4 text-xl font-bold text-[#121110]">
           Acesso não autorizado
         </h1>
-        <p className="mt-3 text-sm text-[#4A4436]">
+        <p className="mt-3 text-sm text-[#3A352C]">
           {pagina
             ? `Você não tem permissão para acessar “${pagina}”.`
             : acao
             ? `Você não tem permissão para “${acao}”.`
             : 'Você não tem permissão para realizar esta ação.'}
         </p>
-        <p className="mt-2 text-xs text-[#8A8171]">
+        <p className="mt-2 text-xs text-[#7C7469]">
           Entre em contato com o administrador do sistema caso acredite que isto
           seja um erro.
         </p>
@@ -50,7 +50,7 @@ export default function SemPermissao({ acao, pagina, onVoltar }: Props) {
           <button
             type="button"
             onClick={onVoltar}
-            className="mt-5 w-full rounded-lg bg-[#8A6A14] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="mt-5 w-full rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Voltar
           </button>

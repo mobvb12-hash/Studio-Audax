@@ -20,7 +20,7 @@ type Props = {
 function classeStatus(status: StatusEstoque): string {
   if (status === 'zerado') return 'text-red-700'
   if (status === 'baixo') return 'text-[#8A6A14]'
-  return 'text-[#4A4436]'
+  return 'text-[#3A352C]'
 }
 
 /** Produção do período: profissionais, serviços e produtos. */
@@ -40,7 +40,7 @@ export default function ProducaoPeriodo({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead>
-                <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                   <th className="px-3 py-2 font-semibold">Profissional</th>
                   <th className="px-3 py-2 text-right font-semibold">Atend.</th>
                   <th className="px-3 py-2 text-right font-semibold">
@@ -68,7 +68,7 @@ export default function ProducaoPeriodo({
                 {profLinhas.map((p) => (
                   <tr key={p.chave}>
                     <td className="px-3 py-2">
-                      <span className="font-medium text-[#1C1A15]">
+                      <span className="font-medium text-[#121110]">
                         {p.nome}
                       </span>
                       {p.inativo && (
@@ -77,27 +77,27 @@ export default function ProducaoPeriodo({
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {p.qtd}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {formatarBRL(p.producao)}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {formatarBRL(p.producaoProdutos)}
                       {p.qtdProdutos > 0 && (
-                        <span className="ml-1 text-xs text-[#8A8171]">
+                        <span className="ml-1 text-xs text-[#7C7469]">
                           ({p.qtdProdutos})
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {formatarBRL(p.descontos)}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#4A4436]">
+                    <td className="px-3 py-2 text-right text-[#3A352C]">
                       {formatarBRL(p.estornos)}
                     </td>
-                    <td className="px-3 py-2 text-right text-[#8A8171]">
+                    <td className="px-3 py-2 text-right text-[#7C7469]">
                       {p.percentual}%
                     </td>
                     <td className="px-3 py-2 text-right font-semibold text-[#8A6A14]">
@@ -120,7 +120,7 @@ export default function ProducaoPeriodo({
           <Vazio texto="Nenhum serviço realizado no período." />
         ) : (
           <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
+            <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#3A352C]">
               Mais realizado: {servicos.maisRealizado?.nome} (
               {servicos.maisRealizado?.qtd})
             </span>
@@ -131,7 +131,7 @@ export default function ProducaoPeriodo({
             <div className="mt-2 w-full overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                     <th className="px-3 py-2 font-semibold">Serviço</th>
                     <th className="px-3 py-2 text-right font-semibold">
                       Realizados
@@ -147,16 +147,16 @@ export default function ProducaoPeriodo({
                 <tbody className="divide-y divide-[#EFE7D3]">
                   {servicos.linhas.map((s) => (
                     <tr key={s.nome}>
-                      <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                      <td className="px-3 py-2 font-medium text-[#121110]">
                         {s.nome}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {s.qtd}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {formatarBRL(s.faturamento)}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {formatarBRL(s.ticketMedio)}
                       </td>
                     </tr>
@@ -175,20 +175,20 @@ export default function ProducaoPeriodo({
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
+              <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#3A352C]">
                 Vendidos no período: {prods.qtdTotalVendida} un.
               </span>
               <span className="rounded-full border border-[#E5DCC3] bg-[#F3ECDA] px-3 py-1.5 text-xs font-medium text-[#8A6A14]">
                 Receita de produtos: {formatarBRL(prods.receitaTotal)}
               </span>
-              <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#4A4436]">
+              <span className="rounded-full border border-[#E5DCC3] bg-[#FAF6EB] px-3 py-1.5 text-xs font-medium text-[#3A352C]">
                 Estoque baixo/zerado: {prods.baixos}
               </span>
             </div>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[560px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+                  <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                     <th className="px-3 py-2 font-semibold">Produto</th>
                     <th className="px-3 py-2 font-semibold">Categoria</th>
                     <th className="px-3 py-2 text-right font-semibold">
@@ -206,7 +206,7 @@ export default function ProducaoPeriodo({
                 <tbody className="divide-y divide-[#EFE7D3]">
                   {prods.linhas.map((p) => (
                     <tr key={p.id} className={p.ativo ? '' : 'opacity-60'}>
-                      <td className="px-3 py-2 font-medium text-[#1C1A15]">
+                      <td className="px-3 py-2 font-medium text-[#121110]">
                         {p.nome}
                         {!p.ativo && (
                           <span className="ml-1.5 text-xs text-[#A99E85]">
@@ -214,16 +214,16 @@ export default function ProducaoPeriodo({
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-[#4A4436]">
+                      <td className="px-3 py-2 text-[#3A352C]">
                         {p.categoria || '—'}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {p.qtdVendida}
                       </td>
-                      <td className="px-3 py-2 text-right text-[#4A4436]">
+                      <td className="px-3 py-2 text-right text-[#3A352C]">
                         {formatarBRL(p.receita)}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
+                      <td className="px-3 py-2 text-right font-semibold text-[#121110]">
                         {p.estoqueAtual}
                       </td>
                       <td

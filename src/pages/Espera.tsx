@@ -162,10 +162,10 @@ export default function Espera() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#1C1A15]">
+          <h1 className="text-[28px] leading-none font-bold tracking-tight text-[#121110]">
             Fila de Espera
           </h1>
-          <p className="mt-2 text-[13px] text-[#4A4436]">
+          <p className="mt-2 text-[13px] text-[#3A352C]">
             {naFila} aguardando · {pedidos.length} pedido(s) no total · a fila
             é separada da Agenda e não envia mensagens sozinha
           </p>
@@ -175,7 +175,7 @@ export default function Espera() {
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">
         <div className="flex min-w-[480px] divide-x divide-[#E5DCC3]">
           <div className="min-w-[120px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
               Na fila
             </p>
             <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
@@ -183,7 +183,7 @@ export default function Espera() {
             </p>
           </div>
           <div className="min-w-[120px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
               Atendimentos
             </p>
             <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
@@ -191,7 +191,7 @@ export default function Espera() {
             </p>
           </div>
           <div className="min-w-[120px] flex-1 px-4 py-4">
-            <p className="text-[11px] font-medium tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-medium tracking-[0.12em] text-[#7C7469] uppercase">
               Cancelamentos
             </p>
             <p className="mt-1.5 text-[22px] leading-none font-bold text-[#8A6A14]">
@@ -206,7 +206,7 @@ export default function Espera() {
         onSubmit={enviar}
         className="mt-5 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4"
       >
-        <h2 className="text-sm font-bold text-[#1C1A15]">
+        <h2 className="text-sm font-bold text-[#121110]">
           {editandoId ? 'Editar pedido da fila' : 'Adicionar à fila'}
         </h2>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -222,7 +222,7 @@ export default function Espera() {
           <div>
             <label
               htmlFor="espera-servico"
-              className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase"
+              className="text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase"
             >
               Serviço desejado
             </label>
@@ -243,7 +243,7 @@ export default function Espera() {
           <div>
             <label
               htmlFor="espera-profissional"
-              className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase"
+              className="text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase"
             >
               Profissional
             </label>
@@ -262,7 +262,7 @@ export default function Espera() {
             </select>
           </div>
           <div>
-            <span className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+            <span className="text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase">
               Período preferido
             </span>
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -281,7 +281,7 @@ export default function Espera() {
           <div>
             <label
               htmlFor="espera-data"
-              className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase"
+              className="text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase"
             >
               Data preferida (opcional)
             </label>
@@ -296,7 +296,7 @@ export default function Espera() {
           <div>
             <label
               htmlFor="espera-obs"
-              className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase"
+              className="text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase"
             >
               Observação (opcional)
             </label>
@@ -312,7 +312,7 @@ export default function Espera() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="submit"
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             {editandoId ? 'Salvar alterações' : 'Adicionar à fila'}
           </button>
@@ -320,7 +320,7 @@ export default function Espera() {
             <button
               type="button"
               onClick={cancelarEdicao}
-              className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+              className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
             >
               Cancelar edição
             </button>
@@ -390,15 +390,15 @@ export default function Espera() {
                     {posicao === null ? '—' : `#${posicao}`}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-[#1C1A15]">
+                    <p className="truncate text-sm font-bold text-[#121110]">
                       {pedido.cliente}{' '}
                       {pedido.telefone && (
-                        <span className="ml-1 font-normal text-[#8A8171]">
+                        <span className="ml-1 font-normal text-[#7C7469]">
                           {pedido.telefone}
                         </span>
                       )}
                     </p>
-                    <p className="mt-0.5 text-[13px] text-[#4A4436]">
+                    <p className="mt-0.5 text-[13px] text-[#3A352C]">
                       {pedido.servico} ·{' '}
                       {pedido.profissional || 'qualquer profissional'} ·{' '}
                       {PERIODOS_ESPERA_ROTULO[pedido.periodo]}
@@ -407,7 +407,7 @@ export default function Espera() {
                         : ''}
                     </p>
                     {pedido.observacao && (
-                      <p className="mt-0.5 text-[13px] text-[#8A8171]">
+                      <p className="mt-0.5 text-[13px] text-[#7C7469]">
                         {pedido.observacao}
                       </p>
                     )}
@@ -423,7 +423,7 @@ export default function Espera() {
 
                 {janelas.length > 0 && (
                   <div className="mt-3 border-t border-[#E9DDC0] pt-3">
-                    <p className="text-[11px] font-semibold tracking-[0.1em] text-[#8A8171] uppercase">
+                    <p className="text-[11px] font-semibold tracking-[0.1em] text-[#7C7469] uppercase">
                       Horários compatíveis (livres na agenda)
                     </p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -446,7 +446,7 @@ export default function Espera() {
                         </button>
                       ))}
                       {janelas.length > 3 && (
-                        <span className="text-[11px] text-[#8A8171]">
+                        <span className="text-[11px] text-[#7C7469]">
                           + {janelas.length - 3} horário(s)
                         </span>
                       )}
@@ -460,7 +460,7 @@ export default function Espera() {
                       <button
                         type="button"
                         onClick={() => iniciarEdicao(pedido)}
-                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
                       >
                         Editar
                       </button>
@@ -483,7 +483,7 @@ export default function Espera() {
                   <button
                     type="button"
                     onClick={() => setRemovendo(pedido)}
-                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#4A4436] hover:border-red-300 hover:text-red-700"
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:border-red-300 hover:text-red-700"
                   >
                     Remover
                   </button>

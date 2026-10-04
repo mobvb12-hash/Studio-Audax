@@ -91,13 +91,13 @@ export default function PagamentoAssinaturaModal({
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8A8171] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#7C7469] uppercase">
               Pagamento de renovação
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[#1C1A15]">
+            <h2 className="mt-1 text-lg font-bold text-[#121110]">
               {assinatura.cliente}
             </h2>
-            <p className="mt-0.5 text-[13px] text-[#8A8171]">
+            <p className="mt-0.5 text-[13px] text-[#7C7469]">
               {PLANOS_ROTULO[assinatura.plano]} ·{' '}
               {formatarBRL(assinatura.valorMensal)}/mês
             </p>
@@ -105,7 +105,7 @@ export default function PagamentoAssinaturaModal({
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-md px-2 py-1 text-lg text-[#8A8171] hover:bg-[#F3ECDA]"
+            className="rounded-md px-2 py-1 text-lg text-[#7C7469] hover:bg-[#F3ECDA]"
             aria-label="Fechar"
           >
             ×
@@ -114,13 +114,13 @@ export default function PagamentoAssinaturaModal({
 
         <div className="mt-4 rounded-lg border border-[#E5DCC3] bg-white px-3 py-2.5 text-sm">
           <div className="flex items-center justify-between py-0.5">
-            <span className="text-[#8A8171]">Vencimento atual</span>
-            <span className="font-medium text-[#1C1A15]">
+            <span className="text-[#7C7469]">Vencimento atual</span>
+            <span className="font-medium text-[#121110]">
               {formatarDataLonga(assinatura.proximoVencimento)}
             </span>
           </div>
           <div className="flex items-center justify-between border-t border-[#EFE7D3] py-0.5">
-            <span className="text-[#8A8171]">Novo vencimento</span>
+            <span className="text-[#7C7469]">Novo vencimento</span>
             <span className="font-semibold text-[#8A6A14]">
               {formatarDataLonga(novoVencimento)}
             </span>
@@ -172,7 +172,7 @@ export default function PagamentoAssinaturaModal({
           </div>
         </div>
 
-        <p className="mt-3 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#4A4436]">
+        <p className="mt-3 rounded-lg bg-[#F3ECDA] px-3 py-2 text-[13px] text-[#3A352C]">
           O pagamento entra no Caixa do dia (quando aberto) e renova o ciclo por
           1 mês.
         </p>
@@ -187,14 +187,14 @@ export default function PagamentoAssinaturaModal({
           <button
             type="button"
             onClick={onFechar}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#4A4436] hover:bg-[#F3ECDA]"
+            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
           >
             Voltar
           </button>
           <button
             type="button"
             onClick={confirmar}
-            className="rounded-lg bg-[#8A6A14] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6F550F]"
+            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
           >
             Confirmar pagamento
           </button>

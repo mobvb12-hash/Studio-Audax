@@ -9,7 +9,7 @@ type Props = {
 export default function HistoricoVendas({ vendas }: Props) {
   return (
     <section className="mt-4 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
-      <h2 className="text-[15px] font-bold text-[#1C1A15]">
+      <h2 className="text-[15px] font-bold text-[#121110]">
         Histórico de vendas
       </h2>
       {vendas.length === 0 ? (
@@ -20,7 +20,7 @@ export default function HistoricoVendas({ vendas }: Props) {
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
-              <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#8A8171] uppercase">
+              <tr className="border-b border-[#E5DCC3] bg-[#FAF6EB] text-[11px] tracking-[0.1em] text-[#7C7469] uppercase">
                 <th className="px-3 py-2 font-semibold">Data</th>
                 <th className="px-3 py-2 font-semibold">Cliente</th>
                 <th className="px-3 py-2 font-semibold">Profissional</th>
@@ -36,33 +36,33 @@ export default function HistoricoVendas({ vendas }: Props) {
             <tbody className="divide-y divide-[#EFE7D3]">
               {vendas.map((v) => (
                 <tr key={v.id}>
-                  <td className="px-3 py-2 text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#3A352C]">
                     {formatarDataLonga(v.data)} · {v.hora}
                   </td>
-                  <td className="px-3 py-2 text-[#1C1A15]">{v.cliente || '—'}</td>
-                  <td className="px-3 py-2 text-[#1C1A15]">
+                  <td className="px-3 py-2 text-[#121110]">{v.cliente || '—'}</td>
+                  <td className="px-3 py-2 text-[#121110]">
                     {v.profissional || '—'}
                   </td>
-                  <td className="px-3 py-2 text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#3A352C]">
                     {v.itens
                       ? v.itens
                           .map((i) => `${i.quantidade}× ${i.produto}`)
                           .join(', ')
                       : v.descricao}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#4A4436]">
+                  <td className="px-3 py-2 text-right text-[#3A352C]">
                     {v.quantidade ?? 0}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#4A4436]">
+                  <td className="px-3 py-2 text-right text-[#3A352C]">
                     {formatarBRL(v.valor)}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#4A4436]">
+                  <td className="px-3 py-2 text-right text-[#3A352C]">
                     {formatarBRL(v.desconto)}
                   </td>
-                  <td className="px-3 py-2 text-right font-semibold text-[#1C1A15]">
+                  <td className="px-3 py-2 text-right font-semibold text-[#121110]">
                     {formatarBRL(v.valorLiquido)}
                   </td>
-                  <td className="px-3 py-2 text-[#4A4436]">
+                  <td className="px-3 py-2 text-[#3A352C]">
                     {FORMAS_ROTULO[v.formaPagamento]}
                   </td>
                   <td className="px-3 py-2">

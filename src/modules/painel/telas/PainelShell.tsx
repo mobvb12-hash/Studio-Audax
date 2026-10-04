@@ -37,7 +37,7 @@ function conteudoDaRota(rota: string): ReactNode {
   if (aba) {
     return (
       <div className="rounded-2xl border border-cream-300 bg-cream-50 p-8 text-center">
-        <h1 className="font-serif-display text-[20px] font-semibold text-noir-900">
+        <h1 className="font-display text-[20px] font-semibold text-noir-900">
           {aba.rotulo}
         </h1>
         <p className="mx-auto mt-3 max-w-sm text-[13.5px] leading-relaxed text-noir-500">
@@ -102,10 +102,10 @@ export default function PainelShell() {
       <header className="border-b border-cream-300 bg-cream-50">
         <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3 px-4 pt-4 pb-3 sm:px-6">
           <div className="min-w-0">
-            <p className="font-serif-display text-[11px] leading-none font-semibold tracking-[0.34em] text-gold-600 uppercase">
+            <p className="font-display text-[11px] leading-none font-semibold tracking-[0.34em] text-gold-600 uppercase">
               Studio
             </p>
-            <p className="font-serif-display text-[19px] leading-tight font-semibold tracking-[0.16em] text-noir-900 uppercase">
+            <p className="font-display text-[19px] leading-tight font-semibold tracking-[0.16em] text-noir-900 uppercase">
               Audax
             </p>
           </div>
