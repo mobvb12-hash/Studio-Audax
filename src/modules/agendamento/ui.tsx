@@ -307,6 +307,36 @@ export function BotaoDia({
   )
 }
 
+/**
+ * "Cadastrar ou entrar" — a porta de entrada do lado do cliente.
+ *
+ * Fica no topo da vitrine, à direita, como na referência: agendar e entrar são
+ * as duas coisas que a pessoa quer quando abre a página, e as duas ficam na
+ * mesma tela. Adiar isso para o fim da rolagem é esconder a metade do serviço.
+ *
+ * O destino é a ÁREA DO CLIENTE (`/cliente`), que já pede nome e telefone para
+ * identificar e mostra agendamentos, Club e cadastro. Não é o login da equipe:
+ * a equipe entra pelo painel, que é outra porta e não deve aparecer para quem
+ * está marcando horário.
+ *
+ * Não é `<a href>` e sim um botão que navega: o destino sai de
+ * `urlAreaDoCliente()`, a mesma função que o resto do app usa, para a URL
+ * oficial continuar sendo uma só. Um link duro "/cliente" duplicaria o
+ * endereço num segundo lugar, e é o que costuma parar de ser atualizado.
+ */
+export function BotaoEntrar({ aoEntrar }: { aoEntrar: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={aoEntrar}
+      className="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full border border-gold-600 bg-gold-200/40 px-4 text-[13px] font-semibold text-noir-900 transition-colors hover:bg-gold-200/70"
+    >
+      <span aria-hidden="true">👤</span>
+      Entrar
+    </button>
+  )
+}
+
 /** Data por extenso, para o resumo: "segunda-feira, 05/10/2026". */
 export function dataPorExtenso(iso: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso

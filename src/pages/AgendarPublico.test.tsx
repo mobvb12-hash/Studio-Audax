@@ -9,6 +9,7 @@ import {
 } from '@/services/supabase/agendaPublica'
 import type { SlotLivre } from '@/modules/agenda/regras'
 import { carregarBeneficiosClube } from '@/services/supabase/painel'
+import { irParaAreaDoCliente } from '@/modules/painel/regras'
 import { formatarBRL } from '@/lib/moeda'
 
 /**
@@ -54,6 +55,7 @@ const catalogo = vi.mocked(carregarCatalogo)
 const slots = vi.mocked(horariosPublicosPorProfissional)
 const criar = vi.mocked(criarAgendamentoPublico)
 const beneficios = vi.mocked(carregarBeneficiosClube)
+const irParaCliente = vi.mocked(irParaAreaDoCliente)
 
 const CATALOGO: CatalogoPublico = {
   servicos: [
@@ -144,6 +146,7 @@ beforeEach(() => {
   slots.mockReset()
   criar.mockReset()
   beneficios.mockReset()
+  irParaCliente.mockReset()
   catalogo.mockResolvedValue(CATALOGO)
   beneficios.mockResolvedValue(null)
   // 08:00 e 09:00 livres; 10:00 ocupado. A grade é a REAL devolvida pela Agenda.
@@ -314,6 +317,26 @@ describe('vitrine (primeira tela)', () => {
     // Um destaque só cabe na tela: seta de não ir a lugar nenhum é ruído.
     expect(screen.queryByRole('button', { name: 'Mais destaques' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Destaques anteriores' })).toBeNull()
+  })
+
+  it('tem a porta do cliente no topo, junto com a marca', async () => {
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+
+    /*
+     * Agendar e entrar são as duas coisas que a pessoa quer quando abre o link.
+     * A porta do cliente fica no cabeçalho — e antes do título, para não
+     * precisar rolar até o fim da página para entrar.
+     */
+    const entrar = screen.getByRole('button', { name: /Entrar/ })
+    const titulo = screen.getByText('Agende seu horário')
+    expect(
+      entrar.compareDocumentPosition(titulo) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    fireEvent.click(entrar)
+    // Leva para a ÁREA DO CLIENTE, não para o login da equipe.
+    expect(irParaCliente).toHaveBeenCalledWith()
   })
 
   it('mostra a equipe, com a foto que a casa cadastrou', async () => {

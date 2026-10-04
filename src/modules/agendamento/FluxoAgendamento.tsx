@@ -43,6 +43,7 @@ import {
   Aviso,
   Botao,
   BotaoDia,
+  BotaoEntrar,
   BotaoHora,
   Campo,
   CarrosselDestaques,
@@ -531,9 +532,20 @@ function EtapaServicos({
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-16 sm:px-6">
-      <header className="mb-6">
+      {/*
+        * TOPO: marca à esquerda, "Entrar" à direita.
+        *
+        * Agendar e entrar são as duas coisas que a pessoa quer quando abre a
+        * link, e as duas ficam na mesma tela — por isso a porta do cliente
+        * entra no cabeçalho, e não no fim da rolagem.
+        */}
+      <div className="mb-4 flex items-start justify-between gap-4">
         <Marca />
-        <h1 className="mt-4 font-serif-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[32px]">
+        <BotaoEntrar aoEntrar={() => irParaAreaDoCliente()} />
+      </div>
+
+      <header className="mb-6">
+        <h1 className="font-serif-display text-[28px] leading-tight font-semibold text-noir-900 sm:text-[32px]">
           Agende seu horário
         </h1>
         <p className="mt-2 max-w-sm text-[14.5px] leading-relaxed text-noir-500">
