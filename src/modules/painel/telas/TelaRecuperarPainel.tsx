@@ -38,7 +38,7 @@ export default function TelaRecuperarPainel() {
         <BotaoPrimario
           processando={processando}
           rotulo="Enviar link"
-          processandoRotulo="Enviandoâ€¦"
+          processandoRotulo="Enviando…"
         />
       </form>
 

@@ -57,6 +57,7 @@ function Probe() {
             nome: 'Ana Silva',
             email: 'ana@studio.com',
             telefone: '(11) 98888-7777',
+            nascimento: '1995-06-15',
             senha: 'segredo123',
           })
         }
@@ -245,7 +246,7 @@ describe('PainelAuthProvider — autenticação do cliente', () => {
     expect(cliente.chamadasVincular[0]).toEqual({
       nome: 'Ana Silva',
       telefone: '(11) 98888-7777',
-      nascimento: '',
+      nascimento: '1995-06-15',
     })
   })
 

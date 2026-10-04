@@ -1,3 +1,5 @@
+import { ESTADO_VAZIO } from '@/modules/agendamento/estado'
+import type { EstadoAgendamento } from '@/modules/agendamento/estado'
 import type { EstadoVinculo } from './tipos'
 
 /** Rotas do painel do cliente (`#/painel/...`). */
@@ -144,6 +146,112 @@ export function limparPreenchimento(): void {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.removeItem(CHAVE_PREENCHIMENTO)
+  } catch {
+    // sessionStorage indisponível: nada a limpar.
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Retomada do agendamento: a ponte /agendar → /cliente → /agendar              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Chave do rascunho de agendamento guardado quando falta identificação.
+ *
+ * O fluxo público exige conta antes de confirmar. A pessoa escolheu serviço,
+ * profissional, data e horário — apagar tudo mandaria ela recomeçar do zero
+ * depois de criar a conta, e é aí que o abandono acontece. O rascunho fica no
+ * `sessionStorage` (uma visita, não um dispositivo) e o fluxo o restaura quando
+ * ela volta autenticada.
+ *
+ * Por que em `painel/regras` e não em `agendamento`: é a MESMA ponte do
+ * `CHAVE_PREENCHIMENTO` acima — o troco entre as duas áreas mora aqui, e
+ * `PainelAuthProvider` precisa ler isto sem importar o módulo de agendamento
+ * para dentro dele.
+ */
+const CHAVE_RETOMADA = 'studio-audax:agendar:retomada'
+
+/** Vida do rascunho. Passou disso, a pessoa refaz as escolhas. */
+const VIDA_RETOMADA_MS = 30 * 60 * 1000
+
+type RetomadaBruta = {
+  estado?: Partial<EstadoAgendamento>
+  salvoEm?: number
+}
+
+function normalizarRetomada(estado: Partial<EstadoAgendamento> | undefined) {
+  const e = estado ?? {}
+  return {
+    ...ESTADO_VAZIO,
+    servicoNome: String(e.servicoNome ?? ''),
+    profissional: String(e.profissional ?? ''),
+    data: String(e.data ?? ''),
+    horario: String(e.horario ?? ''),
+    complementoIds: Array.isArray(e.complementoIds)
+      ? e.complementoIds.map(String)
+      : [],
+    nome: String(e.nome ?? ''),
+    telefone: String(e.telefone ?? ''),
+    observacao: String(e.observacao ?? ''),
+  } satisfies EstadoAgendamento
+}
+
+/** Guarda o que a pessoa já escolheu antes de ir identificar-se. */
+export function salvarRetomadaAgendamento(estado: EstadoAgendamento): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(
+      CHAVE_RETOMADA,
+      JSON.stringify({ estado, salvoEm: Date.now() }),
+    )
+  } catch {
+    // sessionStorage indisponível: ela refaz as escolhas. Nada quebra.
+  }
+}
+
+/**
+ * Lê o rascunho (sem apagar) para o fluxo restaurar.
+ *
+ * `null` = não há rascunho, rascunho velho ou rascunho malformado. Toda
+ * entrada é normalizada contra `ESTADO_VAZIO`: o que veio do `sessionStorage`
+ * não é dado confiável, e um objeto incompleto não pode derrubar a etapa.
+ */
+export function lerRetomadaAgendamento(): EstadoAgendamento | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const bruto = window.sessionStorage.getItem(CHAVE_RETOMADA)
+    if (!bruto) return null
+    const dados = JSON.parse(bruto) as RetomadaBruta
+    if (typeof dados.salvoEm !== 'number') return null
+    if (Date.now() - dados.salvoEm > VIDA_RETOMADA_MS) {
+      limparRetomadaAgendamento()
+      return null
+    }
+    const estado = normalizarRetomada(dados.estado)
+    // Só vale restaurar um tentativa que chegou até o horário. Um rascunho
+    // incompleto (escrito à mão, ou de uma versão antiga do fluxo) jogaria a
+    // pessoa na etapa de extras sem nada escolhido — e o resumo sairia em
+    // branco. Nesses casos é melhor recomeçar do que restaurar pela metade.
+    if (!estado.servicoNome || !estado.profissional || !estado.data || !estado.horario) {
+      limparRetomadaAgendamento()
+      return null
+    }
+    return estado
+  } catch {
+    return null
+  }
+}
+
+/** Há um rascunho novo o bastante para valer a pena restaurar? */
+export function temRetomadaAgendamento(): boolean {
+  return lerRetomadaAgendamento() !== null
+}
+
+/** Apaga o rascunho: ele vale para uma tentativa, não para sempre. */
+export function limparRetomadaAgendamento(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(CHAVE_RETOMADA)
   } catch {
     // sessionStorage indisponível: nada a limpar.
   }
@@ -304,4 +412,30 @@ export function nomeValido(nome: string): boolean {
 
 export function senhaValida(senha: string): boolean {
   return senha.length >= 6
+}
+
+/**
+ * Data de nascimento em `YYYY-MM-DD` (é o que o campo `type="date"` entrega)
+ * e que a RPC 018 normaliza com `audax_nascimento_iso`.
+ *
+ * Não é só "não vazio": uma data impossível (`2026-13-45`) passaria pelo
+ * formato e a RPC devolveria `''`, o que derrubaria a prova de identidade sem
+ * que a pessoa entendesse por quê.
+ */
+export function nascimentoValido(nascimento: string): boolean {
+  const valor = nascimento.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false
+  const [ano, mes, dia] = valor.split('-').map(Number)
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return false
+  const data = new Date(ano, mes - 1, dia)
+  if (
+    data.getFullYear() !== ano ||
+    data.getMonth() !== mes - 1 ||
+    data.getDate() !== dia
+  ) {
+    return false
+  }
+  // Ninguém nasceu amanhã. Passa pelo formato, mas é uma data impossível como
+  // data de nascimento — e a prova de identidade a rejeitaria lá na frente.
+  return data.getTime() <= Date.now()
 }

@@ -9,6 +9,7 @@ export default function TelaCadastrarPainel() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [nascimento, setNascimento] = useState('')
   const [senha, setSenha] = useState('')
 
   function irPara(rota: string) {
@@ -25,7 +26,7 @@ export default function TelaCadastrarPainel() {
         className="mt-6 space-y-4"
         onSubmit={(evento) =>
           submeterFormulario(evento, () =>
-            void cadastrar({ nome, email, telefone, senha }),
+            void cadastrar({ nome, email, telefone, nascimento, senha }),
           )
         }
       >
@@ -55,18 +56,27 @@ export default function TelaCadastrarPainel() {
           placeholder="(11) 99999-9999"
         />
         <Campo
+          id="cad-nascimento"
+          label="Data de nascimento"
+          tipo="date"
+          valor={nascimento}
+          aoMudar={setNascimento}
+          autocomplete="bday"
+          obrigatorio
+        />
+        <Campo
           id="cad-senha"
           label="Senha"
           tipo="password"
           valor={senha}
           aoMudar={setSenha}
           autocomplete="new-password"
-          dica="MÃ­nimo de 6 caracteres."
+          dica="Mínimo de 6 caracteres."
         />
         <BotaoPrimario
           processando={processando}
           rotulo="Criar conta"
-          processandoRotulo="Criandoâ€¦"
+          processandoRotulo="Criando…"
         />
       </form>
 
@@ -74,7 +84,7 @@ export default function TelaCadastrarPainel() {
 
       <div className="mt-5">
         <LinkPainel aoClicar={() => irPara('entrar')}>
-          JÃ¡ tenho conta â€” entrar
+          Já tenho conta — entrar
         </LinkPainel>
       </div>
     </CartaoPainel>

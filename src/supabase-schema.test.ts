@@ -1971,115 +1971,98 @@ describe('040 · expediente por dia da semana', () => {
 /* 041 - cliente com conta, sem ver a base                              */
 /* ------------------------------------------------------------------ */
 
-describe('041 · perfis e a conta do cliente', () => {
+describe('041 · fecha o using (true) que a conta de cliente ainda conseguia ler', () => {
   const bruto = sql('../supabase/migrations/041_perfis_e_conta_do_cliente.sql')
   const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
 
-  it('cria perfis ligando a conta ao papel, e só dois papéis existem', () => {
-    expect(texto).toMatch(/create table if not exists public\.perfis \(\s*\n\s*auth_uid\s+uuid primary key references auth\.users \(id\) on delete cascade,/)
-    expect(texto).toContain("check (papel in ('equipe', 'cliente'))")
-    // Apagar a conta apaga o perfil: não sobra papel órfão.
-    expect(texto).toContain('on delete cascade')
-  })
-
-  it('quem já existia vira equipe — e só ele', () => {
-    expect(texto).toContain("select u.id, 'equipe', coalesce(u.email, '')")
-    expect(texto).toContain('from auth.users u')
-    expect(texto).toContain('on conflict (auth_uid) do nothing')
-  })
-
-  it('eh_equipe é SECURITY DEFINER, para não entrar em recursão de RLS', () => {
-    /*
-     * A política de perfis consulta perfis. Se a consulta fosse normal, a RLS
-     * reentraria nela mesma e a pergunta do papel nunca voltaria.
-     */
-    expect(texto).toMatch(
-      /create or replace function public\.eh_equipe\(\)\s*\nreturns boolean\s*\nlanguage sql\s*\nstable\s*\nsecurity definer/,
-    )
-    // Só responde sobre a SESSÃO atual, não sobre anybody.
-    expect(texto).toContain('where p.auth_uid = auth.uid()')
-    expect(texto).toContain("and p.papel = 'equipe'")
-    // E anon não precisa saber se é equipe.
-    expect(texto).toContain('revoke execute on function public.eh_equipe() from public;')
-  })
-
-  it('clientes: o using (true) some e o cliente lê só a própria linha', () => {
-    for (const antiga of [
-      'clientes_select_autenticado',
-      'clientes_insert_autenticado',
-      'clientes_update_autenticado',
-      'clientes_delete_autenticado',
+  /*
+   * A versão anterior deste arquivo criava uma SEGUNDA tabela `perfis` com
+   * `auth_uid` e papel ('equipe' | 'cliente') — e quebraria na primeira linha
+   * que não é `create table if not exists`, porque o `perfis` real existe
+   * desde a 001 com `user_id`. Este teste é a trava disso não voltar.
+   *
+   * Auditado: clientes/agendamentos já são fechados pela 018 (`_select_proprio`)
+   * e a escrita já é por papel desde a 017 (`current_user_papel()` é NULL sem
+   * linha em `perfis`, e NULL nega tudo). Repetir a regra aqui seria um
+   * segundo modelo de papel ao lado do que já existe.
+   */
+  it('não cria tabela, coluna, política, função nem um segundo modelo de papel', () => {
+    for (const proibido of [
+      /\bcreate table\b/i,
+      /\badd column\b/i,
+      /\balter table\b/i,
+      /\bcreate policy\b/i,
+      /\bcreate or replace function\b/i,
+      /\bgrant\b/i,
+      /\brevoke\b/i,
+      /\binsert into\b/i,
+      /\bupdate\b/i,
+      /\bdelete from\b/i,
+      /\bdrop table\b/i,
+      /\bdrop function\b/i,
+      /\btruncate\b/i,
     ]) {
-      expect(texto).toContain(`drop policy if exists ${antiga} on public.clientes`)
+      expect(texto).not.toMatch(proibido)
     }
-    // Nenhuma política de clientes pode voltar a ser liberada a qualquer
-    // autenticado: é exatamente esse o vazamento que esta migration fecha.
-    expect(texto).not.toMatch(
-      /on public\.clientes for select to authenticated\s*\n\s*using \(true\)/,
-    )
-    expect(texto).toMatch(
-      /create policy clientes_select on public\.clientes\s*\n\s*for select to authenticated\s*\n\s*using \(public\.eh_equipe\(\) or auth_uid = auth\.uid\(\)\);/,
-    )
+    // `eh_equipe()` e `perfis.auth_uid` são o modelo que já existe (017/001).
+    expect(texto).not.toContain('eh_equipe')
+    expect(texto).not.toContain('auth_uid')
+    // Ninguém é promovido nem rebaixado: sem escrita em `perfis`.
+    expect(texto).not.toMatch(/perfis/i)
   })
 
-  it('clientes: INSERT, UPDATE e DELETE são só da equipe', () => {
-    /*
-     * O cadastro do cliente passa pela Edge Function (service_role). Uma policy
-     * de insert "para o próprio" deixaria qualquer conta autenticada inserir
-     * linha com o auth_uid de outra pessoa.
-     */
-    expect(texto).toMatch(
-      /create policy clientes_write_equipe on public\.clientes\s*\n\s*for all to authenticated\s*\n\s*using \(public\.eh_equipe\(\)\)\s*\n\s*with check \(public\.eh_equipe\(\)\);/,
-    )
-  })
-
-  it('agendamentos: o cliente vê os PRÓPRIOS, e o using (true) some', () => {
+  it('fecha só o agenda_expediente_select — a política permissiva que sobrava', () => {
     expect(texto).toContain(
-      'drop policy if exists agenda_acesso_autenticado on public.agendamentos',
+      'drop policy if exists agenda_expediente_select on public.agenda_expediente',
     )
-    expect(texto).not.toMatch(
-      /on public\.agendamentos for all to authenticated\s*\n\s*using \(true\)/,
-    )
-    expect(texto).toMatch(
-      /create policy agenda_acesso on public\.agendamentos\s*\n\s*for select to authenticated\s*\n\s*using \(public\.eh_equipe\(\) or cliente_auth_uid = auth\.uid\(\)\);/,
-    )
+    // É a ÚNICA política mexida neste arquivo.
+    expect(texto.match(/drop policy if exists/g)).toHaveLength(1)
+    // Nenhuma policy liberada a qualquer um pode sobrar nele.
+    expect(texto).not.toContain('using (true)')
+    expect(texto).not.toContain('with check (true)')
+    // Remove a policy, não a tabela nem o dado do expediente.
+    expect(texto).not.toMatch(/\bdrop table\b/i)
+    expect(texto).not.toMatch(/\btruncate\b/i)
+    expect(texto).not.toMatch(/\bdelete from\b/i)
   })
 
-  it('a conta é ligada pelo telefone, reaproveitando o que já existe', () => {
-    expect(texto).toMatch(
-      /add column if not exists cliente_auth_uid uuid\s*\n\s*references auth\.users \(id\) on delete set null;/,
-    )
-    // Mesmo telefone, mesmos dígitos: é o mesmo cliente para a Agenda.
-    expect(texto).toContain("regexp_replace(coalesce(a.telefone, ''), '\\D', '', 'g')")
-    // E nunca sobrescreve um vínculo que já existe.
-    expect(texto).toContain('where a.cliente_auth_uid is null')
+  it('um regresso da policy permissiva vira erro visível, não silêncio', () => {
+    /*
+     * `drop policy if exists` é idempotente por definição: se alguém
+     * recriar `agenda_expediente_select ... using (true)`, a migration
+     * seguinte corre sem reclamar. A checagem em `pg_policies` transforma
+     * isso em exceção no primeiro SQL Editor.
+     */
+    expect(texto).toContain('from pg_policies')
+    expect(texto).toContain("tablename = 'agenda_expediente'")
+    expect(texto).toContain("policyname = 'agenda_expediente_select'")
+    expect(texto).toContain('raise exception')
+    expect(texto).toContain('agenda_expediente_select ainda existe')
   })
 
-  it('bloqueios e agenda_expediente viram só da equipe', () => {
-    expect(texto).toContain("array['bloqueios', 'agenda_expediente'] loop")
-    expect(texto).toContain("'create policy operacao_acesso_equipe on %I for all to authenticated '")
-    // Nenhuma das duas pode ficar com using (true).
-    expect(texto).not.toContain('using (true) with check (true)')
+  it('documenta que reaproveita o que já existe, em vez de criar de novo', () => {
+    // Os vínculos da conta de cliente são da 018 e continuam valendo.
+    expect(bruto).toContain('clientes.auth_user_id')
+    expect(bruto).toContain('agendamentos.cliente_id')
+    // E o fechamento de acesso é das 014/017/018, não uma terceira via.
+    expect(bruto).toContain('018')
+    expect(bruto).toContain('017')
+    expect(bruto).toContain('014')
+    // Nenhuma tabela nova: nada é criado aqui.
+    expect(bruto).toMatch(/Nenhuma tabela é criada/i)
   })
 
-  it('o agendamento público não depende de RLS e não muda', () => {
-    // As RPCs do agendamento são security definer (012) e seguem idênticas.
-    // É o que garante que a vitrine continue agendando depois de as políticas
-    // apertarem.
+  it('o agendamento público continua security definer e não é reescrito', () => {
+    // As RPCs do agendamento (012/021/040) não dependem de RLS nem mudam aqui.
     expect(texto).not.toContain(
       'create or replace function public.agendamento_publico_criar(',
     )
     expect(texto).not.toContain(
       'create or replace function public.agendamento_publico_slots(',
     )
-    expect(texto).not.toContain('drop function')
   })
 
-  it('não apaga dado nem derruba tabela', () => {
-    expect(texto).not.toMatch(/\bdrop table\b/i)
-    expect(texto).not.toMatch(/\btruncate\b/i)
-    expect(texto).not.toMatch(/\bdelete from\b/i)
-    // `drop policy` é o necessário e esperado: são as políticas que mudam.
-    expect(texto).toMatch(/drop policy if exists/i)
+  it('recarrega o cache do PostgREST para a política nova valer na hora', () => {
+    expect(texto).toContain("notify pgrst, 'reload schema';")
   })
 })

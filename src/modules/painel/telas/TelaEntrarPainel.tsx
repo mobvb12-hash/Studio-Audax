@@ -46,7 +46,7 @@ export default function TelaEntrarPainel() {
         <BotaoPrimario
           processando={processando}
           rotulo="Entrar"
-          processandoRotulo="Entrandoâ€¦"
+          processandoRotulo="Entrando…"
         />
       </form>
 

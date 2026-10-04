@@ -43,7 +43,7 @@ export default function TelaRedefinirPainel() {
           valor={senha}
           aoMudar={setSenha}
           autocomplete="new-password"
-          dica="MÃ­nimo de 6 caracteres."
+          dica="Mínimo de 6 caracteres."
         />
         <Campo
           id="confirmar-senha"
@@ -56,7 +56,7 @@ export default function TelaRedefinirPainel() {
         <BotaoPrimario
           processando={processando}
           rotulo="Salvar senha"
-          processandoRotulo="Salvandoâ€¦"
+          processandoRotulo="Salvando…"
         />
       </form>
 

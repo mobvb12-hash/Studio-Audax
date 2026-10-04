@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ESTADO_VAZIO } from '@/modules/agendamento/estado'
 import {
   areaPelaUrl,
   CAMINHO_AGENDAR,
@@ -8,9 +9,14 @@ import {
   irParaAgendamentoOficial,
   irParaAreaDoCliente,
   lerPreenchimento,
+  lerRetomadaAgendamento,
   limparPreenchimento,
+  limparRetomadaAgendamento,
   navegarPainel,
+  nascimentoValido,
   rotaPainelAtual,
+  salvarRetomadaAgendamento,
+  temRetomadaAgendamento,
   urlAgendamentoOficial,
   urlAreaDoCliente,
 } from './regras'
@@ -236,5 +242,131 @@ describe('identidade que viaja do painel para o agendamento', () => {
     ).not.toThrow()
     expect(assign).toHaveBeenCalledWith(`${origem()}/agendar`)
     erro.mockRestore()
+  })
+})
+
+/**
+ * O rascunho do agendamento: a ponte entre o fluxo público e a Área do
+ * Cliente.
+ *
+ * Sem sessão a pessoa não reserva — mas as escolhas feitas até então não podem
+ * se perder, ou ela recomeça do zero depois de criar a conta. Este rascunho é
+ * o que faz a frase "você continua de onde parou" ser verdade.
+ *
+ * Duas coisas aqui precisam ser confiáveis: ele só restaura o que dá para
+ * restaurar (um rascunho incompleto jogaria a pessoa numa etapa sem nada
+ * escolhido), e ele nunca derruba a tela quando o `sessionStorage` está fora
+ * do ar.
+ */
+describe('o rascunho do agendamento (retomada)', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear()
+  })
+
+  /** Uma escolha que chegou até o horário — o mínimo para valer a pena. */
+  function escolhaCompleta() {
+    return {
+      ...ESTADO_VAZIO,
+      servicoNome: 'Corte Audax',
+      profissional: 'Cleiton Silva',
+      data: '2026-10-10',
+      horario: '08:00',
+      complementoIds: ['srv-barba'],
+    }
+  }
+
+  it('guarda a escolha e a devolve igual', () => {
+    expect(lerRetomadaAgendamento()).toBeNull()
+
+    salvarRetomadaAgendamento(escolhaCompleta())
+
+    expect(temRetomadaAgendamento()).toBe(true)
+    expect(lerRetomadaAgendamento()).toEqual(escolhaCompleta())
+  })
+
+  it('apagar duas vezes não explode', () => {
+    salvarRetomadaAgendamento(escolhaCompleta())
+    limparRetomadaAgendamento()
+    limparRetomadaAgendamento()
+    expect(lerRetomadaAgendamento()).toBeNull()
+    expect(temRetomadaAgendamento()).toBe(false)
+  })
+
+  it('rascunho incompleto não restaura — seria cair na etapa vazia', () => {
+    // Escrito à mão ou por uma versão antiga do fluxo: sem horário não há o
+    // que continuar, e restaurar jogaria a pessoa nos extras sem nada.
+    window.sessionStorage.setItem(
+      'studio-audax:agendar:retomada',
+      JSON.stringify({
+        estado: { servicoNome: 'Corte Audax' },
+        salvoEm: Date.now(),
+      }),
+    )
+
+    expect(lerRetomadaAgendamento()).toBeNull()
+    // E a tentativa é descartada: não fica esperando para atrapalhar depois.
+    expect(window.sessionStorage.getItem('studio-audax:agendar:retomada')).toBeNull()
+  })
+
+  it('rascunho velho não restaura', () => {
+    window.sessionStorage.setItem(
+      'studio-audax:agendar:retomada',
+      JSON.stringify({
+        estado: escolhaCompleta(),
+        salvoEm: Date.now() - 31 * 60 * 1000,
+      }),
+    )
+
+    expect(lerRetomadaAgendamento()).toBeNull()
+  })
+
+  it('rascunho malformado devolve null, não erro', () => {
+    window.sessionStorage.setItem('studio-audax:agendar:retomada', '{não é json')
+
+    expect(lerRetomadaAgendamento()).toBeNull()
+  })
+
+  it('sessionStorage fora do ar não derruba o fluxo', () => {
+    const salvar = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('sem storage')
+      })
+    const ler = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('sem storage')
+    })
+    const apagar = vi
+      .spyOn(Storage.prototype, 'removeItem')
+      .mockImplementation(() => {
+        throw new Error('sem storage')
+      })
+
+    expect(() => salvarRetomadaAgendamento(escolhaCompleta())).not.toThrow()
+    expect(lerRetomadaAgendamento()).toBeNull()
+    expect(() => limparRetomadaAgendamento()).not.toThrow()
+
+    salvar.mockRestore()
+    ler.mockRestore()
+    apagar.mockRestore()
+  })
+})
+
+describe('data de nascimento (prova de vínculo da RPC 018)', () => {
+  it('aceita o formato que o campo type=date entrega', () => {
+    expect(nascimentoValido('1995-06-15')).toBe(true)
+    expect(nascimentoValido('  1995-06-15  ')).toBe(true)
+  })
+
+  it('recusa vazio, formato errado e data que não existe', () => {
+    expect(nascimentoValido('')).toBe(false)
+    expect(nascimentoValido('   ')).toBe(false)
+    expect(nascimentoValido('15/06/1995')).toBe(false)
+    expect(nascimentoValido('1995-13-01')).toBe(false)
+    expect(nascimentoValido('1995-02-30')).toBe(false)
+    expect(nascimentoValido('nada')).toBe(false)
+  })
+
+  it('recusa data futura: ninguém nasceu amanhã', () => {
+    expect(nascimentoValido('2999-01-01')).toBe(false)
   })
 })

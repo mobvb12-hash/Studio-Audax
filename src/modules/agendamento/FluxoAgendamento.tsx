@@ -15,7 +15,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import BlocoBarbearia from '@/modules/painel/telas/BlocoBarbearia'
 import { SecaoAudaxClub } from './club'
-import { irParaAreaDoCliente } from '@/modules/painel/regras'
+import {
+  irParaAreaDoCliente,
+  lerPreenchimento,
+  lerRetomadaAgendamento,
+  limparPreenchimento,
+  limparRetomadaAgendamento,
+  salvarRetomadaAgendamento,
+} from '@/modules/painel/regras'
+import { clientePainel, obterMeuCadastro } from '@/services/supabase/painel'
 import { formatarBRL } from '@/lib/moeda'
 import {
   carregarCatalogo,
@@ -116,6 +124,100 @@ export default function FluxoAgendamento() {
     )
   }, [])
 
+  /*
+   * A identificação: a pessoa pode concluir o agendamento sem conta?
+   *
+   * Não pode. Serviço, profissional, data e horário são escolhidos antes —
+   * é o que o fluxo pede — e na hora de sair daí a conta é obrigatória.
+   *
+   * `verificando` existe para não decidir às cegas: a sessão mora no
+   * `localStorage` do Supabase e leva milissegundos, mas o primeiro clique
+   * pode chegar antes. Preferimos segurar um instante a mandar para o cadastro
+   * alguém que já está logado.
+   *
+   * A sessão é lida pelo MESMO contrato da Área do Cliente
+   * (`ClientePainel`): um único sistema de autenticação, não dois.
+   */
+  const [identificacao, setIdentificacao] = useState<
+    'verificando' | 'autenticado' | 'anonimo'
+  >('verificando')
+  /*
+   * O portão está aberto de propósito — a pessoa tentou seguir sem conta.
+   *
+   * Separado de `identificacao` porque é uma intenção, não um fato: ela pode
+   * ter clicado em "Voltar" e voltado a escolher horário.
+   */
+  const [portaoAberto, setPortaoAberto] = useState(false)
+
+  /*
+   * Ao montar: descobre se há sessão e, se houver, se há um rascunho para
+   * restaurar. É o ponto de retorno de quem foi identificar-se: o fluxo salvou
+   * as escolhas, mandou para `/cliente`, e a conta pronta volta para cá.
+   */
+  useEffect(() => {
+    let vivo = true
+    const db = clientePainel()
+
+    const decidir = (autenticado: boolean) => {
+      if (!vivo) return
+      setIdentificacao(autenticado ? 'autenticado' : 'anonimo')
+      if (!autenticado) return
+
+      const rascunho = lerRetomadaAgendamento()
+      if (rascunho) {
+        limparRetomadaAgendamento()
+        setEstado(rascunho)
+        setEtapa('complementos')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+
+      // Sem rascunho é uma visita normal logada. O formulário nasce
+      // preenchido com o que a casa já sabe — mas só quando está vazio: quem
+      // já digitou não tem o que foi digitado trocado por baixo.
+      //
+      // Duas fontes, nessa ordem: o preenchimento que a ÁREA DO CLIENTE
+      // deixou ao mandar a pessoa para cá (o intento mais recente), e senão o
+      // cadastro ligado à sessão. A primeira é de uma visita só; a segunda é
+      // sempre atual.
+      const preenchimento = lerPreenchimento()
+      if (preenchimento) {
+        limparPreenchimento()
+        setEstado((atual) =>
+          atual.nome.trim()
+            ? atual
+            : { ...atual, nome: preenchimento.nome, telefone: preenchimento.telefone },
+        )
+        return
+      }
+
+      void obterMeuCadastro()
+        .then((cad) => {
+          if (!vivo || !cad) return
+          setEstado((atual) =>
+            atual.nome.trim()
+              ? atual
+              : { ...atual, nome: cad.nome, telefone: cad.telefone },
+          )
+        })
+        .catch(() => {
+          // Sem cadastro vinculado ou rede fora: o formulário continua vazio.
+        })
+    }
+
+    // Tudo assíncrono de propósito: `setState` no corpo do efeito é proibido
+    // pelas regras do lint, e sem Supabase também precisa sair de
+    // `verificando` — senão o portão ficaria carregando para sempre.
+    Promise.resolve(db ? db.sessao() : null)
+      .then((sessao) => decidir(Boolean(sessao)))
+      .catch(() => decidir(false))
+    const cancelar = db ? db.observar((sessao) => decidir(Boolean(sessao))) : () => {}
+    return () => {
+      vivo = false
+      cancelar()
+    }
+  }, [])
+
   // Horários do dia escolhido — sempre da Agenda, nunca calculados aqui.
   const [slots, setSlots] = useState<string[]>([])
   const [carregandoSlots, setCarregandoSlots] = useState(false)
@@ -194,6 +296,23 @@ export default function FluxoAgendamento() {
   const voltar = useCallback(() => {
     avancar(etapaAnterior(etapa))
   }, [avancar, etapa])
+
+  /**
+   * Desiste da identificação e volta para onde ela foi pedida.
+   *
+   * Não mexe em `etapa`: o portão é uma moldura sobre a etapa que estava na
+   * tela — horário quando a pessoa tentou seguir, resumo quando faltou um
+   * detalhe na hora de confirmar. Fechar é devolver a mesma tela, com as
+   * escolhas intactas.
+   *
+   * O rascunho é que sai do ar: ele existe para atravessar este portão, e sem
+   * sessão não há quem o guarde depois.
+   */
+  const desistirDaIdentificacao = useCallback(() => {
+    limparRetomadaAgendamento()
+    setPortaoAberto(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
   /* ---------------------------------------------------------------- */
   /* Horários: sempre a regra da Agenda                                 */
@@ -311,13 +430,39 @@ export default function FluxoAgendamento() {
   }
 
   function escolherHorario(hora: string) {
-    setEstado(escolherHorarioEstado(estado, hora))
+    const proximo = escolherHorarioEstado(estado, hora)
+    setEstado(proximo)
     setErro('')
+    /*
+     * O portão fica aqui: logo após a escolha do horário, antes de falar de
+     * adicionais.
+     *
+     * Escolher custa nada a ninguém — é só um clique na tela. A identificação
+     * acontece quando a pessoa tenta IR, porque é nesse momento que uma
+     * reserva passa a preocupar alguém. O rascunho é gravado junto, para que
+     * a volta não obrigue a escolher tudo de novo.
+     */
+    if (identificacao !== 'autenticado') {
+      salvarRetomadaAgendamento(proximo)
+      setPortaoAberto(true)
+      return
+    }
     avancar('complementos')
   }
 
   async function confirmar() {
     if (enviando || !base || !dadosValidos(estado)) return
+    /*
+     * Última trincheira antes do banco, por via das dúvidas: se alguma porta
+     * de trás deixou a sessão cair no meio do caminho, não se reserva hora de
+     * ninguém no escuro. O rascunho fica salvo — ao entrar, a pessoa pega
+     * exatamente de onde parou.
+     */
+    if (identificacao !== 'autenticado') {
+      salvarRetomadaAgendamento(estado)
+      setPortaoAberto(true)
+      return
+    }
     setErro('')
     setEnviando(true)
     try {
@@ -388,6 +533,20 @@ export default function FluxoAgendamento() {
           </p>
         </div>
       </div>
+    )
+  }
+
+  /*
+   * O portão manda na página inteira, não só na etapa: ele não faz sentido
+   * junto do rodapé de serviços nem do resumo de quem está prestes a reservar.
+   * Fica depois dos guardas de catálogo — sem serviços não há que reservar.
+   */
+  if (portaoAberto && identificacao !== 'autenticado') {
+    return (
+      <EtapaIdentificacao
+        identificacao={identificacao}
+        aoDesistir={desistirDaIdentificacao}
+      />
     )
   }
 
@@ -480,6 +639,61 @@ function EtapaConteudo(props: PropsEtapa) {
   if (etapa === 'dados') return <EtapaDados {...props} />
   if (etapa === 'resumo') return <EtapaResumo {...props} />
   return <EtapaConfirmacao {...props} />
+}
+
+/**
+ * O portão: a pessoa escolheu hora e agora precisa ser alguém.
+ *
+ * Não é uma etapa numerada do fluxo — é o ponto exato onde a sessão é
+ * exigida. Por isso mantém a mesma moldura das outras telas (progresso,
+ * título, voltar) e só troca o conteúdo por duas portas: criar conta ou
+ * entrar. Os dois caminhos levam à ÁREA DO CLIENTE, que é quem cuida de
+ * sessão, cadastro e vínculo; aqui não se abre uma segunda porta de
+ * autenticação.
+ *
+ * Ao voltar, o horário escolhido continua escolhido — ele está em `estado`,
+ * intacto, e o rascunho é que é descartado (sem sessão não há quem guarde).
+ */
+function EtapaIdentificacao({
+  identificacao,
+  aoDesistir,
+}: {
+  identificacao: 'verificando' | 'autenticado' | 'anonimo'
+  aoDesistir: () => void
+}) {
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
+      <Progresso etapa="horario" />
+      <Tela
+        etapa="horario"
+        titulo="Falta pouco"
+        descricao="Para reservar seu horário, entre na sua conta ou crie uma. É rápido, fica salvo para a próxima vez e você continua exatamente de onde parou."
+        voltar={aoDesistir}
+      >
+        {identificacao === 'verificando' ? (
+          <Carregando texto="Verificando seu acesso…" />
+        ) : (
+          <>
+            <div className="flex flex-col gap-2.5">
+              <Botao
+                variante="primario"
+                aoClicar={() => irParaAreaDoCliente('cadastrar')}
+              >
+                Criar conta
+              </Botao>
+              <Botao aoClicar={() => irParaAreaDoCliente('entrar')}>
+                Já tenho conta — entrar
+              </Botao>
+            </div>
+            <p className="mt-5 text-[12.5px] leading-relaxed text-noir-500">
+              Serviço, profissional, dia e horário já estão guardados. Depois de
+              entrar, você volta direto para os adicionais e confirma a reserva.
+            </p>
+          </>
+        )}
+      </Tela>
+    </main>
+  )
 }
 
 /**

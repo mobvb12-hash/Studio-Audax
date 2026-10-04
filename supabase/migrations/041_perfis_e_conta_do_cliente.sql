@@ -1,241 +1,127 @@
 -- ============================================================================
--- 041_perfis_e_conta_do_cliente.sql - cliente com conta, sem ver a base
+-- 041_perfis_e_conta_do_cliente.sql - a conta de cliente dentro do RLS certo
 -- ============================================================================
 --
--- O QUE ESTE SCRIPT FAZ
+-- O QUE ESTE SCRIPT É (e o que ele NÃO é)
 --
--- Deixa existir CONTA DE CLIENTE (e-mail + senha) sem que essa conta veja a
--- base de clientes.
+-- Ele foi reescrito depois de auditar o banco real. A versão anterior criava
+-- uma SEGUNDA tabela `perfis` com coluna `auth_uid` e papel ('equipe' |
+-- 'cliente') — e falharia na primeira linha que não é `create table if not
+-- exists`: `insert into public.perfis (auth_uid, ...)` num banco cujo `perfis`
+-- já existe desde a 001 com `user_id`. Também duplicava um modelo que já
+-- existe, o que é proibido aqui.
 --
--- POR QUE ERA OBRIGATÓRIO ANTES DA TELA DE CADASTRO
+-- AUDITORIA: o que JÁ FECHAVA o acesso do cliente antes desta migration
 --
--- As políticas de RLS eram `using (true)`:
+-- A conta de cliente não é coisa nova — ela nasceu na 018 junto com o Painel do
+-- Cliente, e as políticas por papel da 014/017 já tinham substituído todos os
+-- `using (true)` originais. O estado real é este:
 --
---   • `clientes`    (003) — select/insert/update/delete liberado a QUALQUER
---     usuário autenticado;
---   • `agendamentos`, `bloqueios`, `agenda_expediente` (007) — `for all to
---     authenticated using (true) with check (true)`.
+--   tabela            | política que manda                 | cliente vê
+--   ------------------+------------------------------------+------------------
+--   clientes          | clientes_select_proprio (018)      | só a PRÓPRIA linha
+--                     | clientes_*_por_papel (017)         | (papel = null nega)
+--   agendamentos      | agendamentos_select_proprio (018)  | só os PRÓPRIOS
+--                     | agendamentos_*_por_papel (017)     |
+--   clube_assinaturas | ..._select_proprio (018)           | só a própria
+--   clube_pagamentos  | ..._select_proprio (018)           | só o próprio
+--   perfis            | perfis_select_por_papel (017)      | admin ou a própria
+--   caixa/estoque/    | *_por_papel (017)                  | nada (papel null)
+--   comissões/crm/    |                                    |
+--   whatsapp/bloqueios|                                    |
 --
--- Isso era inofensivo porque a única conta autenticada era a da EQUIPE. No
--- minuto em que um cliente se cadastrasse, ele passaria a ler a tabela
--- `clientes` inteira — nome, telefone, e-mail e nascimento de todo mundo — e
--- ainda poderia alterar e apagar qualquer linha. E a ver todos os agendamentos,
--- com nome e telefone de todos os clientes.
+-- O mecanismo é `public.current_user_papel()` (017:40), que devolve NULL para
+-- quem não tem linha em `perfis` — e NULL nega tudo. Como NENHUM código cria
+-- linha de `perfis` para conta de cliente (o trigger 018/017 bloqueia insert
+-- sem admin), a conta do cliente nasce sem papel e, por desenho, sem acesso à
+-- operação interna. Escrita em `clientes`/`agendamentos` também é negada, e o
+-- agendamento público não depende de policy: `agendamento_publico_criar` é
+-- `security definer` (012/021/040).
 --
--- Por isso a tela de cadastro NÃO podia vir antes disto.
+-- Conclusão: `clientes` e `agendamentos` NÃO precisam de política nova aqui.
+-- Repetir um `eh_equipe()` / `perfis.auth_uid` seria criar um segundo modelo de
+-- papel ao lado do que já existe — exatamente o que não pode ser feito.
 --
--- QUEM É QUEM
+-- O QUE FALTAVA (e é o motivo de existir esta migration)
 --
--- `public.perfis` liga `auth.uid()` a um papel. Só dois:
+-- A 014 substituiu o `agenda_acesso_autenticado ... using (true)` da 007 por
+-- uma política de leitura que também ficou `using (true)` (014:386). A 017
+-- criou `agenda_expediente_select_por_papel`, mas como policies PERMISSIVAS são
+-- unidas por OU, a permissiva antiga continuava vencendo: qualquer sessão
+-- autenticada — inclusive a de um cliente — lia o expediente inteiro da casa.
 --
---   • `equipe`  — a equipe da casa: vê e escreve em tudo, como hoje.
---   • `cliente` — o dono do agendamento: lê a PRÓPRIA linha de `clientes` e os
---     PRÓPRIOS agendamentos, e não escreve em nada.
+-- `agenda_expediente` é dado de operação interna (dias, janelas, almoço). Não é
+-- dado do cliente. E a vitrine não precisa dela por RLS: o expediente chega ao
+-- público por `agendamento_publico_slots` e `agenda_expediente_do_dia`, ambos
+-- `security definer`.
 --
--- `public.eh_equipe()` responde "esta sessão é da equipe?". Sem ela, toda
--- política repetiria a mesma subconsulta.
+-- E QUÊM É EQUIPE AGORA
 --
--- POR QUE `eh_equipe()` É `security definer`
+-- Ninguém é promovido aqui. Quem tem linha em `perfis` com papel de equipe já
+-- é a equipe, e continua com o mesmo acesso de antes. Conta criada DEPOIS
+-- desta migration pela tela de cadastro do cliente é cliente, e continua sem
+-- linha em `perfis` — o que a mantém fora do painel interno.
 --
--- Porque a política de `perfis` precisa consultar `perfis`, e um `select`
--- normal dentro de uma política de `perfis` entraria em RECURSÃO DE RLS: a
--- política pergunta o papel, a pergunta relê a tabela, que aciona a política de
--- novo, para sempre. A função roda como dono da tabela, que não é submetida a
--- RLS, e o ciclo fecha em uma passada.
---
--- QUEM É EQUIPE AGORA
---
--- Todo usuário que EXISTE no momento desta migration vira equipe. É a única
--- inferência honesta: hoje não existe outra forma de ter conta, então quem tem
--- conta é a equipe.
---
--- ⚠ QUEM CRIAR CONTA DEPOIS DESTA MIGRATION PRECISA SER PROMOVIDO:
---
---     insert into public.perfis (auth_uid, papel, nome)
---     values ('<uuid>', 'equipe', '<nome>');
---
--- Sem isso o usuário novo entra e NÃO vê o painel — por desenho: sem papel
--- explícito, ninguém é equipe. Uma conta cadastrada pelo cliente final nunca
--- entra nessa lista; ela entra como `cliente`, pela Edge Function.
+-- Se um dia uma conta nova tiver que virar equipe, o caminho é o de sempre:
+--     insert into public.perfis (user_id, nome, email, papel)
+--     values ('<uuid>', '<nome>', '<email>', 'recepcao');
 --
 -- O QUE NÃO MUDA
 --
---   • A equipe continua vendo e fazendo exatamente o que via antes.
---   • O agendamento público não depende de RLS: `agendamento_publico_slots` e
---     `agendamento_publico_criar` são `security definer` e seguem idênticas.
---   • Nenhuma tabela de cliente é apagada; `clientes.auth_uid` só liga a conta.
---   • Nenhum preço, nenhuma regra de vaga, nenhum aviso.
+--   • A equipe segue vendo e fazendo exatamente o que via antes.
+--   • Nenhuma tabela é criada, renomeada ou apagada.
+--   • Nenhuma coluna é adicionada: os vínculos já existem —
+--     `clientes.auth_user_id` e `agendamentos.cliente_id` (018).
+--   • Nenhuma regra de preço, vaga, comissão, fechamento ou Club é tocada.
+--   • O agendamento criado pelo cliente continua entrando na MESMA tabela
+--     `agendamentos`, que é a mesma que a equipe lê na Agenda interna.
 -- ============================================================================
 
--- ---------------------------------------------------------------------------
--- 1. Quem é quem
--- ---------------------------------------------------------------------------
-
-create table if not exists public.perfis (
-  auth_uid  uuid primary key references auth.users (id) on delete cascade,
-  papel     text not null default 'cliente',
-  nome      text not null default '',
-  criado_em timestamptz not null default now(),
-  constraint perfis_papel check (papel in ('equipe', 'cliente'))
-);
-
-comment on table public.perfis is
-  'Vínculo entre uma conta do Supabase Auth e o papel no Studio Audax. '
-  'Sem linha aqui, NINGUÉM é equipe — é o que impede conta nova de nascer '
-  'com acesso de equipe.';
-
-create index if not exists idx_perfis_papel on public.perfis (papel);
-
--- Todo usuário que já existia é da equipe (ver o comentário do cabeçalho).
-insert into public.perfis (auth_uid, papel, nome)
-select u.id, 'equipe', coalesce(u.email, '')
-  from auth.users u
-on conflict (auth_uid) do nothing;
-
--- ---------------------------------------------------------------------------
--- 2. "Esta sessão é da equipe?"
--- ---------------------------------------------------------------------------
-
-create or replace function public.eh_equipe()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-      from public.perfis p
-     where p.auth_uid = auth.uid()
-       and p.papel = 'equipe'
-  );
-$$;
-
-revoke execute on function public.eh_equipe() from public;
-grant execute on function public.eh_equipe() to authenticated;
-
--- ---------------------------------------------------------------------------
--- 3. As políticas de `perfis`
--- ---------------------------------------------------------------------------
-
-alter table public.perfis enable row level security;
-
-drop policy if exists perfis_select on public.perfis;
-drop policy if exists perfis_write_equipe on public.perfis;
-
--- Cada um lê o próprio perfil; a equipe lê todos (para promover alguém).
-create policy perfis_select on public.perfis
-  for select to authenticated
-  using (auth_uid = auth.uid() or public.eh_equipe());
-
--- Perfil NÃO nasce por INSERT do próprio usuário: quem cria é a Edge Function
--- (service_role), no cadastro. Sem isso, qualquer conta nova poderia se
--- promover a `equipe` com um insert.
-create policy perfis_write_equipe on public.perfis
-  for all to authenticated
-  using (public.eh_equipe())
-  with check (public.eh_equipe());
-
--- ---------------------------------------------------------------------------
--- 4. `clientes`: a conta é dona da própria linha
--- ---------------------------------------------------------------------------
-
-alter table public.clientes
-  add column if not exists auth_uid uuid references auth.users (id) on delete set null;
-
--- Um cliente, uma conta. Índice parcial porque `null` se repete à vontade:
--- quem ainda não tem conta é a maioria.
-create unique index if not exists clientes_auth_uid_unico
-  on public.clientes (auth_uid)
-  where auth_uid is not null;
-
-drop policy if exists clientes_select_autenticado on public.clientes;
-drop policy if exists clientes_insert_autenticado on public.clientes;
-drop policy if exists clientes_update_autenticado on public.clientes;
-drop policy if exists clientes_delete_autenticado on public.clientes;
-
--- Cliente lê a PRÓPRIA ficha. Equipe lê todas.
-create policy clientes_select on public.clientes
-  for select to authenticated
-  using (public.eh_equipe() or auth_uid = auth.uid());
-
--- INSERT, UPDATE e DELETE são da EQUIPE.
+-- ----------------------------------------------------------------------------
+-- 1) Fecha o último `using (true)` que uma conta de cliente conseguia ler
+-- ----------------------------------------------------------------------------
 --
--- O cadastro do cliente final passa pela Edge Function `cadastro-cliente`, que
--- usa `service_role` e ignora RLS de propósito: é o único caminho em que uma
--- conta nova cria a própria ficha. Uma policy de insert "para o próprio"
--- permitiria a qualquer conta autenticada inserir linha com o
--- `auth_uid` de outra pessoa.
-create policy clientes_write_equipe on public.clientes
-  for all to authenticated
-  using (public.eh_equipe())
-  with check (public.eh_equipe());
-
--- ---------------------------------------------------------------------------
--- 5. `agendamentos`: o cliente vê os próprios
--- ---------------------------------------------------------------------------
-
-alter table public.agendamentos
-  add column if not exists cliente_auth_uid uuid
-  references auth.users (id) on delete set null;
-
-create index if not exists idx_agendamentos_cliente_auth
-  on public.agendamentos (cliente_auth_uid)
-  where cliente_auth_uid is not null;
-
--- Reaproveita o que já existe: a conta é ligada pelo telefone, que é a mesma
--- coisa que a Agenda já usa para achar o cliente. Telefone com o mesmo
--- dígitos conta como o mesmo cliente.
-update public.agendamentos a
-   set cliente_auth_uid = c.auth_uid
-  from public.clientes c
- where a.cliente_auth_uid is null
-   and c.auth_uid is not null
-   and regexp_replace(coalesce(a.telefone, ''), '\D', '', 'g')
-     = regexp_replace(coalesce(c.telefone, ''), '\D', '', 'g');
-
-drop policy if exists agenda_acesso_autenticado on public.agendamentos;
-drop policy if exists agenda_acesso_equipe on public.agendamentos;
-
-create policy agenda_acesso on public.agendamentos
-  for select to authenticated
-  using (public.eh_equipe() or cliente_auth_uid = auth.uid());
-
-create policy agenda_acesso_equipe on public.agendamentos
-  for all to authenticated
-  using (public.eh_equipe())
-  with check (public.eh_equipe());
-
--- ---------------------------------------------------------------------------
--- 6. `bloqueios` e `agenda_expediente`: só da equipe
--- ---------------------------------------------------------------------------
+-- A política `agenda_expediente_select` (014:386) era `using (true)` e não foi
+-- substituída pela 017 — ela foi apenas convivendo com a nova. Removê-la faz o
+-- SELECT cair inteiramente em `agenda_expediente_select_por_papel`, que exige
+-- `current_user_is_recepcao_ou_acima()`.
 --
--- São dados de operação da casa, não do cliente. E a vitrine não depende de
--- RLS para lê-los: `agendamento_publico_slots` é `security definer`.
+-- Idempotente: `drop policy if exists`. Sem drop não há como "remover" uma
+-- policy, e esta migration pode ser reaplicada.
+-- ----------------------------------------------------------------------------
+drop policy if exists agenda_expediente_select on public.agenda_expediente;
 
+-- Confirmação de que a política permissiva de leitura sumiu: a query falha em
+-- produção se ainda existir, o que transformaria um regresso silencioso em
+-- erro visível logo na primeira checagem.
 do $$
-declare
-  t text;
 begin
-  foreach t in array array['bloqueios', 'agenda_expediente'] loop
-    execute format('drop policy if exists agenda_acesso_autenticado on %I', t);
-    execute format('drop policy if exists agenda_acesso_equipe on %I', t);
-    execute format('drop policy if exists operacao_acesso_equipe on %I', t);
-    execute format(
-      'create policy operacao_acesso_equipe on %I for all to authenticated '
-      || 'using (public.eh_equipe()) with check (public.eh_equipe())',
-      t
-    );
-  end loop;
+  if exists (
+    select 1
+      from pg_policies
+     where schemaname = 'public'
+       and tablename = 'agenda_expediente'
+       and policyname = 'agenda_expediente_select'
+  ) then
+    raise exception '041: agenda_expediente_select ainda existe (using true)';
+  end if;
 end $$;
 
--- ---------------------------------------------------------------------------
--- 7. O que a conta pode ler de bate-pronto
--- ---------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- 2) Nada mais a fazer — e deixar isso explícito
+-- ----------------------------------------------------------------------------
 --
--- `clientes` e `agendamentos` mudaram de política; nada mais precisa de
--- grant novo. As tabelas do painel (caixa, produtos, serviços) continuam com as
--- políticas que já existiam — e são de leitura da EQUIPE, que segue com o mesmo
--- acesso de antes.
+-- `clientes`, `agendamentos`, `perfis`, `clube_assinaturas` e `clube_pagamentos`
+-- já estão com a leitura restrita ao próprio registro (018) e a escrita por
+-- papel (017). Nenhuma `create table`, nenhum `add column`, nenhuma política
+-- sobre `clientes` ou `agendamentos` é criada aqui: criá-las seria uma segunda
+-- versão de uma regra que já existe.
+--
+-- O que a conta de cliente ganhou com isto:
+--   • lê a PRÓPRIA ficha em `clientes`             (018, inalterado)
+--   • lê os PRÓPRIOS agendamentos                  (018, inalterado)
+--   • NÃO lê mais o expediente interno da casa     (esta migration)
+--   • NÃO escreve nada fora das RPCs de posse      (017/018, inalterado)
+--   • NÃO entra no painel da equipe                (sem linha em `perfis`)
 
 notify pgrst, 'reload schema';

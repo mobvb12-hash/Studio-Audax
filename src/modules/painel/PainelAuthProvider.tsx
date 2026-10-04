@@ -12,14 +12,17 @@ import {
   exigeNascimento,
   hashAuthRedirect,
   limparHashAuth,
+  lerRetomadaAgendamento,
   mensagemErroCadastro,
   mensagemErroPerfil,
   mensagemErroRecuperacao,
   mensagemErroRedefinicao,
   mensagemErroVinculo,
+  nascimentoValido,
   nomeValido,
   senhaValida,
   telefoneValido,
+  urlAgendamentoOficial,
 } from './regras'
 import type {
   ClientePainel,
@@ -203,6 +206,27 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
     }
   }, [cliente, concluirVinculo])
 
+  /**
+   * Terminou de entrar (ou de criar conta) E tinha um agendamento a retomar:
+   * volta para `/agendar`, que restaura as escolhas e reabre na etapa de
+   * extras.
+   *
+   * É a segunda metade da ponte: o fluxo público salva o rascunho quando
+   * falta identificação, manda a pessoa para cá, e aqui devolvemos ela com o
+   * que já tinha escolhido. Sem rascunho não há para onde voltar — quem só
+   * quis abrir o painel continua nele.
+   *
+   * O rascunho vive 30 minutos no `sessionStorage` e é apagado pelo próprio
+   * fluxo depois de restaurar, então isto não pega ninguém de surpresa horas
+   * depois. Navegação cheia (não hash): `/agendar` é a URL oficial, e é ela
+   * que precisa estar no endereço.
+   */
+  useEffect(() => {
+    if (estado.status !== 'pronto') return
+    if (!lerRetomadaAgendamento()) return
+    window.location.assign(urlAgendamentoOficial())
+  }, [estado.status])
+
   const entrar = useCallback(
     async (email: string, senha: string): Promise<boolean> => {
       if (cliente === null) return false
@@ -233,12 +257,22 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
         setErro('Informe seu nome.')
         return false
       }
+      // Só o vazio: o formato do e-mail é do campo `type="email"` no navegador
+      // e do signUp no servidor — aqui não se inventa uma segunda regra.
+      if (!dados.email.trim()) {
+        setErro('Informe seu e-mail.')
+        return false
+      }
       if (!telefoneValido(dados.telefone)) {
         setErro('Informe um telefone válido com DDD.')
         return false
       }
       if (!senhaValida(dados.senha)) {
         setErro('A senha precisa de pelo menos 6 caracteres.')
+        return false
+      }
+      if (!nascimentoValido(dados.nascimento)) {
+        setErro('Informe uma data de nascimento válida.')
         return false
       }
       setProcessando(true)
@@ -260,7 +294,7 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
         return await concluirVinculo(
           dados.nome.trim(),
           dados.telefone.trim(),
-          '',
+          dados.nascimento.trim(),
         )
       } catch (erroCadastro) {
         setErro(mensagemErroCadastro(erroCadastro))

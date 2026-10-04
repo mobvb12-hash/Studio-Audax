@@ -4,9 +4,9 @@ import { AvisoPainel, BotaoPrimario, Campo, CartaoPainel, ErroPainel } from './c
 import { submeterFormulario } from './submissao'
 
 /**
- * FormulÃ¡rio de vÃ­nculo da sessÃ£o com um cadastro. O campo de nascimento
+ * Formulário de vínculo da sessão com um cadastro. O campo de nascimento
  * aparece/exige conforme o estado da prova da RPC 018 (ambiguo/precisa_dados)
- * â€” nunca mostra dados de outros cadastros.
+ * — nunca mostra dados de outros cadastros.
  */
 export default function TelaVincularPainel() {
   const { estado, erro, processando, vincular } = usePainelAuth()
@@ -23,7 +23,7 @@ export default function TelaVincularPainel() {
   return (
     <CartaoPainel
       titulo="Confirme seu cadastro"
-      subtitulo="Use os dados que o Studio Audax jÃ¡ conhece para abrir o seu painel."
+      subtitulo="Use os dados que o Studio Audax já conhece para abrir o seu painel."
     >
       <form
         className="mt-6 space-y-4"
@@ -64,7 +64,7 @@ export default function TelaVincularPainel() {
         <BotaoPrimario
           processando={processando}
           rotulo="Continuar"
-          processandoRotulo="Verificandoâ€¦"
+          processandoRotulo="Verificando…"
         />
       </form>
 

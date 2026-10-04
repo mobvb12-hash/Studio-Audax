@@ -217,7 +217,24 @@ declare
   v_alm_inicio text;
   v_alm_fim text;
   v_id text;
+  v_cliente_id text;
 begin
+  -- Quem está LOGADO quando agenda: a linha é dele, e é isso que faz o
+  -- agendamento aparecer em "Meus agendamentos" (policy
+  -- `agendamentos_select_proprio` da 018 compara `cliente_id`).
+  --
+  -- Sem sessão — que é o caso normal da vitrine — dá `null` e nada muda: o
+  -- agendamento entra na MESMA `agendamentos`, com o mesmo nome e telefone de
+  -- sempre, só sem vínculo. Sessão sem cadastro vinculado também dá `null`;
+  -- quem acabou de criar a conta já chega com o cadastro ligado pela 018.
+  --
+  -- Não é uma segunda Agenda nem uma segunda coluna de cliente: `cliente_id`
+  -- existe desde a 018, é a mesma que o painel do cliente já usa.
+  v_cliente_id := case
+    when auth.uid() is not null then public.current_cliente_id()
+    else null
+  end;
+
   if length(v_nome) < 2 then
     raise exception 'Informe seu nome.';
   end if;
@@ -308,11 +325,13 @@ begin
   v_id := gen_random_uuid()::text;
   insert into agendamentos (
     id, cliente, telefone, servico, profissional, data, horario,
-    status, duracao_min, observacao, remarcacoes, criado_em, atualizado_em
+    status, duracao_min, observacao, remarcacoes, criado_em, atualizado_em,
+    cliente_id
   ) values (
     v_id, v_nome, trim(coalesce(p_telefone, '')), p_servico, p_profissional,
     p_data, p_horario, 'pendente', v_duracao,
-    coalesce(trim(p_observacao), ''), '[]'::jsonb, now(), now()
+    coalesce(trim(p_observacao), ''), '[]'::jsonb, now(), now(),
+    v_cliente_id
   );
 
   return json_build_object('id', v_id);

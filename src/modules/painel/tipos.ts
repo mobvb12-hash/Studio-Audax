@@ -14,6 +14,15 @@ export type DadosCadastro = {
   nome: string
   email: string
   telefone: string
+  /**
+   * Data de nascimento, `YYYY-MM-DD`.
+   *
+   * É um dos cinco campos obrigatórios do cadastro. NÃO vai para o
+   * `raw_user_meta_data` da conta (isso fica no JWT, que o próprio navegador
+   * lê): ele viaja só para a RPC `painel_cliente_vincular` (018), que usa na
+   * prova de identidade e grava em `clientes.nascimento`.
+   */
+  nascimento: string
   senha: string
 }
 

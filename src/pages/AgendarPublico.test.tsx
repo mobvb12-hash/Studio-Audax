@@ -8,8 +8,9 @@ import {
   type CatalogoPublico,
 } from '@/services/supabase/agendaPublica'
 import type { SlotLivre } from '@/modules/agenda/regras'
+import { ESTADO_VAZIO } from '@/modules/agendamento/estado'
 import { carregarBeneficiosClube } from '@/services/supabase/painel'
-import { irParaAreaDoCliente } from '@/modules/painel/regras'
+import { irParaAreaDoCliente, salvarRetomadaAgendamento } from '@/modules/painel/regras'
 import { formatarBRL } from '@/lib/moeda'
 
 /**
@@ -30,6 +31,23 @@ import { formatarBRL } from '@/lib/moeda'
  * função oficial e respeita o que ela devolve.
  */
 
+/**
+ * O que o portão de identificação decide sobre.
+ *
+ * `sessaoAtiva` é o interruptor: `true` (o padrão) é um cliente que já tem
+ * conta — é o caso repetido, e é ele que os testes de etapa descrevem. `false`
+ * é o primeiro acesso, onde o agendamento exige cadastro antes dos extras.
+ *
+ * O rascunho é o que liga o fluxo público à Área do Cliente: sem sessão o
+ * horário escolhido é guardado, a pessoa passa pela porta, e ao voltar o fluxo
+ * reabre exatamente onde parou.
+ */
+const controle = vi.hoisted(() => ({
+  sessaoAtiva: true,
+  rascunho: null as unknown,
+  preenchimento: null as { nome: string; telefone: string } | null,
+}))
+
 vi.mock('@/services/supabase/agendaPublica', () => ({
   carregarCatalogo: vi.fn(),
   criarAgendamentoPublico: vi.fn(),
@@ -38,17 +56,39 @@ vi.mock('@/services/supabase/agendaPublica', () => ({
 
 vi.mock('@/modules/painel/regras', () => ({
   navegarPainel: vi.fn(),
-  lerPreenchimento: vi.fn(() => null),
-  limparPreenchimento: vi.fn(),
+  lerPreenchimento: vi.fn(() => controle.preenchimento),
+  limparPreenchimento: vi.fn(() => {
+    controle.preenchimento = null
+  }),
   irParaAreaDoCliente: vi.fn(),
   irParaAgendamentoOficial: vi.fn(),
+  lerRetomadaAgendamento: vi.fn(() => controle.rascunho),
+  limparRetomadaAgendamento: vi.fn(() => {
+    controle.rascunho = null
+  }),
+  salvarRetomadaAgendamento: vi.fn((estado: unknown) => {
+    controle.rascunho = estado
+  }),
 }))
 
 // O conteúdo do Club vem da configuração oficial; no teste, a casa não tem
 // nada configurado e a seção simplesmente não aparece (preferimos assim a
 // mostrar um Club inventado).
+//
+// `clientePainel` é o MESMO contrato da Área do Cliente: devolve o adaptador
+// de sessão, ou `null` quando não há Supabase. É por ele que o fluxo sabe se
+// pode seguir sem identificação.
 vi.mock('@/services/supabase/painel', () => ({
   carregarBeneficiosClube: vi.fn(() => Promise.resolve(null)),
+  obterMeuCadastro: vi.fn(() => Promise.resolve(null)),
+  clientePainel: vi.fn(() =>
+    controle.sessaoAtiva
+      ? {
+          sessao: vi.fn(() => Promise.resolve({ user: { id: 'u-teste' } })),
+          observar: vi.fn(() => () => {}),
+        }
+      : null,
+  ),
 }))
 
 const catalogo = vi.mocked(carregarCatalogo)
@@ -56,6 +96,7 @@ const slots = vi.mocked(horariosPublicosPorProfissional)
 const criar = vi.mocked(criarAgendamentoPublico)
 const beneficios = vi.mocked(carregarBeneficiosClube)
 const irParaCliente = vi.mocked(irParaAreaDoCliente)
+const salvarRetomada = vi.mocked(salvarRetomadaAgendamento)
 
 const CATALOGO: CatalogoPublico = {
   servicos: [
@@ -147,6 +188,14 @@ beforeEach(() => {
   criar.mockReset()
   beneficios.mockReset()
   irParaCliente.mockReset()
+  // `mockClear`, não `mockReset`: o que importa aqui é a chamada, e a
+  // implementação é quem grava o rascunho no controlador.
+  salvarRetomada.mockClear()
+  // O comum: cliente que já tem conta, para os testes de etapa descreverem o
+  // agendamento e não o cadastro. Quem quer o portão zera isto no teste.
+  controle.sessaoAtiva = true
+  controle.rascunho = null
+  controle.preenchimento = null
   catalogo.mockResolvedValue(CATALOGO)
   beneficios.mockResolvedValue(null)
   // 08:00 e 09:00 livres; 10:00 ocupado. A grade é a REAL devolvida pela Agenda.
@@ -887,5 +936,101 @@ describe('dados, resumo e confirmação', () => {
     expect(screen.getByRole('button', { name: /Ver meu agendamento/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Voltar ao início/ }))
     expect(await screen.findByText('Agende seu horário')).toBeTruthy()
+  })
+})
+
+/*
+ * O portão: reservar exige ser cliente, e a exigência acontece no ponto
+ * exato onde a pessoa tenta seguir — depois de escolher hora, antes dos
+ * extras.
+ *
+ * Os testes acima descrevem o agendamento de quem JÁ tem conta (o caso
+ * repetido, `sessaoAtiva = true` por padrão). Estes descrevem o primeiro
+ * acesso, que é o comport novo deste trabalho.
+ */
+describe('identificação obrigatória (primeiro acesso)', () => {
+  /** Serviço → barbeiro → dia, parado na grade de horários. */
+  async function ateHorario() {
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+    escolherServicoNaVitrine('Corte Audax')
+    fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
+    fireEvent.click(await screen.findByText('Escolha o dia'))
+    escolherDia()
+    await screen.findByText('Horários disponíveis')
+  }
+
+  it('sem conta, escolher o horário abre a porta em vez dos extras', async () => {
+    controle.sessaoAtiva = false
+    await ateHorario()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+
+    expect(await screen.findByText('Falta pouco')).toBeTruthy()
+    expect(screen.queryByText('Quer completar seu atendimento?')).toBeNull()
+    // Nada é enviado ao banco antes de a pessoa ser identificada.
+    expect(criar).not.toHaveBeenCalled()
+  })
+
+  it('a porta oferece os dois caminhos da Área do Cliente', async () => {
+    controle.sessaoAtiva = false
+    await ateHorario()
+    fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+    await screen.findByText('Falta pouco')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    expect(irParaCliente).toHaveBeenCalledWith('cadastrar')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Já tenho conta — entrar' }))
+    expect(irParaCliente).toHaveBeenCalledWith('entrar')
+  })
+
+  it('o horário escolhido é guardado; voltar devolve a escolha e descarta o rascunho', async () => {
+    controle.sessaoAtiva = false
+    await ateHorario()
+    fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+    await screen.findByText('Falta pouco')
+
+    // O rascunho é a ponte para a Área do Cliente: é ele que faz a volta
+    // não obrigar a escolher tudo de novo.
+    expect(salvarRetomada).toHaveBeenCalledTimes(1)
+    expect(controle.rascunho).toMatchObject({ horario: '08:00' })
+
+    fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
+
+    // De volta à grade, com o 08:00 ainda marcado — o portão não apagou nada.
+    await waitFor(() => expect(screen.getByText('Horários disponíveis')).toBeTruthy())
+    expect(
+      screen.getByRole('button', { name: 'Horário 08:00' }).getAttribute('aria-pressed'),
+    ).toBe('true')
+    expect(controle.rascunho).toBeNull()
+  })
+
+  it('quem volta já identificado cai direto nos extras, sem refazer nada', async () => {
+    // O rascunho que a pessoa deixou ao se identificar, e a sessão pronta.
+    controle.rascunho = {
+      ...ESTADO_VAZIO,
+      servicoNome: 'Corte Audax',
+      profissional: 'Cleiton Silva',
+      data: '2026-10-10',
+      horario: '08:00',
+    }
+
+    render(<AgendarPublico />)
+
+    expect(await screen.findByText('Quer completar seu atendimento?')).toBeTruthy()
+    // Uso único: restaurado, ele some — senão a próxima visita cairia aqui.
+    expect(controle.rascunho).toBeNull()
+    expect(screen.queryByText('Falta pouco')).toBeNull()
+  })
+
+  it('quem já tem conta nunca vê a porta', async () => {
+    await ateHorario()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+
+    expect(await screen.findByText('Quer completar seu atendimento?')).toBeTruthy()
+    expect(screen.queryByText('Falta pouco')).toBeNull()
+    expect(salvarRetomada).not.toHaveBeenCalled()
   })
 })
