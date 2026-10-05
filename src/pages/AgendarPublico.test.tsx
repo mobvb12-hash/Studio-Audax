@@ -712,32 +712,53 @@ describe('extras: incluir outro serviço no mesmo horário', () => {
     await screen.findByText('Quer completar seu atendimento?')
   }
 
-  it('oferece QUALQUER serviço do catálogo, não só o que a casa sugeriu', async () => {
+  it('mostra no máximo 2 sugestões, mesmo com mais complementos da casa', async () => {
     /*
-     * Regressão do que a tela mostrou: a etapa vinha da configuração
-     * `servicos.complementos`, que estava vazia, então não oferecia NADA.
-     * Quem queria corte + barba + sobrancelha não tinha como pedir os três.
-     * O catálogo é a fonte; a configuração só decide a ordem de leitura.
+     * A etapa é RECOMENDAÇÃO, não vitrine: a casa configurou três
+     * complementos para o Corte e a pessoa ainda assim vê só os dois
+     * primeiros. Três opções travam; a terceira não entra na tela.
+     */
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      destaques: [],
+      servicos: [
+        {
+          id: 'srv-corte',
+          nome: 'Corte Audax',
+          preco: 30,
+          duracaoMin: 30,
+          categoria: 'Cabelo',
+          complementos: ['srv-barba', 'srv-sobrancelha', 'srv-luzes'],
+        },
+        { id: 'srv-barba', nome: 'Barba', preco: 20, duracaoMin: 20, categoria: 'Barba', complementos: [] },
+        { id: 'srv-sobrancelha', nome: 'Sobrancelha', preco: 10, duracaoMin: 10, categoria: 'Barba', complementos: [] },
+        { id: 'srv-luzes', nome: 'Luzes', preco: 90, duracaoMin: 60, categoria: 'Tratamento', complementos: [] },
+      ],
+    })
+    await ateExtras()
+
+    expect(screen.getByRole('button', { name: 'Adicionar Barba' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Adicionar Sobrancelha' })).toBeTruthy()
+    // A terceira sugestão da casa não aparece: a cota é duas.
+    expect(screen.queryByRole('button', { name: 'Adicionar Luzes' })).toBeNull()
+    // E o serviço escolhido nunca é oferecido a si mesmo.
+    expect(screen.queryByRole('button', { name: 'Adicionar Corte Audax' })).toBeNull()
+  })
+
+  it('as sugestões são só as da casa; o resto do catálogo fica de fora', async () => {
+    /*
+     * Antes a etapa listava o catálogo inteiro depois das sugestões — virava
+     * prateleira de loja. Agora só entra o que a casa marcou como complemento
+     * do serviço escolhido.
      */
     await ateExtras()
 
-    // A Barba é sugestão da casa para o Corte (esta no catálogo do teste).
-    expect(screen.getByRole('button', { name: 'Adicionar Barba' })).toBeTruthy()
-    // As Luzes não são sugestão de ninguém — e aparecem mesmo assim.
-    expect(screen.getByRole('button', { name: 'Adicionar Luzes' })).toBeTruthy()
-  })
-
-  it('as sugestões da casa vêm primeiro, e o resto do catálogo depois', async () => {
-    await ateExtras()
-
     expect(screen.getByText('Sugestões da casa')).toBeTruthy()
-    expect(screen.getByText('Outros serviços')).toBeTruthy()
-    // A ordem na tela segue a ordem dos grupos.
-    const sugestoes = screen.getByText('Sugestões da casa')
-    const outros = screen.getByText('Outros serviços')
-    expect(
-      sugestoes.compareDocumentPosition(outros) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    // A Barba é complemento configurado do Corte.
+    expect(screen.getByRole('button', { name: 'Adicionar Barba' })).toBeTruthy()
+    // As Luzes não são complemento de ninguém — e ficam fora da tela.
+    expect(screen.queryByRole('button', { name: 'Adicionar Luzes' })).toBeNull()
+    expect(screen.queryByText('Outros serviços')).toBeNull()
   })
 
   it('o serviço já escolhido não é oferecido a si mesmo', async () => {
@@ -777,6 +798,41 @@ describe('extras: incluir outro serviço no mesmo horário', () => {
       ).toContain(formatarBRL(50)),
     )
     expect(screen.getByRole('button', { name: 'Remover Barba' })).toBeTruthy()
+  })
+
+  it('duas sugestões selecionadas somam no total e na duração', async () => {
+    catalogo.mockResolvedValue({
+      ...CATALOGO,
+      destaques: [],
+      servicos: [
+        {
+          id: 'srv-corte',
+          nome: 'Corte Audax',
+          preco: 30,
+          duracaoMin: 30,
+          categoria: 'Cabelo',
+          complementos: ['srv-barba', 'srv-sobrancelha'],
+        },
+        { id: 'srv-barba', nome: 'Barba', preco: 20, duracaoMin: 20, categoria: 'Barba', complementos: [] },
+        { id: 'srv-sobrancelha', nome: 'Sobrancelha', preco: 10, duracaoMin: 10, categoria: 'Barba', complementos: [] },
+        { id: 'srv-luzes', nome: 'Luzes', preco: 90, duracaoMin: 60, categoria: 'Tratamento', complementos: [] },
+      ],
+    })
+    await ateExtras()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Barba' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Sobrancelha' }))
+
+    // 30 do corte + 20 da barba + 10 da sobrancelha.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('group', { name: 'Total do atendimento' }).textContent,
+      ).toContain(formatarBRL(60)),
+    )
+    // A Luzes continua fora da tela: a cota é de duas sugestões.
+    expect(screen.queryByRole('button', { name: 'Adicionar Luzes' })).toBeNull()
+    // E a duração total é a soma das escolhidas — 30 + 20 + 10 = 60.
+    await waitFor(() => expect(slots.mock.calls.some((c) => c[1] === 60)).toBe(true))
   })
 
   it('adicionar marca e recalcula a duração na Agenda', async () => {
@@ -832,7 +888,7 @@ describe('extras: incluir outro serviço no mesmo horário', () => {
     expect(await screen.findByText('Seus dados')).toBeTruthy()
   })
 
-  it('se o catálogo tiver só este serviço, a etapa diz isso', async () => {
+  it('sem sugestão configurada a etapa diz que pode seguir', async () => {
     catalogo.mockResolvedValue({
       ...CATALOGO,
       destaques: [],
@@ -846,10 +902,11 @@ describe('extras: incluir outro serviço no mesmo horário', () => {
     escolherDia()
     fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
 
-    expect(
-      await screen.findByText(/único serviço do catálogo/i),
-    ).toBeTruthy()
+    expect(await screen.findByText(/Sem complementos por aqui/i)).toBeTruthy()
     expect(screen.queryByText('Outros serviços')).toBeNull()
+    // Seguir sem escolher nada é caminho livre.
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(await screen.findByText('Seus dados')).toBeTruthy()
   })
 })
 

@@ -1218,15 +1218,16 @@ function EtapaHorario({
 /**
  * "Quer completar seu atendimento?" — o "adicionar também".
  *
- * A pergunta aqui é "quero fazer mais alguma coisa hoje?", e a resposta honesta
- * é QUALQUER serviço do catálogo. A configuração `servicos.complementos` deixa
- * de ser uma lista fechada — quando estava vazia (que era o caso), a etapa não
- * oferecia nada e quem queria corte + barba + sobrancelha não tinha como pedir
- * os três. Agora a configuração decide a ORDEM de leitura: o que a casa sugeriu
- * vem primeiro, e o resto do catálogo vem logo abaixo.
+ * A pergunta é comercial, não de catálogo: no máximo DUAS sugestões, tiradas
+ * do que a casa configurou como complemento do serviço escolhido
+ * (`servicos.complementos`). Listar o resto do catálogo aqui transformava a
+ * etapa em vitrine; agora ela é recomendação contextualizada — e o serviço
+ * escolhido nunca volta a aparecer.
  *
- * Três coisas que fazem isso_reviewar bem em vez de virar uma lista de compras:
- *
+ *   • Duas no máximo. Com três opções a pessoa trava e a recomendação vira
+ *     lista de compras; quando há uma claramente melhor, é ela que aparece.
+ *   • Sem sugestão configurada a etapa não inventa extras: diz que pode
+ *     seguir e o "Continuar" continua livre.
  *   • NADA vem marcado. Extra pré-marcado é taxa escondida, e a pessoa
  *     descobriria o valor dobrado só no resumo.
  *   • O preço e a duração de cada extra aparecem na linha, e o total é
@@ -1247,16 +1248,17 @@ function EtapaComplementos({
 }: PropsEtapa) {
   const prosseguir = () => aoAvancar('dados')
   const base = catalogo.servicos.find((s) => s.nome === estado.servicoNome)
-  const { sugeridos, outros } = useMemo(
+  const { sugeridos } = useMemo(
     () => servicosAdicionais(catalogo.servicos, estado.servicoNome),
     [catalogo.servicos, estado.servicoNome],
   )
-  // O que a CASA marcou para este serviço vem primeiro; o resto do catálogo
-  // abaixo. A lista nunca fica vazia enquanto houver outro serviço cadastrado.
-  const grupos = [
-    { titulo: 'Sugestões da casa', itens: sugeridos },
-    { titulo: 'Outros serviços', itens: outros },
-  ].filter((g) => g.itens.length > 0)
+  // No máximo 2 sugestões, sempre as da casa. O resto do catálogo fica de
+  // fora: a etapa é recomendação, não vitrine. Sem sugestão configurada ela
+  // não inventa extras — só diz que pode seguir.
+  const grupos =
+    sugeridos.length > 0
+      ? [{ titulo: 'Sugestões da casa', itens: sugeridos.slice(0, 2) }]
+      : []
 
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
@@ -1266,7 +1268,7 @@ function EtapaComplementos({
         titulo="Quer completar seu atendimento?"
         descricao={
           grupos.length === 0
-            ? 'Este é o único serviço do catálogo por enquanto.'
+            ? 'Sem complementos por aqui. Você pode seguir em frente.'
             : `Além de ${base?.nome ?? 'o serviço escolhido'}, você pode incluir outro no mesmo horário. Nada é cobrado sem você escolher.`
         }
         voltar={aoVoltar}
