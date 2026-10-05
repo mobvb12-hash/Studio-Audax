@@ -54,22 +54,28 @@ vi.mock('@/services/supabase/agendaPublica', () => ({
   horariosPublicosPorProfissional: vi.fn(),
 }))
 
-vi.mock('@/modules/painel/regras', () => ({
-  navegarPainel: vi.fn(),
-  lerPreenchimento: vi.fn(() => controle.preenchimento),
-  limparPreenchimento: vi.fn(() => {
-    controle.preenchimento = null
-  }),
-  irParaAreaDoCliente: vi.fn(),
-  irParaAgendamentoOficial: vi.fn(),
-  lerRetomadaAgendamento: vi.fn(() => controle.rascunho),
-  limparRetomadaAgendamento: vi.fn(() => {
-    controle.rascunho = null
-  }),
-  salvarRetomadaAgendamento: vi.fn((estado: unknown) => {
-    controle.rascunho = estado
-  }),
-}))
+vi.mock('@/modules/painel/regras', async () => {
+  const actual = (await vi.importActual(
+    '@/modules/painel/regras',
+  )) as typeof import('@/modules/painel/regras')
+  return {
+    ...actual,
+    navegarPainel: vi.fn(),
+    lerPreenchimento: vi.fn(() => controle.preenchimento),
+    limparPreenchimento: vi.fn(() => {
+      controle.preenchimento = null
+    }),
+    irParaAreaDoCliente: vi.fn(),
+    irParaAgendamentoOficial: vi.fn(),
+    lerRetomadaAgendamento: vi.fn(() => controle.rascunho),
+    limparRetomadaAgendamento: vi.fn(() => {
+      controle.rascunho = null
+    }),
+    salvarRetomadaAgendamento: vi.fn((estado: unknown) => {
+      controle.rascunho = estado
+    }),
+  }
+})
 
 // O conteúdo do Club vem da configuração oficial; no teste, a casa não tem
 // nada configurado e a seção simplesmente não aparece (preferimos assim a
@@ -960,50 +966,75 @@ describe('identificação obrigatória (primeiro acesso)', () => {
     await screen.findByText('Horários disponíveis')
   }
 
-  it('sem conta, escolher o horário abre a porta em vez dos extras', async () => {
+  it('sem conta, passar pela etapa Extras leva à criação de acesso na Dados', async () => {
     controle.sessaoAtiva = false
     await ateHorario()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
 
+    expect(await screen.findByText('Quer completar seu atendimento?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+
     expect(await screen.findByText('Falta pouco')).toBeTruthy()
-    expect(screen.queryByText('Quer completar seu atendimento?')).toBeNull()
     // Nada é enviado ao banco antes de a pessoa ser identificada.
     expect(criar).not.toHaveBeenCalled()
   })
 
-  it('a porta oferece os dois caminhos da Área do Cliente', async () => {
+  it('a porta na Dados oferece os dois caminhos', async () => {
     controle.sessaoAtiva = false
     await ateHorario()
     fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+    await screen.findByText('Quer completar seu atendimento?')
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     await screen.findByText('Falta pouco')
 
     fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
-    expect(irParaCliente).toHaveBeenCalledWith('cadastrar')
+    expect(await screen.findByLabelText('Nome completo')).toBeTruthy()
+    expect(screen.getByLabelText('Telefone')).toBeTruthy()
+    expect(screen.getByLabelText('Email')).toBeTruthy()
+    expect(screen.getByLabelText('Data de nascimento')).toBeTruthy()
+    expect(screen.getByLabelText('Senha')).toBeTruthy()
+    expect(screen.getByLabelText('Confirmar senha')).toBeTruthy()
+
+    // Voltar devolve a escolha
+    fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
+    await waitFor(() => expect(screen.getByText('Falta pouco')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: 'Já tenho conta — entrar' }))
-    expect(irParaCliente).toHaveBeenCalledWith('entrar')
+    expect(await screen.findByLabelText('Email')).toBeTruthy()
+    expect(screen.getByLabelText('Senha')).toBeTruthy()
+  })
+
+  it('cadastro de conta valida presença dos campos obrigatórios primeiro', async () => {
+    controle.sessaoAtiva = false
+    await ateHorario()
+    fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+    await screen.findByText('Quer completar seu atendimento?')
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    await screen.findByText('Falta pouco')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Criar acesso e continuar' }),
+    )
+
+    expect(
+      await screen.findAllByText(/Informe seu nome completo/),
+    ).not.toHaveLength(0)
+    expect(criar).not.toHaveBeenCalled()
   })
 
   it('o horário escolhido é guardado; voltar devolve a escolha e descarta o rascunho', async () => {
     controle.sessaoAtiva = false
     await ateHorario()
     fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+    await screen.findByText('Quer completar seu atendimento?')
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     await screen.findByText('Falta pouco')
 
-    // O rascunho é a ponte para a Área do Cliente: é ele que faz a volta
-    // não obrigar a escolher tudo de novo.
-    expect(salvarRetomada).toHaveBeenCalledTimes(1)
-    expect(controle.rascunho).toMatchObject({ horario: '08:00' })
-
+    // Volta para a tela de extras ao clicar em Voltar
     fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
-
-    // De volta à grade, com o 08:00 ainda marcado — o portão não apagou nada.
-    await waitFor(() => expect(screen.getByText('Horários disponíveis')).toBeTruthy())
-    expect(
-      screen.getByRole('button', { name: 'Horário 08:00' }).getAttribute('aria-pressed'),
-    ).toBe('true')
-    expect(controle.rascunho).toBeNull()
+    expect(await screen.findByText('Quer completar seu atendimento?')).toBeTruthy()
   })
 
   it('quem volta já identificado cai direto nos extras, sem refazer nada', async () => {

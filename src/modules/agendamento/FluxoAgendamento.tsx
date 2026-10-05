@@ -21,8 +21,14 @@ import {
   lerRetomadaAgendamento,
   limparPreenchimento,
   limparRetomadaAgendamento,
+  mensagemErroCadastro,
+  nomeValido,
+  nascimentoValido,
   salvarRetomadaAgendamento,
+  senhaValida,
+  telefoneValido,
 } from '@/modules/painel/regras'
+import { mensagemErroEntrada } from '@/modules/auth/regras'
 import { clientePainel, obterMeuCadastro } from '@/services/supabase/painel'
 import { formatarBRL } from '@/lib/moeda'
 import {
@@ -433,20 +439,6 @@ export default function FluxoAgendamento() {
     const proximo = escolherHorarioEstado(estado, hora)
     setEstado(proximo)
     setErro('')
-    /*
-     * O portão fica aqui: logo após a escolha do horário, antes de falar de
-     * adicionais.
-     *
-     * Escolher custa nada a ninguém — é só um clique na tela. A identificação
-     * acontece quando a pessoa tenta IR, porque é nesse momento que uma
-     * reserva passa a preocupar alguém. O rascunho é gravado junto, para que
-     * a volta não obrigue a escolher tudo de novo.
-     */
-    if (identificacao !== 'autenticado') {
-      salvarRetomadaAgendamento(proximo)
-      setPortaoAberto(true)
-      return
-    }
     avancar('complementos')
   }
 
@@ -546,6 +538,17 @@ export default function FluxoAgendamento() {
       <EtapaIdentificacao
         identificacao={identificacao}
         aoDesistir={desistirDaIdentificacao}
+        aoIdentificado={(dados) => {
+          setIdentificacao('autenticado')
+          setPortaoAberto(false)
+          setEstado((atual) => ({
+            ...atual,
+            nome: dados.nome.trim() || atual.nome,
+            telefone: dados.telefone.trim() || atual.telefone,
+          }))
+          avancar('complementos')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }}
       />
     )
   }
@@ -577,6 +580,18 @@ export default function FluxoAgendamento() {
       aoRecomecar={recomecar}
       aoVoltar={voltar}
       aoAvancar={avancar}
+      identificacao={identificacao}
+      aoIdentificado={(dados) => {
+        setIdentificacao('autenticado')
+        setPortaoAberto(false)
+        setEstado((atual) => ({
+          ...atual,
+          nome: dados.nome.trim() || atual.nome,
+          telefone: dados.telefone.trim() || atual.telefone,
+        }))
+        if (etapa !== 'dados') avancar('complementos')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }}
       aoDefinir={(campo, novo) =>
         setEstado((atual) => ({ ...atual, [campo]: novo }))
       }
@@ -627,6 +642,8 @@ type PropsEtapa = {
   /** Avanço explícito: "Continuar" na etapa de complementos e de dados. */
   aoAvancar: (destino: Etapa) => void
   aoDefinir: (campo: 'nome' | 'telefone' | 'observacao', valor: string) => void
+  identificacao: 'verificando' | 'autenticado' | 'anonimo'
+  aoIdentificado: (dados: { nome: string; telefone: string }) => void
 }
 
 function EtapaConteudo(props: PropsEtapa) {
@@ -657,31 +674,167 @@ function EtapaConteudo(props: PropsEtapa) {
 function EtapaIdentificacao({
   identificacao,
   aoDesistir,
+  aoIdentificado,
 }: {
   identificacao: 'verificando' | 'autenticado' | 'anonimo'
   aoDesistir: () => void
+  aoIdentificado: (dados: { nome: string; telefone: string }) => void
 }) {
+  const [modo, setModo] = useState<'inicial' | 'cadastro' | 'entrar'>('inicial')
+  const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [processando, setProcessando] = useState(false)
+  const [tentou, setTentou] = useState(false)
+  const [form, setForm] = useState({
+    nome: '',
+    telefone: '',
+    email: '',
+    nascimento: '',
+    senha: '',
+    confirmarSenha: '',
+  })
+
+  async function criarConta() {
+    setTentou(true)
+    if (!nomeValido(form.nome)) {
+      setErro('Informe seu nome completo.')
+      return
+    }
+    if (!telefoneValido(form.telefone)) {
+      setErro('Informe um telefone válido com DDD.')
+      return
+    }
+    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) {
+      setErro('Informe um e-mail válido.')
+      return
+    }
+    if (!nascimentoValido(form.nascimento)) {
+      setErro('Informe uma data de nascimento válida (não pode ser futura).')
+      return
+    }
+    if (!senhaValida(form.senha)) {
+      setErro('A senha precisa de pelo menos 6 caracteres.')
+      return
+    }
+    if (form.senha !== form.confirmarSenha) {
+      setErro('As senhas não conferem.')
+      return
+    }
+
+    setErro('')
+    setAviso('')
+    setProcessando(true)
+    try {
+      const db = clientePainel()
+      if (!db) {
+        setErro('Disponível apenas com Supabase configurado.')
+        return
+      }
+      const sessao = await db.cadastrar({
+        nome: form.nome.trim(),
+        telefone: form.telefone.trim(),
+        email: form.email.trim(),
+        nascimento: form.nascimento.trim(),
+        senha: form.senha,
+      })
+      if (!sessao) {
+        setAviso('Conta criada. Confirme seu e-mail para ativar seu acesso.')
+        return
+      }
+      if (!(await db.confirmar())) {
+        setErro('Sua sessão expirou. Tente novamente.')
+        return
+      }
+      const vinculo = await db.vincular(
+        form.nome.trim(),
+        form.telefone.trim(),
+        form.nascimento.trim(),
+      )
+      if (!vinculo.clienteId) {
+        setErro('Não foi possível associar o perfil ao agendamento.')
+        return
+      }
+      aoIdentificado({ nome: form.nome.trim(), telefone: form.telefone.trim() })
+    } catch (erro) {
+      setErro(mensagemErroCadastro(erro))
+    } finally {
+      setProcessando(false)
+    }
+  }
+
+  async function entrar() {
+    setErro('')
+    setAviso('')
+    setProcessando(true)
+    try {
+      const db = clientePainel()
+      if (!db) {
+        setErro('Disponível apenas com Supabase configurado.')
+        return
+      }
+      await db.entrar(form.email.trim(), form.senha)
+      if (!(await db.confirmar())) {
+        setErro('Sua sessão expirou. Tente novamente.')
+        return
+      }
+      const cad = await obterMeuCadastro().catch(() => null)
+      aoIdentificado({
+        nome: cad && 'nome' in cad && cad.nome ? String(cad.nome) : '',
+        telefone:
+          cad && 'telefone' in cad && cad.telefone ? String(cad.telefone) : '',
+      })
+    } catch (erro) {
+      setErro(mensagemErroEntrada(erro))
+    } finally {
+      setProcessando(false)
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
       <Progresso etapa="horario" />
       <Tela
         etapa="horario"
-        titulo="Falta pouco"
-        descricao="Para reservar seu horário, entre na sua conta ou crie uma. É rápido, fica salvo para a próxima vez e você continua exatamente de onde parou."
-        voltar={aoDesistir}
+        titulo={
+          modo === 'inicial'
+            ? 'Falta pouco'
+            : modo === 'cadastro'
+              ? 'Crie seu acesso'
+              : 'Entrar'
+        }
+        descricao={
+          modo === 'inicial'
+            ? 'Para reservar seu horário, crie seu acesso ou entre na sua conta.'
+            : modo === 'cadastro'
+              ? 'Precisamos de alguns dados para criar sua conta.'
+              : 'Use seu e-mail e senha para continuar.'
+        }
+        voltar={modo === 'inicial' ? aoDesistir : () => setModo('inicial')}
       >
         {identificacao === 'verificando' ? (
           <Carregando texto="Verificando seu acesso…" />
-        ) : (
+        ) : modo === 'inicial' ? (
           <>
             <div className="flex flex-col gap-2.5">
               <Botao
                 variante="primario"
-                aoClicar={() => irParaAreaDoCliente('cadastrar')}
+                aoClicar={() => {
+                  setModo('cadastro')
+                  setTentou(false)
+                  setErro('')
+                  setAviso('')
+                }}
               >
                 Criar conta
               </Botao>
-              <Botao aoClicar={() => irParaAreaDoCliente('entrar')}>
+              <Botao
+                aoClicar={() => {
+                  setModo('entrar')
+                  setTentou(false)
+                  setErro('')
+                  setAviso('')
+                }}
+              >
                 Já tenho conta — entrar
               </Botao>
             </div>
@@ -689,6 +842,127 @@ function EtapaIdentificacao({
               Serviço, profissional, dia e horário já estão guardados. Depois de
               entrar, você volta direto para os adicionais e confirma a reserva.
             </p>
+          </>
+        ) : modo === 'cadastro' ? (
+          <>
+            {erro && <Aviso texto={erro} />}
+            {aviso && <Aviso texto={aviso} />}
+            <div className="flex flex-col gap-3">
+              <Campo
+                id="cadastro-nome"
+                rotulo="Nome completo"
+                valor={form.nome}
+                autoComplete="name"
+                aoMudar={(v) => setForm((c) => ({ ...c, nome: v }))}
+              />
+              <Campo
+                id="cadastro-fone"
+                rotulo="Telefone"
+                valor={form.telefone}
+                placeholder="(81) 99999-9999"
+                inputMode="tel"
+                autoComplete="tel"
+                aoMudar={(v) => setForm((c) => ({ ...c, telefone: v }))}
+              />
+              <Campo
+                id="cadastro-email"
+                rotulo="Email"
+                valor={form.email}
+                tipo="email"
+                autoComplete="email"
+                aoMudar={(v) => setForm((c) => ({ ...c, email: v }))}
+              />
+              <Campo
+                id="cadastro-nascimento"
+                rotulo="Data de nascimento"
+                valor={form.nascimento}
+                tipo="date"
+                aoMudar={(v) => setForm((c) => ({ ...c, nascimento: v }))}
+              />
+              <Campo
+                id="cadastro-senha"
+                rotulo="Senha"
+                valor={form.senha}
+                tipo="password"
+                autoComplete="new-password"
+                aoMudar={(v) => setForm((c) => ({ ...c, senha: v }))}
+              />
+              <Campo
+                id="cadastro-confirmar"
+                rotulo="Confirmar senha"
+                valor={form.confirmarSenha}
+                tipo="password"
+                autoComplete="new-password"
+                aoMudar={(v) => setForm((c) => ({ ...c, confirmarSenha: v }))}
+              />
+            </div>
+            {tentou && erro && (
+              <p role="alert" className="mt-3 text-[13px] text-red-700">
+                {erro}
+              </p>
+            )}
+            <div className="mt-5">
+              <Botao
+                variante="primario"
+                desabilitado={processando}
+                aoClicar={criarConta}
+              >
+                {processando ? 'Criando…' : 'Criar acesso e continuar'}
+              </Botao>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setModo('entrar')
+                setErro('')
+                setAviso('')
+              }}
+              className="mt-3 text-[13px] font-medium text-gold-700 underline-offset-2 hover:underline"
+            >
+              Já tenho conta — entrar
+            </button>
+          </>
+        ) : (
+          <>
+            {erro && <Aviso texto={erro} />}
+            <div className="flex flex-col gap-3">
+              <Campo
+                id="entrar-email"
+                rotulo="Email"
+                valor={form.email}
+                tipo="email"
+                autoComplete="email"
+                aoMudar={(v) => setForm((c) => ({ ...c, email: v }))}
+              />
+              <Campo
+                id="entrar-senha"
+                rotulo="Senha"
+                valor={form.senha}
+                tipo="password"
+                autoComplete="current-password"
+                aoMudar={(v) => setForm((c) => ({ ...c, senha: v }))}
+              />
+            </div>
+            <div className="mt-5">
+              <Botao
+                variante="primario"
+                desabilitado={processando}
+                aoClicar={entrar}
+              >
+                {processando ? 'Entrando…' : 'Entrar e continuar'}
+              </Botao>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setModo('cadastro')
+                setErro('')
+                setAviso('')
+              }}
+              className="mt-3 text-[13px] font-medium text-gold-700 underline-offset-2 hover:underline"
+            >
+              Criar conta
+            </button>
           </>
         )}
       </Tela>
@@ -1090,9 +1364,30 @@ function EtapaComplementos({
   )
 }
 
-function EtapaDados({ estado, erro, aoDefinir, aoVoltar, aoAvancar }: PropsEtapa) {
+function EtapaDados({
+  estado,
+  erro,
+  aoDefinir,
+  aoVoltar,
+  aoAvancar,
+  identificacao,
+  aoIdentificado,
+}: PropsEtapa) {
   const [tentou, setTentou] = useState(false)
   const valido = dadosValidos(estado)
+
+  // A conta é pré-condição para reservar; se ainda não temos sessão, aqui
+  // mesmo acontece o login ou o cadastro completo com e-mail + senha.
+  if (identificacao !== 'autenticado') {
+    return (
+      <EtapaIdentificacao
+        identificacao={identificacao}
+        aoDesistir={aoVoltar}
+        aoIdentificado={aoIdentificado}
+      />
+    )
+  }
+
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-6 pb-16 sm:px-6">
       <Progresso etapa="dados" />
