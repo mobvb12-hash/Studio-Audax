@@ -157,6 +157,20 @@ function salvo(chave: string): unknown[] {
   return JSON.parse(localStorage.getItem(chave) ?? '[]')
 }
 
+/** Simula um aparelho que já sincronizou antes (marca presente). */
+function marcarComoSincronizado(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, '2020-01-01T00:00:00.000Z')
+  }
+}
+
+/** Marca já concluída agora: carimbo do registro é anterior → resquício. */
+function marcarComoSincronizadoAgora(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, new Date().toISOString())
+  }
+}
+
 beforeEach(() => {
   localStorage.clear()
   limparAvisosPersistencia()
@@ -183,6 +197,9 @@ describe('Caixa — lançamentos no Supabase', () => {
       servico: 'Corte',
       criadoEm: '2026-03-10T13:00:00.000Z',
     }
+    // pendência legítima: já houve sincronização antes e o registro é
+    // posterior à marca
+    marcarComoSincronizado(CHAVE_LANCAMENTOS)
     localStorage.setItem(CHAVE_LANCAMENTOS, JSON.stringify([existente]))
 
     montar()
@@ -191,6 +208,77 @@ describe('Caixa — lançamentos no Supabase', () => {
     expect((remoto.lancamentos[0] as { id: string }).id).toBe('lan-1')
     expect(ctx.lancamentos).toHaveLength(1)
     expect(avisosPersistencia()).toEqual([])
+  })
+
+  it('J — lançamento anterior à última sincronização não volta (resquício fica no snapshot)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarLancamentos } = await import('@/services/supabase/caixa')
+    marcarComoSincronizadoAgora(CHAVE_LANCAMENTOS)
+    localStorage.setItem(
+      CHAVE_LANCAMENTOS,
+      JSON.stringify([
+        {
+          id: 'lan-7',
+          tipo: 'receita',
+          origem: 'atendimento',
+          data: DIA,
+          hora: '10:00',
+          descricao: 'Receita antiga',
+          valor: 70,
+          desconto: 0,
+          valorLiquido: 70,
+          formaPagamento: 'pix',
+          cliente: 'Ana',
+          profissional: 'Cleiton',
+          servico: 'Corte',
+          criadoEm: '2026-03-10T13:00:00.000Z',
+        } satisfies Lancamento,
+      ]),
+    )
+
+    montar()
+
+    await waitFor(() => expect(ctx.lancamentos).toEqual([]))
+    expect(remoto.lancamentos).toHaveLength(0)
+    expect(importarLancamentos).not.toHaveBeenCalled()
+    expect(
+      Object.keys(localStorage).filter((c) =>
+        c.startsWith(`${CHAVE_LANCAMENTOS}:backup:`),
+      ),
+    ).toHaveLength(1)
+    aviso.mockRestore()
+  })
+
+  it('J — marca inexistente: lançamento local não é enviado', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarLancamentos } = await import('@/services/supabase/caixa')
+    const existente: Lancamento = {
+      id: 'lan-8',
+      tipo: 'receita',
+      origem: 'atendimento',
+      data: DIA,
+      hora: '10:00',
+      descricao: 'Receita recente',
+      valor: 70,
+      desconto: 0,
+      valorLiquido: 70,
+      formaPagamento: 'pix',
+      cliente: 'Ana',
+      profissional: 'Cleiton',
+      servico: 'Corte',
+      criadoEm: '2026-03-10T13:00:00.000Z',
+    }
+    localStorage.setItem(CHAVE_LANCAMENTOS, JSON.stringify([existente]))
+
+    montar()
+
+    await waitFor(() => expect(ctx.lancamentos).toEqual([]))
+    expect(remoto.lancamentos).toHaveLength(0)
+    expect(importarLancamentos).not.toHaveBeenCalled()
+    expect(
+      localStorage.getItem(`${CHAVE_LANCAMENTOS}:sincronizado_em:v1`),
+    ).not.toBeNull()
+    aviso.mockRestore()
   })
 
   it('criar pagamento grava local e envia com o mesmo id (sem duplicar)', async () => {
@@ -222,6 +310,7 @@ describe('Caixa — lançamentos no Supabase', () => {
       formaPagamento: 'dinheiro',
       criadoEm: '2026-03-10T12:00:00.000Z',
     }
+    marcarComoSincronizado(CHAVE_LANCAMENTOS)
     localStorage.setItem(CHAVE_LANCAMENTOS, JSON.stringify([existente]))
     // o servidor ainda não tem o lançamento (primeira carga falha ao enviar)
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})

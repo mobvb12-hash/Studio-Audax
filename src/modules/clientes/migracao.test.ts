@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ultimaSincronizacao } from '@/lib/persistencia'
 import type { Cliente } from './types'
 import * as repositorio from '@/services/supabase/clientes'
 import {
@@ -93,6 +94,12 @@ function chavesBackup(): string[] {
 
 beforeEach(() => {
   localStorage.clear()
+  // aparelho que já sincronizou antes: fixtures (2025/2026) são posteriores
+  // à marca e, portanto, pendências legítimas de reenvio
+  localStorage.setItem(
+    `${CHAVE_STORAGE_CLIENTES}:sincronizado_em:v1`,
+    '2020-01-01T00:00:00.000Z',
+  )
   remoto.reiniciar()
   vi.clearAllMocks()
 })
@@ -342,5 +349,201 @@ describe('Clientes — migração localStorage → Supabase', () => {
     expect(relatorio.clientes).toEqual([localAntigo])
     expect(remoto.linhas[0]).toMatchObject({ nome: 'Ana Versão Remota' })
     vi.restoreAllMocks()
+  })
+})
+
+/**
+ * Local-only e a marca de sincronização: a régua que separa pendência legítima
+ * (carimbo posterior à última integração concluída) de resquício (carimbo
+ * anterior ou igual — registro apagado no servidor).
+ */
+describe('Clientes — marca de sincronização e resquícios', () => {
+  const MARCA = '2026-06-01T00:00:00.000Z'
+  const CHAVE_MARCA = `${CHAVE_STORAGE_CLIENTES}:sincronizado_em:v1`
+
+  /** Snapshot mais recente gravado pela migração. */
+  function ultimoSnapshot(): Cliente[] {
+    return JSON.parse(localStorage.getItem(chavesBackup().at(-1)!) ?? '[]')
+  }
+
+  it('A — local-only anterior à marca não volta: é descartado e fica no snapshot', async () => {
+    localStorage.setItem(CHAVE_MARCA, MARCA)
+
+    const relatorio = await migrarClientes([
+      cliente('cli-1', 'Ana Dias', { atualizadoEm: '2026-01-01T00:00:00.000Z' }),
+    ])
+
+    expect(repositorio.importarClientes).not.toHaveBeenCalled()
+    expect(remoto.linhas).toHaveLength(0)
+    expect(relatorio.inseridos).toBe(0)
+    expect(relatorio.atualizados).toBe(0)
+    expect(relatorio.descartados).toEqual(['cli-1'])
+    expect(relatorio.ignorados).toBe(1)
+    expect(relatorio.ok).toBe(true)
+    // sai da lista oficial…
+    expect(relatorio.clientes).toEqual([])
+    // …mas está preservado no snapshot
+    expect(chavesBackup()).toHaveLength(1)
+    expect(ultimoSnapshot().map((c) => c.id)).toEqual(['cli-1'])
+  })
+
+  it('B — pendência posterior à marca é enviada e a marca avança', async () => {
+    localStorage.setItem(CHAVE_MARCA, MARCA)
+    const posterior = cliente('cli-1', 'Ana Dias', {
+      atualizadoEm: '2026-07-01T00:00:00.000Z',
+    })
+
+    const relatorio = await migrarClientes([posterior])
+
+    expect(relatorio.inseridos).toBe(1)
+    expect(relatorio.descartados).toEqual([])
+    expect(remoto.linhas.map((l) => (l as Cliente).id)).toEqual(['cli-1'])
+    expect(ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)).not.toBe(MARCA)
+  })
+
+  it('C — marca inexistente é conservadora: nada local-only é enviado', async () => {
+    localStorage.removeItem(CHAVE_MARCA)
+
+    const relatorio = await migrarClientes([
+      cliente('cli-1', 'Ana Dias'),
+      cliente('cli-2', 'Bruno'),
+    ])
+
+    expect(repositorio.importarClientes).not.toHaveBeenCalled()
+    expect(remoto.linhas).toHaveLength(0)
+    expect(relatorio.descartados).toEqual(['cli-1', 'cli-2'])
+    expect(relatorio.ignorados).toBe(2)
+    // preservados no snapshot
+    expect(ultimoSnapshot().map((c) => c.id)).toEqual(['cli-1', 'cli-2'])
+    // a marca só existe depois da sincronização concluída
+    expect(ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)).not.toBeNull()
+  })
+
+  it('D — envio parcial não avança a marca: a pendência segue para a próxima carga', async () => {
+    localStorage.setItem(CHAVE_MARCA, MARCA)
+    const pendente = cliente('cli-1', 'Ana Dias', {
+      atualizadoEm: '2026-07-01T00:00:00.000Z',
+    })
+    remoto.falhaEscrita = true
+
+    const primeira = await migrarClientes([pendente])
+
+    expect(primeira.ok).toBe(false)
+    expect(ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)).toBe(MARCA)
+
+    remoto.falhaEscrita = false
+    const segunda = await migrarClientes([pendente])
+
+    expect(segunda.inseridos).toBe(1)
+    expect(ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)).not.toBe(MARCA)
+  })
+
+  it('E — falha de snapshot não envia, não descarta e não avança a marca', async () => {
+    localStorage.setItem(CHAVE_MARCA, MARCA)
+    const resquicio = cliente('cli-1', 'Ana Dias', {
+      atualizadoEm: '2026-01-01T00:00:00.000Z',
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new Error('quota cheia')
+    })
+
+    const relatorio = await migrarClientes([resquicio])
+
+    expect(relatorio.ok).toBe(false)
+    expect(repositorio.importarClientes).not.toHaveBeenCalled()
+    // não descartou nada: o resquício continua visível
+    expect(relatorio.descartados).toEqual([])
+    expect(relatorio.clientes.map((c) => c.id)).toEqual(['cli-1'])
+    expect(ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)).toBe(MARCA)
+    vi.restoreAllMocks()
+  })
+
+  it('F — mesmo id local e remoto não duplica nem reenvia', async () => {
+    localStorage.setItem(CHAVE_MARCA, MARCA)
+    remoto.linhas = [cliente('cli-1', 'Ana Dias')]
+
+    const relatorio = await migrarClientes([cliente('cli-1', 'Ana Dias')])
+
+    expect(repositorio.importarClientes).not.toHaveBeenCalled()
+    expect(remoto.linhas).toHaveLength(1)
+    expect(relatorio.inseridos).toBe(0)
+    expect(relatorio.atualizados).toBe(0)
+    expect(relatorio.descartados).toEqual([])
+  })
+
+  it('G — alteração local legítima (divergência) continua sincronizando', async () => {
+    localStorage.setItem(CHAVE_MARCA, MARCA)
+    remoto.linhas = [
+      cliente('cli-1', 'Nome Antigo', {
+        atualizadoEm: '2026-01-01T00:00:00.000Z',
+      }),
+    ]
+
+    const relatorio = await migrarClientes([
+      cliente('cli-1', 'Nome Novo', { atualizadoEm: '2026-07-01T00:00:00.000Z' }),
+    ])
+
+    expect(relatorio.atualizados).toBe(1)
+    expect(remoto.linhas).toHaveLength(1)
+    expect((remoto.linhas[0] as Cliente).nome).toBe('Nome Novo')
+  })
+
+  it('I — dado orgânico recente (carimbo de agora) continua sincronizando', async () => {
+    const agora = new Date().toISOString()
+    localStorage.setItem(CHAVE_MARCA, new Date(Date.now() - 60_000).toISOString())
+
+    const relatorio = await migrarClientes([
+      cliente('cli-1', 'Atendimento de hoje', {
+        criadoEm: agora,
+        atualizadoEm: agora,
+      }),
+    ])
+
+    expect(relatorio.inseridos).toBe(1)
+    expect(relatorio.descartados).toEqual([])
+  })
+
+  it('H — apagado no servidor não volta pela cópia antiga, e alteração posterior continua indo', async () => {
+    // 1) registro existe no localStorage e é sincronizado (pendência legítima:
+    //    já havia marca anterior e o carimbo é posterior a ela)
+    localStorage.setItem(CHAVE_MARCA, '2020-01-01T00:00:00.000Z')
+    const original = cliente('cli-7', 'Cliente Apagado No Servidor', {
+      atualizadoEm: '2026-02-01T00:00:00.000Z',
+    })
+    const primeira = await migrarClientes([original])
+
+    expect(primeira.inseridos).toBe(1)
+    expect(remoto.linhas).toHaveLength(1)
+    const marcaConcluida = ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)
+    expect(marcaConcluida).not.toBeNull()
+
+    // 2) registro apagado remotamente; a cópia antiga continua no localStorage
+    remoto.linhas = []
+
+    // 3) painel abre de novo e a sincronização roda
+    const segunda = await migrarClientes([original])
+
+    // 4) o registro NÃO pode voltar
+    expect(repositorio.importarClientes).toHaveBeenCalledTimes(1)
+    expect(remoto.linhas).toHaveLength(0)
+    expect(segunda.inseridos).toBe(0)
+    expect(segunda.descartados).toEqual(['cli-7'])
+    expect(segunda.clientes).toEqual([])
+    // preservado no snapshot, para conferência
+    expect(ultimoSnapshot().map((c) => c.id)).toEqual(['cli-7'])
+    // a marca segue gravada (leitura ok, nada pendente a reenviar)
+    expect(
+      (ultimaSincronizacao(CHAVE_STORAGE_CLIENTES) ?? '') >= (marcaConcluida ?? ''),
+    ).toBe(true)
+
+    // 5) alteração local posterior à marca continua indo para o servidor
+    const alterado = cliente('cli-7', 'Cliente Apagado No Servidor', {
+      atualizadoEm: new Date().toISOString(),
+    })
+    const terceira = await migrarClientes([alterado])
+
+    expect(terceira.inseridos).toBe(1)
+    expect(remoto.linhas).toHaveLength(1)
+    expect((remoto.linhas[0] as Cliente).id).toBe('cli-7')
   })
 })

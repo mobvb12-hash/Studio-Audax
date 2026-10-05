@@ -185,6 +185,20 @@ function salvo(chave: string): unknown[] {
   return JSON.parse(localStorage.getItem(chave) ?? '[]')
 }
 
+/** Simula um aparelho que já sincronizou antes (marca presente). */
+function marcarComoSincronizado(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, '2020-01-01T00:00:00.000Z')
+  }
+}
+
+/** Marca já concluída agora: carimbo do registro é anterior → resquício. */
+function marcarComoSincronizadoAgora(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, new Date().toISOString())
+  }
+}
+
 beforeEach(() => {
   localStorage.clear()
   limparAvisosPersistencia()
@@ -195,6 +209,9 @@ beforeEach(() => {
 
 describe('Agenda — agendamentos', () => {
   it('agenda local ausente no remoto é enviada (migração do que já existe)', async () => {
+    // pendência legítima: já houve sincronização antes e o registro é
+    // posterior à marca
+    marcarComoSincronizado(CHAVE_AGENDAMENTOS, CHAVE_BLOQUEIOS)
     localStorage.setItem(CHAVE_AGENDAMENTOS, JSON.stringify([agendamento()]))
 
     montar()
@@ -203,6 +220,41 @@ describe('Agenda — agendamentos', () => {
     expect(remoto.ids(remoto.agendamentos)).toEqual(['ag-1'])
     expect(ctx.agendamentos).toHaveLength(1)
     expect(avisosPersistencia()).toEqual([])
+  })
+
+  it('J — agendamento anterior à última sincronização não volta (resquício fica no snapshot)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarAgendamentos } = await import('@/services/supabase/agenda')
+    marcarComoSincronizadoAgora(CHAVE_AGENDAMENTOS, CHAVE_BLOQUEIOS)
+    localStorage.setItem(CHAVE_AGENDAMENTOS, JSON.stringify([agendamento()]))
+
+    montar()
+
+    await waitFor(() => expect(ctx.agendamentos).toEqual([]))
+    expect(remoto.agendamentos).toHaveLength(0)
+    expect(importarAgendamentos).not.toHaveBeenCalled()
+    expect(
+      Object.keys(localStorage).filter((c) =>
+        c.startsWith(`${CHAVE_AGENDAMENTOS}:backup:`),
+      ),
+    ).toHaveLength(1)
+    aviso.mockRestore()
+  })
+
+  it('J — marca inexistente: agendamento local não é enviado', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarAgendamentos } = await import('@/services/supabase/agenda')
+    localStorage.setItem(CHAVE_AGENDAMENTOS, JSON.stringify([agendamento()]))
+
+    montar()
+
+    await waitFor(() => expect(ctx.agendamentos).toEqual([]))
+    expect(remoto.agendamentos).toHaveLength(0)
+    expect(importarAgendamentos).not.toHaveBeenCalled()
+    expect(
+      localStorage.getItem(`${CHAVE_AGENDAMENTOS}:sincronizado_em:v1`),
+    ).not.toBeNull()
+    aviso.mockRestore()
   })
 
   it('criar agendamento grava local e envia com o mesmo id', async () => {
@@ -432,6 +484,7 @@ describe('Agenda — agendamentos', () => {
   })
 
   it('reenviar a mesma agenda não duplica agendamento nem altera a agenda', async () => {
+    marcarComoSincronizado(CHAVE_AGENDAMENTOS, CHAVE_BLOQUEIOS)
     localStorage.setItem(CHAVE_AGENDAMENTOS, JSON.stringify([agendamento()]))
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
     remoto.falhaEscrita = true

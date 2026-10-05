@@ -137,6 +137,30 @@ function salvo(chave: string): unknown[] {
   return JSON.parse(localStorage.getItem(chave) ?? '[]')
 }
 
+/** Chaves de snapshot (`:backup:`) gravadas pela integração. */
+function chavesSnapshot(chave: string): string[] {
+  return Object.keys(localStorage).filter((k) => k.startsWith(`${chave}:backup:`))
+}
+
+/** Marca de sincronização: simula um aparelho que já integrou antes. */
+function marcarComoSincronizado(
+  ...chaves: string[]
+): void {
+  const quando = '2020-01-01T00:00:00.000Z'
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, quando)
+  }
+}
+
+function marcaDe(chave: string): string | null {
+  return localStorage.getItem(`${chave}:sincronizado_em:v1`)
+}
+
+/** Marca já avanzada (pós-carga), para simular "carimbo anterior à marca". */
+function marcarComoSincronizadoAgora(chave: string): void {
+  localStorage.setItem(`${chave}:sincronizado_em:v1`, new Date().toISOString())
+}
+
 beforeEach(() => {
   localStorage.clear()
   limparAvisosPersistencia()
@@ -148,6 +172,9 @@ beforeEach(() => {
 
 describe('Produtos — integração com o Supabase', () => {
   it('produto local ausente no remoto é enviado (migração do que já existe)', async () => {
+    // pendência legítima: este aparelho já sincronizou antes (marca presente)
+    // e o produto é posterior à última integração concluída
+    marcarComoSincronizado(CHAVE_PRODUTOS)
     localStorage.setItem(CHAVE_PRODUTOS, JSON.stringify([produto()]))
 
     montar()
@@ -156,6 +183,75 @@ describe('Produtos — integração com o Supabase', () => {
     expect(remoto.ids(remoto.produtos)).toEqual(['pro-1'])
     expect(ctxProdutos.produtos).toHaveLength(1)
     expect(avisosPersistencia()).toEqual([])
+  })
+
+  it('A — produto anterior à última sincronização não volta: é descartado e fica no snapshot', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // carimbo do produto (2026-04-01) é ANTERIOR à marca
+    marcarComoSincronizadoAgora(CHAVE_PRODUTOS)
+    localStorage.setItem(CHAVE_PRODUTOS, JSON.stringify([produto()]))
+
+    montar()
+
+    await waitFor(() => expect(ctxProdutos.produtos).toEqual([]))
+    expect(remoto.produtos).toHaveLength(0)
+    const { importarProdutos } = await import('@/services/supabase/produtos')
+    expect(importarProdutos).not.toHaveBeenCalled()
+    expect(chavesSnapshot(CHAVE_PRODUTOS)).toHaveLength(1)
+    aviso.mockRestore()
+  })
+
+  it('C — marca inexistente é conservadora: produto local não é enviado', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    localStorage.setItem(CHAVE_PRODUTOS, JSON.stringify([produto()]))
+
+    montar()
+
+    await waitFor(() => expect(ctxProdutos.produtos).toEqual([]))
+    expect(remoto.produtos).toHaveLength(0)
+    expect(chavesSnapshot(CHAVE_PRODUTOS)).toHaveLength(1)
+    // a marca só é gravada depois da carga concluída
+    expect(marcaDe(CHAVE_PRODUTOS)).not.toBeNull()
+    aviso.mockRestore()
+  })
+
+  it('H — produto apagado no servidor não volta pela cópia antiga, e criação posterior continua indo', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarProdutos } = await import('@/services/supabase/produtos')
+
+    // 1) existe no local e no servidor; a carga envia e marca a sincronização
+    marcarComoSincronizado(CHAVE_PRODUTOS)
+    localStorage.setItem(CHAVE_PRODUTOS, JSON.stringify([produto()]))
+    const primeira = montar()
+    await waitFor(() => expect(remoto.produtos).toHaveLength(1))
+    const marca = marcaDe(CHAVE_PRODUTOS)
+    expect(marca).not.toBeNull()
+    primeira.unmount()
+
+    // 2) produto apagado remotamente; a cópia antiga continua no localStorage
+    remoto.produtos = []
+
+    // 3) o painel abre de novo e a sincronização roda
+    const segunda = montar()
+    await waitFor(() => expect(ctxProdutos.produtos).toEqual([]))
+
+    // 4) o produto NÃO pode voltar
+    expect(remoto.produtos).toHaveLength(0)
+    expect(importarProdutos).toHaveBeenCalledTimes(1) // só a 1ª carga
+    expect(chavesSnapshot(CHAVE_PRODUTOS).length).toBeGreaterThanOrEqual(1)
+
+    // 5) criação local posterior à marca continua indo para o servidor
+    segunda.unmount()
+    const agora = new Date().toISOString()
+    localStorage.setItem(
+      CHAVE_PRODUTOS,
+      JSON.stringify([produto({ criadoEm: agora, atualizadoEm: agora })]),
+    )
+    montar()
+
+    await waitFor(() => expect(remoto.produtos).toHaveLength(1))
+    expect(remoto.ids(remoto.produtos)).toEqual(['pro-1'])
+    aviso.mockRestore()
   })
 
   it('criar produto grava local e envia com o mesmo id', async () => {
@@ -353,6 +449,71 @@ describe('Estoque — integração com o Supabase', () => {
     await waitFor(() => expect(ctxEstoque.movimentacoes).toHaveLength(1))
     expect(ctxProdutos.porId(produtoId)?.estoque).toBe(15)
     expect(remoto.movimentacoes).toHaveLength(1)
+  })
+
+  it('J — movimentação anterior à última sincronização não volta (resquício fica no snapshot)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarMovimentacoes } = await import('@/services/supabase/estoque')
+    marcarComoSincronizadoAgora(CHAVE_ESTOQUE)
+    localStorage.setItem(
+      CHAVE_ESTOQUE,
+      JSON.stringify([
+        {
+          id: 'mov-7',
+          tipo: 'entrada',
+          produtoId: 'pro-1',
+          produto: 'Pomada',
+          quantidade: 5,
+          custoUnitario: 12,
+          data: '2026-04-02',
+          hora: '10:00',
+          origem: 'manual',
+          estoqueAntes: 10,
+          estoqueDepois: 15,
+          criadoEm: '2026-04-02T12:00:00.000Z',
+        } as MovimentacaoEstoque,
+      ]),
+    )
+
+    montar()
+
+    await waitFor(() => expect(ctxEstoque.movimentacoes).toEqual([]))
+    expect(remoto.movimentacoes).toHaveLength(0)
+    expect(importarMovimentacoes).not.toHaveBeenCalled()
+    expect(chavesSnapshot(CHAVE_ESTOQUE)).toHaveLength(1)
+    aviso.mockRestore()
+  })
+
+  it('J — marca inexistente: movimentação local não é enviada', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarMovimentacoes } = await import('@/services/supabase/estoque')
+    localStorage.setItem(
+      CHAVE_ESTOQUE,
+      JSON.stringify([
+        {
+          id: 'mov-8',
+          tipo: 'entrada',
+          produtoId: 'pro-1',
+          produto: 'Pomada',
+          quantidade: 5,
+          custoUnitario: 12,
+          data: '2026-04-02',
+          hora: '10:00',
+          origem: 'manual',
+          estoqueAntes: 10,
+          estoqueDepois: 15,
+          criadoEm: '2026-04-02T12:00:00.000Z',
+        } as MovimentacaoEstoque,
+      ]),
+    )
+
+    montar()
+
+    await waitFor(() => expect(ctxEstoque.movimentacoes).toEqual([]))
+    expect(remoto.movimentacoes).toHaveLength(0)
+    expect(importarMovimentacoes).not.toHaveBeenCalled()
+    expect(marcaDe(CHAVE_ESTOQUE)).not.toBeNull()
+    aviso.mockRestore()
   })
 
   it('PDV: a mesma venda processada duas vezes baixa o estoque uma vez só', async () => {

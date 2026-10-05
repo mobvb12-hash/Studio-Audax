@@ -12,7 +12,9 @@ import { normalizarTexto } from '@/lib/moeda'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
+  marcarSincronizacao,
   salvarJSON,
+  ultimaSincronizacao,
 } from '@/lib/persistencia'
 import { supabase } from '@/lib/supabase'
 import { useCaixa } from '@/modules/caixa/store'
@@ -208,6 +210,8 @@ type Integracao<T extends Registro> = {
   assinatura: (registro: T) => string
   /** Em divergência, quem vence é o mais recente por `atualizadoEm` */
   maisRecente: (a: T, b: T) => boolean
+  /** instante que define pendência legítima para esta lista */
+  carimbo: (registro: T) => string
   importar: (lista: T[]) => Promise<number>
   ordenar: (lista: T[]) => T[]
 }
@@ -217,6 +221,11 @@ type Integracao<T extends Registro> = {
  * a agenda enviada três vezes continua sendo a mesma agenda. Em divergência
  * vence o registro mais recente por `atualizadoEm` (mesma regra de produtos e
  * serviços); o perdedor vai para o snapshot.
+ *
+ * Registro local ausente no servidor só é reenviado quando é pendência
+ * legítima — carimbo posterior à última sincronização concluída desta lista.
+ * O resto é resquício (apagado no banco): sai da lista, fica no snapshot e
+ * NUNCA é reenviado.
  */
 async function integrar<T extends Registro>({
   rotulo,
@@ -225,21 +234,30 @@ async function integrar<T extends Registro>({
   remotos,
   assinatura,
   maisRecente,
+  carimbo: carimboDe,
   importar,
   ordenar: ordenarLista,
 }: Integracao<T>): Promise<T[]> {
+  const marcaAnterior = ultimaSincronizacao(chave)
   const remotoPorId = new Map(remotos.map((registro) => [registro.id, registro]))
   const porId = new Map<string, T>()
   const ordem: string[] = []
   const enviar: T[] = []
   const perdedores: T[] = []
+  const descartados: T[] = []
 
   for (const local of locais) {
     const remoto = remotoPorId.get(local.id)
     if (!remoto) {
-      porId.set(local.id, local)
-      ordem.push(local.id)
-      enviar.push(local)
+      const pendente =
+        marcaAnterior !== null && carimboDe(local) > marcaAnterior
+      if (pendente) {
+        porId.set(local.id, local)
+        ordem.push(local.id)
+        enviar.push(local)
+      } else {
+        descartados.push(local)
+      }
       continue
     }
     porId.set(local.id, remoto)
@@ -259,7 +277,11 @@ async function integrar<T extends Registro>({
     ordem.push(remoto.id)
   }
 
-  if (perdedores.length > 0 && !criarSnapshot(chave, perdedores)) {
+  const precisaSnapshot = perdedores.length > 0 || descartados.length > 0
+  const snapshotOk =
+    !precisaSnapshot || criarSnapshot(chave, [...descartados, ...perdedores])
+
+  if (perdedores.length > 0 && !snapshotOk) {
     const divergentes = new Set(perdedores.map((registro) => registro.id))
     for (let i = enviar.length - 1; i >= 0; i--) {
       if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
@@ -269,18 +291,40 @@ async function integrar<T extends Registro>({
     )
   }
 
+  if (descartados.length > 0) {
+    if (snapshotOk) {
+      console.warn(
+        `[agenda] ${descartados.length} registro(s) local(is) ausente(s) no Supabase (${rotulo}): descartado(s) como resquício e preservado(s) em snapshot.`,
+      )
+    } else {
+      for (const registro of descartados) {
+        if (porId.has(registro.id)) continue
+        porId.set(registro.id, registro)
+        ordem.push(registro.id)
+      }
+      console.warn(
+        `[agenda] snapshot indisponível — resquícios de ${rotulo} mantidos na lista e sem envio.`,
+      )
+    }
+  }
+
+  let envioCompleto = true
   if (enviar.length > 0) {
     try {
       const enviados = await importar(enviar)
       if (enviados < enviar.length) {
+        envioCompleto = false
         console.warn(
           `[agenda] envio incompleto de ${rotulo}: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
         )
       }
     } catch (erro) {
+      envioCompleto = false
       console.warn(`[agenda] falha ao enviar ${rotulo} para o Supabase.`, erro)
     }
   }
+
+  if (envioCompleto && snapshotOk) marcarSincronizacao(chave)
 
   return ordenarLista(
     ordem
@@ -292,14 +336,14 @@ async function integrar<T extends Registro>({
 /**
  * Junta a lista oficial com o que a tela fez durante a carga: mudança da sessão
  * vence, registro criado no meio da carga não some e remoção da sessão é
- * respeitada. Em instalação nova só o que a sessão alterou acompanha.
+ * respeitada. Quem não está na base e não foi alterado nesta sessão é resquício
+ * (apagado no Supabase) e não volta para a lista.
  */
 function fundir<T extends Registro>(
   base: T[],
   atual: T[],
   alterados: Set<string>,
   removidos: Set<string>,
-  instalacaoNova: boolean,
   ordenarLista: (lista: T[]) => T[],
 ): T[] {
   const porId = new Map(base.map((registro) => [registro.id, registro]))
@@ -309,12 +353,7 @@ function fundir<T extends Registro>(
     if (alterados.has(registro.id)) {
       if (!porId.has(registro.id)) ordem.push(registro.id)
       porId.set(registro.id, registro)
-      continue
     }
-    if (porId.has(registro.id)) continue
-    if (instalacaoNova) continue
-    ordem.push(registro.id)
-    porId.set(registro.id, registro)
   }
   for (const id of removidos) {
     porId.delete(id)
@@ -374,6 +413,7 @@ async function integrarAgenda(
       maisRecente: (local, remoto) =>
         (local.atualizadoEm ?? local.criadoEm) >
         (remoto.atualizadoEm ?? remoto.criadoEm),
+      carimbo: (agendamento) => agendamento.atualizadoEm ?? agendamento.criadoEm,
       importar: importarAgendamentos,
       ordenar,
     }),
@@ -386,6 +426,7 @@ async function integrarAgenda(
       maisRecente: (local, remoto) =>
         (local.atualizadoEm ?? local.criadoEm) >
         (remoto.atualizadoEm ?? remoto.criadoEm),
+      carimbo: (bloqueio) => bloqueio.atualizadoEm ?? bloqueio.criadoEm,
       importar: importarBloqueios,
       ordenar: ordenarBloqueios,
     }),
@@ -570,7 +611,6 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
             atual,
             alteradosAgendamentos.current,
             removidosAgendamentos.current,
-            instalacaoNova,
             ordenar,
           ),
         )
@@ -580,7 +620,6 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
             atual,
             alteradosBloqueios.current,
             removidosBloqueios.current,
-            instalacaoNova,
             ordenarBloqueios,
           ),
         )

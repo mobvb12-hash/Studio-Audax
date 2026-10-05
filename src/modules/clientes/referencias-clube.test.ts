@@ -68,6 +68,12 @@ async function migrar(): Promise<{ referenciasProblematicas: string[] }> {
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('studio-audax:clientes:v1', JSON.stringify([clienteLocal('cl-1')]))
+  // já houve sincronização antes: o cliente local é pendência legítima e
+  // continua na lista oficial usada pela varredura de referências
+  localStorage.setItem(
+    'studio-audax:clientes:v1:sincronizado_em:v1',
+    '2020-01-01T00:00:00.000Z',
+  )
   limparAvisosPersistencia()
   vi.mocked(repositorio.listarClientes).mockResolvedValue([])
 })

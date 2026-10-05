@@ -11,7 +11,9 @@ import type { ReactNode } from 'react'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
+  marcarSincronizacao,
   salvarJSON,
+  ultimaSincronizacao,
 } from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import { supabase } from '@/lib/supabase'
@@ -144,6 +146,8 @@ type Integracao<T> = {
   assinatura: (registro: T) => string
   /** em divergência, quem tem o carimbo mais novo vence */
   maisRecente: (local: T, remoto: T) => boolean
+  /** instante que define pendência legítima para esta lista */
+  carimbo: (registro: T) => string
   importar: (lista: T[]) => Promise<number>
 }
 
@@ -152,6 +156,11 @@ type Integracao<T> = {
  * chave do app: um fechamento enviado três vezes continua sendo UM
  * fechamento (a comissão não é duplicada). Em divergência vence o carimbo mais
  * recente e o perdedor vai para o snapshot.
+ *
+ * Registro local ausente no servidor só é reenviado quando é pendência
+ * legítima — carimbo posterior à última sincronização concluída desta lista.
+ * O resto é resquício (apagado no banco): sai da lista, fica no snapshot e
+ * NUNCA é reenviado.
  */
 async function integrar<T>({
   rotulo,
@@ -161,20 +170,29 @@ async function integrar<T>({
   remotos,
   assinatura,
   maisRecente,
+  carimbo: carimboDe,
   importar,
 }: Integracao<T>): Promise<T[]> {
+  const marcaAnterior = ultimaSincronizacao(chave)
   const remotoPorId = new Map(remotos.map((registro) => [id(registro), registro]))
   const porId = new Map<string, T>()
   const ordem: string[] = []
   const enviar: T[] = []
   const perdedores: T[] = []
+  const descartados: T[] = []
 
   for (const local of locais) {
     const remoto = remotoPorId.get(id(local))
     if (!remoto) {
-      porId.set(id(local), local)
-      ordem.push(id(local))
-      enviar.push(local)
+      const pendente =
+        marcaAnterior !== null && carimboDe(local) > marcaAnterior
+      if (pendente) {
+        porId.set(id(local), local)
+        ordem.push(id(local))
+        enviar.push(local)
+      } else {
+        descartados.push(local)
+      }
       continue
     }
     porId.set(id(local), remoto)
@@ -194,7 +212,11 @@ async function integrar<T>({
     ordem.push(id(remoto))
   }
 
-  if (perdedores.length > 0 && !criarSnapshot(chave, perdedores)) {
+  const precisaSnapshot = perdedores.length > 0 || descartados.length > 0
+  const snapshotOk =
+    !precisaSnapshot || criarSnapshot(chave, [...descartados, ...perdedores])
+
+  if (perdedores.length > 0 && !snapshotOk) {
     const divergentes = new Set(perdedores.map((registro) => id(registro)))
     for (let i = enviar.length - 1; i >= 0; i--) {
       if (divergentes.has(id(enviar[i]))) enviar.splice(i, 1)
@@ -204,21 +226,43 @@ async function integrar<T>({
     )
   }
 
+  if (descartados.length > 0) {
+    if (snapshotOk) {
+      console.warn(
+        `[comissoes] ${descartados.length} registro(s) local(is) ausente(s) no Supabase (${rotulo}): descartado(s) como resquício e preservado(s) em snapshot.`,
+      )
+    } else {
+      for (const registro of descartados) {
+        if (porId.has(id(registro))) continue
+        porId.set(id(registro), registro)
+        ordem.push(id(registro))
+      }
+      console.warn(
+        `[comissoes] snapshot indisponível — resquícios de ${rotulo} mantidos na lista e sem envio.`,
+      )
+    }
+  }
+
+  let envioCompleto = true
   if (enviar.length > 0) {
     try {
       const enviados = await importar(enviar)
       if (enviados < enviar.length) {
+        envioCompleto = false
         console.warn(
           `[comissoes] envio incompleto de ${rotulo}: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
         )
       }
     } catch (erro) {
+      envioCompleto = false
       console.warn(
         `[comissoes] falha ao enviar ${rotulo} para o Supabase.`,
         erro,
       )
     }
   }
+
+  if (envioCompleto && snapshotOk) marcarSincronizacao(chave)
 
   return ordem
     .map((chave) => porId.get(chave))
@@ -227,27 +271,21 @@ async function integrar<T>({
 
 /**
  * Junta a lista oficial com o que a tela fez durante a carga: mudança da
- * sessão vence, registro criado no meio da carga não some. Em instalação nova
- * só o que a sessão alterou acompanha a lista.
+ * sessão vence, registro criado no meio da carga não some. Quem não está na
+ * base e não foi alterado nesta sessão é resquício (apagado no Supabase) e não
+ * volta para a lista.
  */
 function fundir<T>(
   base: T[],
   atual: T[],
   alterados: Set<string>,
-  instalacaoNova: boolean,
   id: (registro: T) => string,
 ): T[] {
   const porId = new Map(base.map((registro) => [id(registro), registro]))
   const ordem = base.map((registro) => id(registro))
   for (const registro of atual) {
-    if (alterados.has(id(registro))) {
-      if (!porId.has(id(registro))) ordem.push(id(registro))
-      porId.set(id(registro), registro)
-      continue
-    }
-    if (porId.has(id(registro))) continue
-    if (instalacaoNova) continue
-    ordem.push(id(registro))
+    if (!alterados.has(id(registro))) continue
+    if (!porId.has(id(registro))) ordem.push(id(registro))
     porId.set(id(registro), registro)
   }
   return ordem
@@ -301,6 +339,7 @@ async function integrarComissoes(
       // registro antigo (sem carimbo) não rebaixa a versão do servidor
       maisRecente: (local, remoto) =>
         (local.atualizadoEm ?? '') > (remoto.atualizadoEm ?? ''),
+      carimbo: (config) => config.atualizadoEm ?? '',
       importar: importarConfigs,
     }),
     integrar<FechamentoComissao>({
@@ -312,6 +351,7 @@ async function integrarComissoes(
       assinatura: assinaturaFechamento,
       maisRecente: (local, remoto) =>
         carimboFechamento(local) > carimboFechamento(remoto),
+      carimbo: carimboFechamento,
       importar: importarFechamentos,
     }),
     integrar<EventoAuditoriaComissao>({
@@ -323,6 +363,7 @@ async function integrarComissoes(
       assinatura: assinaturaEvento,
       // trilha histórica: o evento mais novo (maior criadoEm) vence
       maisRecente: (local, remoto) => local.criadoEm > remoto.criadoEm,
+      carimbo: (evento) => evento.criadoEm,
       importar: importarAuditoria,
     }),
   ])
@@ -431,7 +472,6 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
             base.configs,
             atual,
             alteradosConfigs.current,
-            instalacaoNova,
             (c) => c.profissionalId,
           ),
         )
@@ -440,7 +480,6 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
             base.fechamentos,
             atual,
             alteradosFechamentos.current,
-            instalacaoNova,
             (f) => f.id,
           ),
         )
@@ -449,7 +488,6 @@ export function ComissoesProvider({ children }: { children: ReactNode }) {
             base.auditoria,
             atual,
             alteradosAuditoria.current,
-            instalacaoNova,
             (a) => a.id,
           ),
         )

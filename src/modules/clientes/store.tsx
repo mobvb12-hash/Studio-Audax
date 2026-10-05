@@ -84,20 +84,26 @@ function carregar(): Cliente[] {
 /**
  * Junta a lista oficial (remoto) com o que aconteceu na tela durante a
  * carga: mudança da sessão vence, registro criado no meio da carga não some
- * e remoção da sessão é respeitada.
+ * e remoção da sessão é respeitada. Resquícios descartados pela migração
+ * (apagados no Supabase) não voltam para a lista — continuam no backup.
  */
 function fundir(
   base: Cliente[],
   atual: Cliente[],
   alterados: Set<string>,
   removidos: Set<string>,
+  descartados: Set<string>,
 ): Cliente[] {
   const porId = new Map(base.map((c) => [c.id, c]))
   for (const cliente of atual) {
     if (removidos.has(cliente.id)) continue
-    if (alterados.has(cliente.id) || !porId.has(cliente.id)) {
+    if (alterados.has(cliente.id)) {
       porId.set(cliente.id, cliente)
+      continue
     }
+    if (descartados.has(cliente.id)) continue
+    if (porId.has(cliente.id)) continue // base já tem a versão oficial
+    porId.set(cliente.id, cliente) // inválido/duplicado segue visível
   }
   for (const id of removidos) porId.delete(id)
   return ordenarClientes([...porId.values()])
@@ -165,6 +171,7 @@ export function ClientesProvider({ children }: { children: ReactNode }) {
               atual,
               alterados.current,
               removidos.current,
+              new Set(relatorio.descartados),
             ),
           )
 

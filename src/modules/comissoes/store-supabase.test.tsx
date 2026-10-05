@@ -175,6 +175,20 @@ function salvo(chave: string): unknown[] {
   return JSON.parse(localStorage.getItem(chave) ?? '[]')
 }
 
+/** Simula um aparelho que já sincronizou antes (marca presente). */
+function marcarComoSincronizado(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, '2020-01-01T00:00:00.000Z')
+  }
+}
+
+/** Marca já concluída agora: carimbo do registro é anterior → resquício. */
+function marcarComoSincronizadoAgora(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, new Date().toISOString())
+  }
+}
+
 function fechar(
   profissionalId = 'prof-1',
   profissionalNome = 'Cleiton',
@@ -231,6 +245,9 @@ describe('Comissões — carga e envio', () => {
   })
 
   it('pendência local vai para o Supabase (comissões já fechadas antes da integração)', async () => {
+    // pendência legítima: já houve sincronização antes e o registro é
+    // posterior à marca
+    marcarComoSincronizado(CHAVE_CONFIGS, CHAVE_FECHAMENTOS, CHAVE_AUDITORIA)
     localStorage.setItem(CHAVE_CONFIGS, JSON.stringify([config()]))
     localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify([fechamento()]))
     localStorage.setItem(CHAVE_AUDITORIA, JSON.stringify([evento()]))
@@ -241,6 +258,41 @@ describe('Comissões — carga e envio', () => {
     expect(remoto.configs).toHaveLength(1)
     expect(remoto.auditoria).toHaveLength(1)
     expect(ctx.fechamentos[0].comissao).toBe(360)
+  })
+
+  it('J — fechamento anterior à última sincronização não volta (resquício fica no snapshot)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarFechamentos } = await import('@/services/supabase/comissoes')
+    marcarComoSincronizadoAgora(CHAVE_CONFIGS, CHAVE_FECHAMENTOS, CHAVE_AUDITORIA)
+    localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify([fechamento()]))
+
+    montar()
+
+    await waitFor(() => expect(ctx.fechamentos).toEqual([]))
+    expect(remoto.fechamentos).toHaveLength(0)
+    expect(importarFechamentos).not.toHaveBeenCalled()
+    expect(
+      Object.keys(localStorage).filter((c) =>
+        c.startsWith(`${CHAVE_FECHAMENTOS}:backup:`),
+      ),
+    ).toHaveLength(1)
+    aviso.mockRestore()
+  })
+
+  it('J — marca inexistente: fechamento local não é enviado', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { importarFechamentos } = await import('@/services/supabase/comissoes')
+    localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify([fechamento()]))
+
+    montar()
+
+    await waitFor(() => expect(ctx.fechamentos).toEqual([]))
+    expect(remoto.fechamentos).toHaveLength(0)
+    expect(importarFechamentos).not.toHaveBeenCalled()
+    expect(
+      localStorage.getItem(`${CHAVE_FECHAMENTOS}:sincronizado_em:v1`),
+    ).not.toBeNull()
+    aviso.mockRestore()
   })
 
   it('instalação nova adota o servidor sem reenviar nada', async () => {
@@ -319,6 +371,7 @@ describe('Comissões — escrita, imutabilidade e não duplicação', () => {
 
   it('reenvio da pendência continua sendo UM fechamento (falha na escrita não vira duplicata)', async () => {
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    marcarComoSincronizado(CHAVE_CONFIGS, CHAVE_FECHAMENTOS, CHAVE_AUDITORIA)
     localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify([fechamento()]))
     remoto.falhaEscrita = true
     const primeira = montar()
@@ -498,6 +551,7 @@ describe('Comissões — divergência entre dispositivos', () => {
 
   it('envio parcial não trava a integração: a pendência segue para a próxima carga', async () => {
     const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    marcarComoSincronizado(CHAVE_CONFIGS, CHAVE_FECHAMENTOS, CHAVE_AUDITORIA)
     localStorage.setItem(CHAVE_FECHAMENTOS, JSON.stringify([fechamento()]))
     remoto.parcial = true
 

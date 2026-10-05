@@ -183,6 +183,20 @@ function chavesBackup(): string[] {
   )
 }
 
+/** Simula um aparelho que já sincronizou antes (marca presente). */
+function marcarComoSincronizado(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, '2020-01-01T00:00:00.000Z')
+  }
+}
+
+/** Marca já concluída agora: carimbo do registro é anterior → resquício. */
+function marcarComoSincronizadoAgora(...chaves: string[]) {
+  for (const chave of chaves) {
+    localStorage.setItem(`${chave}:sincronizado_em:v1`, new Date().toISOString())
+  }
+}
+
 beforeEach(() => {
   localStorage.clear()
   limparAvisosPersistencia()
@@ -193,6 +207,9 @@ beforeEach(() => {
 
 describe('Clientes — Supabase como fonte oficial', () => {
   it('migra o localStorage preservando ids, cria snapshot e mantém a chave original', async () => {
+    // pendência legítima: já houve sincronização antes e os registros são
+    // posteriores à marca
+    marcarComoSincronizado(CHAVE)
     localStorage.setItem(
       CHAVE,
       JSON.stringify([
@@ -253,16 +270,41 @@ describe('Clientes — Supabase como fonte oficial', () => {
     )
     primeiro.unmount()
 
+    // cópia local antiga de um registro que não existe no servidor
     localStorage.setItem(CHAVE, JSON.stringify([cliente('cli-8', 'Local Velho')]))
     montar()
 
-    await waitFor(() =>
-      expect(lerLista().map((c) => c.id)).toEqual(['cli-8', 'cli-9']),
-    )
-    expect(lerLista().map((c) => c.nome)).toEqual([
-      'Local Velho',
-      'Wesley Prado',
-    ])
+    // a fonte oficial continua sendo o servidor: o resquício local é
+    // descartado (preservado no snapshot) e não volta para a lista
+    await waitFor(() => expect(lerLista().map((c) => c.id)).toEqual(['cli-9']))
+    expect(lerLista().map((c) => c.nome)).toEqual(['Wesley Prado'])
+    expect(chavesBackup().length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('J — cliente anterior à última sincronização não volta (resquício fica no snapshot)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    marcarComoSincronizadoAgora(CHAVE)
+    localStorage.setItem(CHAVE, JSON.stringify([cliente('cli-7', 'Cliente Antigo')]))
+
+    montar()
+
+    await waitFor(() => expect(lerLista()).toEqual([]))
+    expect(remoto.linhas).toHaveLength(0)
+    expect(chavesBackup()).toHaveLength(1)
+    aviso.mockRestore()
+  })
+
+  it('J — marca inexistente: cliente local não é enviado e a marca é criada', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    localStorage.setItem(CHAVE, JSON.stringify([cliente('cli-7', 'Cliente Local')]))
+
+    montar()
+
+    await waitFor(() => expect(lerLista()).toEqual([]))
+    expect(remoto.linhas).toHaveLength(0)
+    expect(chavesBackup()).toHaveLength(1)
+    expect(localStorage.getItem(`${CHAVE}:sincronizado_em:v1`)).not.toBeNull()
+    aviso.mockRestore()
   })
 
   it('leitura remota falha: mantém o fallback local e volta a gravar', async () => {

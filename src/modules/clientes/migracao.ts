@@ -9,7 +9,7 @@
 // • em conflito vence o registro mais recente (`atualizadoEm`), o outro fica
 //   preservado no backup;
 // • falha de leitura/escrita interrompe a migração sem tocar em dado algum.
-import { carregarJSON } from '@/lib/persistencia'
+import { carregarJSON, marcarSincronizacao, ultimaSincronizacao } from '@/lib/persistencia'
 import { importarClientes, listarClientes } from '@/services/supabase/clientes'
 import { normalizarCliente, ordenarClientes } from './regras'
 import { digitosDosTelefones, type Cliente } from './types'
@@ -28,6 +28,8 @@ export type RelatorioMigracaoClientes = {
   atualizados: number
   /** não enviados: inválidos, id repetido, idênticos ou superados pelo remoto */
   ignorados: number
+  /** ids locais sem correspondência no servidor e não elegíveis a reenvio */
+  descartados: string[]
   erros: string[]
   /** avisos de repetição local (id repetido é recusado; nome/telefone segue) */
   duplicidades: string[]
@@ -249,6 +251,7 @@ export async function migrarClientes(
     inseridos: 0,
     atualizados: 0,
     ignorados: 0,
+    descartados: [],
     erros: [],
     duplicidades,
     referenciasProblematicas: [],
@@ -270,12 +273,21 @@ export async function migrarClientes(
     return relatorio
   }
 
+  const marcaAnterior = ultimaSincronizacao(CHAVE_STORAGE_CLIENTES)
   const remotoPorId = new Map(remotos.map((c) => [c.id, c]))
   const pendencias = new Map<string, Cliente>()
+  const descartados: string[] = []
   for (const local of validos) {
     const remoto = remotoPorId.get(local.id)
     if (!remoto) {
-      pendencias.set(local.id, local)
+      // local-only: só é reenviado quando houve sincronização anterior e o
+      // carimbo é posterior à marca. Sem marca (primeira carga) ou registro
+      // anterior à marca = resquício de dado apagado no servidor: sai da
+      // lista oficial, fica no backup e nunca volta ao Supabase.
+      const carimboLocal = local.atualizadoEm || local.criadoEm || ''
+      const pendente = marcaAnterior !== null && carimboLocal > marcaAnterior
+      if (pendente) pendencias.set(local.id, local)
+      else descartados.push(local.id)
       continue
     }
     if (assinaturaConteudo(local) === assinaturaConteudo(remoto)) continue
@@ -298,8 +310,9 @@ export async function migrarClientes(
   let enviado = true
 
   // Snapshot obrigatório antes de qualquer mudança visível: envio de
-  // pendência ou substituição por versão remota mais nova.
-  if (aEnviar.length > 0 || superados > 0) {
+  // pendência, substituição por versão remota mais nova ou descarte de
+  // resquício local (o descartado só sai da lista se estiver preservado).
+  if (aEnviar.length > 0 || superados > 0 || descartados.length > 0) {
     const backup = criarBackup(locais)
     if (!backup) {
       // sem snapshot nada é aplicado — a migração tenta de novo depois
@@ -355,7 +368,9 @@ export async function migrarClientes(
     }
   }
 
-  // lista final: remoto oficial + tudo que era pendência local (nada some)
+  relatorio.descartados = descartados
+  // lista final: remoto oficial + tudo que era pendência local (nada some);
+  // descartados ficam de fora — preservados no backup, jamais reenviados
   const finalPorId = new Map(remotos.map((c) => [c.id, c]))
   pendencias.forEach((cliente, id) => finalPorId.set(id, cliente))
   relatorio.clientes = ordenarClientes([...finalPorId.values()])
@@ -375,6 +390,10 @@ export async function migrarClientes(
   }
   relatorio.ok = relatorio.erros.length === 0
   relatorio.fim = new Date().toISOString()
+  // leitura OK, snapshot gravado e envio completo (ou nada a enviar): só
+  // então a migração fica marcada. Envio parcial/falho deixa a marca parada
+  // e a pendência segue para a próxima carga.
+  if (enviado) marcarSincronizacao(CHAVE_STORAGE_CLIENTES)
   ultimoRelatorio = relatorio
   return relatorio
 }

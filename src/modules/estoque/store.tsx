@@ -13,7 +13,9 @@ import { dataLocal } from '@/lib/apresentacao'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
+  marcarSincronizacao,
   salvarJSON,
+  ultimaSincronizacao,
 } from '@/lib/persistencia'
 import { supabase } from '@/lib/supabase'
 import { useProdutos } from '@/modules/produtos/store'
@@ -233,6 +235,11 @@ function criarSnapshot(perdedores: MovimentacaoEstoque[]): boolean {
  * venda repetida não baixe o estoque duas vezes. Movimentações são histórico
  * imutável, então em divergência (só o rótulo pode mudar) vence o estado da
  * tela e a versão remota vai para o snapshot.
+ *
+ * Movimentação local ausente no servidor só é reenviada quando é pendência
+ * legítima — `criadoEm` posterior à última sincronização concluída. O resto é
+ * resquício (histórico apagado no banco): sai da lista, fica no snapshot e
+ * NUNCA é reenviado.
  */
 async function integrarMovimentacoes(
   locais: MovimentacaoEstoque[],
@@ -243,18 +250,26 @@ async function integrarMovimentacoes(
     // instalação nova: o histórico do servidor é a fonte
     return [...remotos]
   }
+  const marcaAnterior = ultimaSincronizacao(CHAVE_STORAGE)
   const remotoPorId = new Map(remotos.map((m) => [m.id, m]))
   const porId = new Map<string, MovimentacaoEstoque>()
   const ordem: string[] = []
   const enviar: MovimentacaoEstoque[] = []
   const perdedores: MovimentacaoEstoque[] = []
+  const descartados: MovimentacaoEstoque[] = []
 
   for (const local of locais) {
     const remoto = remotoPorId.get(local.id)
     if (!remoto) {
-      porId.set(local.id, local)
-      ordem.push(local.id)
-      enviar.push(local)
+      const pendente =
+        marcaAnterior !== null && local.criadoEm > marcaAnterior
+      if (pendente) {
+        porId.set(local.id, local)
+        ordem.push(local.id)
+        enviar.push(local)
+      } else {
+        descartados.push(local)
+      }
       continue
     }
     porId.set(local.id, remoto)
@@ -270,7 +285,11 @@ async function integrarMovimentacoes(
     ordem.push(remoto.id)
   }
 
-  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+  const precisaSnapshot = perdedores.length > 0 || descartados.length > 0
+  const snapshotOk =
+    !precisaSnapshot || criarSnapshot([...descartados, ...perdedores])
+
+  if (perdedores.length > 0 && !snapshotOk) {
     const divergentes = new Set(perdedores.map((m) => m.id))
     for (let i = enviar.length - 1; i >= 0; i--) {
       if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
@@ -280,21 +299,43 @@ async function integrarMovimentacoes(
     )
   }
 
+  if (descartados.length > 0) {
+    if (snapshotOk) {
+      console.warn(
+        `[estoque] ${descartados.length} movimentação(ões) local(is) ausente(s) no Supabase: descartada(s) como resquício e preservada(s) em snapshot.`,
+      )
+    } else {
+      for (const movimentacao of descartados) {
+        if (porId.has(movimentacao.id)) continue
+        porId.set(movimentacao.id, movimentacao)
+        ordem.push(movimentacao.id)
+      }
+      console.warn(
+        '[estoque] snapshot indisponível — resquícios mantidos na lista e sem envio.',
+      )
+    }
+  }
+
+  let envioCompleto = true
   if (enviar.length > 0) {
     try {
       const enviados = await importarMovimentacoes(enviar)
       if (enviados < enviar.length) {
+        envioCompleto = false
         console.warn(
           `[estoque] envio incompleto: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
         )
       }
     } catch (erro) {
+      envioCompleto = false
       console.warn(
         '[estoque] falha ao enviar pendências para o Supabase.',
         erro,
       )
     }
   }
+
+  if (envioCompleto && snapshotOk) marcarSincronizacao(CHAVE_STORAGE)
 
   return ordem
     .map((id) => porId.get(id))
@@ -303,26 +344,20 @@ async function integrarMovimentacoes(
 
 /**
  * Junta a lista oficial com o que a tela fez durante a carga: mudança da
- * sessão vence e registro criado no meio da carga não some. Em instalação
- * nova, só o que a sessão criou acompanha a lista.
+ * sessão vence e registro criado no meio da carga não some. Quem não está na
+ * base e não foi alterado nesta sessão é resquício (histórico apagado no
+ * Supabase) e não volta para a lista.
  */
 function fundir(
   base: MovimentacaoEstoque[],
   atual: MovimentacaoEstoque[],
   alterados: Set<string>,
-  instalacaoNova: boolean,
 ): MovimentacaoEstoque[] {
   const porId = new Map(base.map((m) => [m.id, m]))
   const ordem = base.map((m) => m.id)
   for (const movimentacao of atual) {
-    if (alterados.has(movimentacao.id)) {
-      if (!porId.has(movimentacao.id)) ordem.push(movimentacao.id)
-      porId.set(movimentacao.id, movimentacao)
-      continue
-    }
-    if (porId.has(movimentacao.id)) continue
-    if (instalacaoNova) continue
-    ordem.push(movimentacao.id)
+    if (!alterados.has(movimentacao.id)) continue
+    if (!porId.has(movimentacao.id)) ordem.push(movimentacao.id)
     porId.set(movimentacao.id, movimentacao)
   }
   return ordem
@@ -386,9 +421,7 @@ export function EstoqueProvider({ children }: { children: ReactNode }) {
     promessaIntegracao
       .then((base) => {
         if (vivo) {
-          setMovimentacoes((atual) =>
-            fundir(base, atual, alterados.current, instalacaoNova),
-          )
+          setMovimentacoes((atual) => fundir(base, atual, alterados.current))
         }
       })
       .catch((erro) => {

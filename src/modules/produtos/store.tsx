@@ -11,7 +11,9 @@ import type { ReactNode } from 'react'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
+  marcarSincronizacao,
   salvarJSON,
+  ultimaSincronizacao,
 } from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import { supabase } from '@/lib/supabase'
@@ -167,11 +169,15 @@ function criarSnapshot(perdedores: Produto[]): boolean {
 }
 
 /**
- * União por id + reenvio das pendências. Nada é descartado: o que só existe de
- * um lado entra na lista. Em divergência vence o registro mais recente por
- * `atualizadoEm` (mesma regra de serviços) — o saldo de estoque entra nessa
- * comparação porque `aplicarEstoque` carimba o produto. O perdedor vai para o
- * snapshot e o reenvio é `upsert` por `id`, então repetir não duplica produto.
+ * União por id + reenvio das pendências. O Supabase é a fonte oficial: um
+ * registro local ausente no servidor só é enviado quando é pendência
+ * legítima — carimbo (`atualizadoEm`/`criadoEm`) posterior à última
+ * sincronização concluída. O resto é resquício (apagado no banco): sai da
+ * lista, fica no snapshot e NUNCA é reenviado. Em divergência vence o registro
+ * mais recente por `atualizadoEm` (mesma regra de serviços) — o saldo de
+ * estoque entra nessa comparação porque `aplicarEstoque` carimba o produto. O
+ * perdedor vai para o snapshot e o reenvio é `upsert` por `id`, então repetir
+ * não duplica produto.
  */
 async function integrarProdutos(
   locais: Produto[],
@@ -182,18 +188,27 @@ async function integrarProdutos(
     // instalação nova: o que já existe no servidor é a fonte
     return ordenar(remotos)
   }
+  const marcaAnterior = ultimaSincronizacao(CHAVE_STORAGE)
   const remotoPorId = new Map(remotos.map((p) => [p.id, p]))
   const porId = new Map<string, Produto>()
   const ordem: string[] = []
   const enviar: Produto[] = []
   const perdedores: Produto[] = []
+  const descartados: Produto[] = []
 
   for (const local of locais) {
     const remoto = remotoPorId.get(local.id)
     if (!remoto) {
-      porId.set(local.id, local)
-      ordem.push(local.id)
-      enviar.push(local)
+      const pendente =
+        marcaAnterior !== null &&
+        (local.atualizadoEm || local.criadoEm || '') > marcaAnterior
+      if (pendente) {
+        porId.set(local.id, local)
+        ordem.push(local.id)
+        enviar.push(local)
+      } else {
+        descartados.push(local)
+      }
       continue
     }
     porId.set(local.id, remoto)
@@ -213,7 +228,10 @@ async function integrarProdutos(
     ordem.push(remoto.id)
   }
 
-  if (perdedores.length > 0 && !criarSnapshot(perdedores)) {
+  const precisaSnapshot = perdedores.length > 0 || descartados.length > 0
+  const snapshotOk = !precisaSnapshot || criarSnapshot([...descartados, ...perdedores])
+
+  if (perdedores.length > 0 && !snapshotOk) {
     const divergentes = new Set(perdedores.map((p) => p.id))
     for (let i = enviar.length - 1; i >= 0; i--) {
       if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
@@ -223,18 +241,42 @@ async function integrarProdutos(
     )
   }
 
+  if (descartados.length > 0) {
+    if (snapshotOk) {
+      console.warn(
+        `[produtos] ${descartados.length} registro(s) local(is) ausente(s) no Supabase: descartado(s) como resquício e preservado(s) em snapshot.`,
+      )
+    } else {
+      // sem snapshot o resquício não pode sumir daqui: segue na lista, mas
+      // nunca vai para o Supabase e a marca não avança.
+      for (const produto of descartados) {
+        if (porId.has(produto.id)) continue
+        porId.set(produto.id, produto)
+        ordem.push(produto.id)
+      }
+      console.warn(
+        '[produtos] snapshot indisponível — resquícios mantidos na lista e sem envio.',
+      )
+    }
+  }
+
+  let envioCompleto = true
   if (enviar.length > 0) {
     try {
       const enviados = await importarProdutos(enviar)
       if (enviados < enviar.length) {
+        envioCompleto = false
         console.warn(
           `[produtos] envio incompleto: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
         )
       }
     } catch (erro) {
+      envioCompleto = false
       console.warn('[produtos] falha ao enviar pendências para o Supabase.', erro)
     }
   }
+
+  if (envioCompleto && snapshotOk) marcarSincronizacao(CHAVE_STORAGE)
 
   return ordenar(
     ordem
@@ -245,26 +287,20 @@ async function integrarProdutos(
 
 /**
  * Junta a lista oficial com o que aconteceu na tela durante a carga: mudança
- * da sessão vence, registro criado no meio da carga não some. Em instalação
- * nova o seed local não acompanha — só o que a sessão alterou.
+ * da sessão vence, registro criado no meio da carga não some. Quem não está na
+ * base e não foi alterado nesta sessão é resquício (apagado no Supabase) e não
+ * volta para a lista.
  */
 function fundir(
   base: Produto[],
   atual: Produto[],
   alterados: Set<string>,
-  instalacaoNova: boolean,
 ): Produto[] {
   const porId = new Map(base.map((p) => [p.id, p]))
   const ordem = base.map((p) => p.id)
   for (const produto of atual) {
-    if (alterados.has(produto.id)) {
-      if (!porId.has(produto.id)) ordem.push(produto.id)
-      porId.set(produto.id, produto)
-      continue
-    }
-    if (porId.has(produto.id)) continue
-    if (instalacaoNova) continue
-    ordem.push(produto.id)
+    if (!alterados.has(produto.id)) continue
+    if (!porId.has(produto.id)) ordem.push(produto.id)
     porId.set(produto.id, produto)
   }
   return ordenar(
@@ -304,7 +340,7 @@ export function ProdutosProvider({ children }: { children: ReactNode }) {
     promessaIntegracao
       .then((base) => {
         if (vivo) {
-          setProdutos((atual) => fundir(base, atual, alterados.current, instalacaoNova))
+          setProdutos((atual) => fundir(base, atual, alterados.current))
         }
       })
       .catch((erro) => {

@@ -138,3 +138,38 @@ export function salvarJSON(chave: string, valor: unknown): void {
 export function avisarFalhaSincronizacao(chave: string): void {
   emitir('falha_sincronizacao', chave)
 }
+
+const SUFIXO_SINCRONIZADO = ':sincronizado_em:v1'
+
+/**
+ * Instante da última integração CONCLUÍDA desta chave: leitura remota
+ * bem-sucedida, nenhum envio pendente falho ou parcial e snapshots gravados.
+ *
+ * `null` = nunca sincronizou. É a régua que separa pendência legítima
+ * (carimbo posterior à marca, enviado) de resquício (carimbo igual ou
+ * anterior à marca, ausente no servidor — nunca é reenviado).
+ */
+export function ultimaSincronizacao(chave: string): string | null {
+  try {
+    const bruto = localStorage.getItem(`${chave}${SUFIXO_SINCRONIZADO}`)
+    return typeof bruto === 'string' && bruto.length > 0 ? bruto : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Registra a integração concluída desta chave. Só pode ser chamada quando
+ * todo envio legítimo terminou: falha parcial deixa a marca parada e a
+ * pendência fica para a próxima carga. Falha de gravação também não avança —
+ * sem marca a próxima carga é conservadora e não reenvia local-only.
+ */
+export function marcarSincronizacao(chave: string): boolean {
+  const destino = `${chave}${SUFIXO_SINCRONIZADO}`
+  try {
+    localStorage.setItem(destino, new Date().toISOString())
+    return localStorage.getItem(destino) !== null
+  } catch {
+    return false
+  }
+}

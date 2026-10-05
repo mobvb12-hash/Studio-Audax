@@ -11,7 +11,9 @@ import type { ReactNode } from 'react'
 import {
   avisarFalhaSincronizacao,
   carregarJSON,
+  marcarSincronizacao,
   salvarJSON,
+  ultimaSincronizacao,
 } from '@/lib/persistencia'
 import { normalizarTexto } from '@/lib/moeda'
 import {
@@ -303,15 +305,20 @@ type Integracao<T extends Registro> = {
   locais: T[]
   remotos: T[]
   assinatura: (registro: T) => string
+  /** instante que define pendência legítima para esta lista */
+  carimbo: (registro: T) => string
   importar: (lista: T[]) => Promise<number>
 }
 
 /**
- * União por id + reenvio das pendências locais. Nenhum registro é
- * descartado: o que só existe de um lado entra na lista final. Em divergência
- * vale o estado que a tela está usando (é dele que sai o resumo do dia) e a
- * versão remota substituída fica no snapshot. O reenvio é `upsert` por `id`,
- * então repetir não duplica lançamento, fechamento nem evento.
+ * União por id + reenvio das pendências locais. O Supabase é a fonte oficial:
+ * registro local ausente no servidor só é reenviado quando é pendência
+ * legítima — carimbo posterior à última sincronização concluída desta lista.
+ * O resto é resquício (apagado no banco): sai da lista, fica no snapshot e
+ * NUNCA é reenviado. Em divergência vale o estado que a tela está usando (é
+ * dele que sai o resumo do dia) e a versão remota substituída fica no snapshot.
+ * O reenvio é `upsert` por `id`, então repetir não duplica lançamento,
+ * fechamento nem evento.
  */
 async function integrar<T extends Registro>({
   rotulo,
@@ -319,20 +326,28 @@ async function integrar<T extends Registro>({
   locais,
   remotos,
   assinatura,
+  carimbo,
   importar,
 }: Integracao<T>): Promise<T[]> {
+  const marcaAnterior = ultimaSincronizacao(chave)
   const remotoPorId = new Map(remotos.map((registro) => [registro.id, registro]))
   const porId = new Map<string, T>()
   const ordem: string[] = []
   const enviar: T[] = []
   const perdedores: T[] = []
+  const descartados: T[] = []
 
   for (const local of locais) {
     const remoto = remotoPorId.get(local.id)
     if (!remoto) {
-      porId.set(local.id, local)
-      ordem.push(local.id)
-      enviar.push(local)
+      const pendente = marcaAnterior !== null && carimbo(local) > marcaAnterior
+      if (pendente) {
+        porId.set(local.id, local)
+        ordem.push(local.id)
+        enviar.push(local)
+      } else {
+        descartados.push(local)
+      }
       continue
     }
     porId.set(local.id, remoto)
@@ -350,7 +365,11 @@ async function integrar<T extends Registro>({
     ordem.push(remoto.id)
   }
 
-  if (perdedores.length > 0 && !criarSnapshot(chave, perdedores)) {
+  const precisaSnapshot = perdedores.length > 0 || descartados.length > 0
+  const snapshotOk =
+    !precisaSnapshot || criarSnapshot(chave, [...descartados, ...perdedores])
+
+  if (perdedores.length > 0 && !snapshotOk) {
     const divergentes = new Set(perdedores.map((registro) => registro.id))
     for (let i = enviar.length - 1; i >= 0; i--) {
       if (divergentes.has(enviar[i].id)) enviar.splice(i, 1)
@@ -360,18 +379,40 @@ async function integrar<T extends Registro>({
     )
   }
 
+  if (descartados.length > 0) {
+    if (snapshotOk) {
+      console.warn(
+        `[caixa] ${descartados.length} registro(s) local(is) ausente(s) no Supabase (${rotulo}): descartado(s) como resquício e preservado(s) em snapshot.`,
+      )
+    } else {
+      for (const registro of descartados) {
+        if (porId.has(registro.id)) continue
+        porId.set(registro.id, registro)
+        ordem.push(registro.id)
+      }
+      console.warn(
+        `[caixa] snapshot indisponível — resquícios de ${rotulo} mantidos na lista e sem envio.`,
+      )
+    }
+  }
+
+  let envioCompleto = true
   if (enviar.length > 0) {
     try {
       const enviados = await importar(enviar)
       if (enviados < enviar.length) {
+        envioCompleto = false
         console.warn(
           `[caixa] envio incompleto de ${rotulo}: ${enviados} de ${enviar.length} — as pendências seguem para a próxima carga.`,
         )
       }
     } catch (erro) {
+      envioCompleto = false
       console.warn(`[caixa] falha ao enviar ${rotulo} para o Supabase.`, erro)
     }
   }
+
+  if (envioCompleto && snapshotOk) marcarSincronizacao(chave)
 
   return ordem
     .map((id) => porId.get(id))
@@ -381,15 +422,14 @@ async function integrar<T extends Registro>({
 /**
  * Junta a lista oficial (integração) com o que aconteceu na tela durante a
  * carga: mudança da sessão vence, registro criado no meio da carga não some e
- * remoção da sessão é respeitada. Em instalação nova só o que a sessão
- * alterou acompanha a lista.
+ * remoção da sessão é respeitada. Quem não está na base e não foi alterado
+ * nesta sessão é resquício (apagado no Supabase) e não volta para a lista.
  */
 function fundir<T extends Registro>(
   base: T[],
   atual: T[],
   alterados: Set<string>,
   removidos: Set<string>,
-  instalacaoNova: boolean,
 ): T[] {
   const porId = new Map(base.map((registro) => [registro.id, registro]))
   const ordem = base.map((registro) => registro.id)
@@ -398,12 +438,7 @@ function fundir<T extends Registro>(
     if (alterados.has(registro.id)) {
       if (!porId.has(registro.id)) ordem.push(registro.id)
       porId.set(registro.id, registro)
-      continue
     }
-    if (porId.has(registro.id)) continue // base já tem a versão oficial
-    if (instalacaoNova) continue
-    ordem.push(registro.id)
-    porId.set(registro.id, registro)
   }
   for (const id of removidos) {
     porId.delete(id)
@@ -452,6 +487,7 @@ async function integrarCaixa(
       locais: lancamentosLocais,
       remotos: lancamentosRemotos,
       assinatura: assinaturaLancamento,
+      carimbo: (lancamento) => lancamento.criadoEm,
       importar: importarLancamentos,
     }),
     integrar<Fechamento>({
@@ -460,6 +496,7 @@ async function integrarCaixa(
       locais: fechamentosLocais,
       remotos: fechamentosRemotos,
       assinatura: assinaturaFechamento,
+      carimbo: (fechamento) => fechamento.fechadoEm,
       importar: importarFechamentos,
     }),
     integrar<EventoAuditoria>({
@@ -468,6 +505,7 @@ async function integrarCaixa(
       locais: auditoriaLocal,
       remotos: auditoriaRemota,
       assinatura: assinaturaAuditoria,
+      carimbo: (evento) => evento.criadoEm,
       importar: importarAuditoria,
     }),
   ])
@@ -557,7 +595,6 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
             atual,
             alteradosLancamentos.current,
             removidosLancamentos.current,
-            instalacaoNova,
           ),
         )
         setFechamentos((atual) =>
@@ -566,7 +603,6 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
             atual,
             alteradosFechamentos.current,
             new Set<string>(),
-            instalacaoNova,
           ),
         )
         setAuditoria((atual) =>
@@ -575,7 +611,6 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
             atual,
             alteradosAuditoria.current,
             new Set<string>(),
-            instalacaoNova,
           ),
         )
 
