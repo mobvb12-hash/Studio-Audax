@@ -2,7 +2,7 @@ import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
 import { useEffect, useRef, useState } from 'react'
 import { useCaixa } from '@/modules/caixa/store'
 import { FORMAS_PAGAMENTO, FORMAS_ROTULO } from '@/modules/caixa/types'
-import type { FormaPagamento } from '@/modules/caixa/types'
+import type { FormaPagamento, Lancamento } from '@/modules/caixa/types'
 import { useEstoque } from '@/modules/estoque/store'
 import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
@@ -71,7 +71,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
       return
     }
     salvandoRef.current = true
-    let vendaId = ''
+    let venda: Lancamento | null = null
     try {
       const lancamento = venderProduto({
         data,
@@ -84,9 +84,9 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
         // §5.3 — produção casa por id quando o cadastro existe
         profissionalId:
           profissionais.find((p) => p.nome === profissional)?.id,
-        observacao,
+observacao,
       })
-      vendaId = lancamento.id
+      venda = lancamento
       // Baixa automática de estoque
       saidaPorVenda(lancamento.id, data, [
         {
@@ -100,7 +100,7 @@ export default function VendaProdutoModal({ data, onFechar }: Props) {
     } catch (e) {
       // Baixa de estoque falhou depois da gravação: desfaz o lançamento
       // para a venda não ficar registrada sem estoque baixado.
-      if (vendaId) desfazerLancamento(vendaId)
+      if (venda) desfazerLancamento(venda)
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.')
       salvandoRef.current = false
     }

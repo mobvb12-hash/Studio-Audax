@@ -1,7 +1,8 @@
-// 🟠5 — a remoção de lançamento precisa sobreviver ao F5. O tombstone mora no
-// localStorage, é reaplicado na fusão com o servidor (a lista remota não
-// devolve o registro) e a remoção remota que não chegou a valer é reenviada
-// na carga seguinte, sem duplicar nada.
+// A compensação de uma gravação parcial (falha na baixa de estoque depois do
+// caixa gravar) NÃO apaga o lançamento: ele é estornado. Este arquivo trava a
+// garantia disso no F5 — um lançamento compensado continua marcado como
+// estornado e nunca volta a contar como receita, mesmo com a cópia antiga do
+// localStorage e do servidor.
 import { act, useEffect } from 'react'
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -9,11 +10,10 @@ import { CaixaProvider, useCaixa } from './store'
 import type { Lancamento } from './types'
 
 const CHAVE_LANCAMENTOS = 'studio-audax:caixa:lancamentos:v1'
-const CHAVE_REMOVIDOS = 'studio-audax:caixa:removidos:v1'
 
 const controle = vi.hoisted(() => ({
   remoto: [] as Lancamento[],
-  removerFalha: false,
+  chamadasAtualizar: [] as string[],
   chamadasRemover: [] as string[],
 }))
 
@@ -32,14 +32,17 @@ vi.mock('@/services/supabase/caixa', async (importOriginal) => {
     importarAuditoria: vi.fn(async (lista: unknown[]) => lista.length),
     removerLancamento: vi.fn(async (id: string) => {
       controle.chamadasRemover.push(id)
-      if (controle.removerFalha) throw new Error('remoção não confirmada')
       controle.remoto = controle.remoto.filter((l) => l.id !== id)
       return true
     }),
     criarLancamento: vi.fn(async (l: Lancamento) => l),
     criarFechamento: vi.fn(async (f: unknown) => f),
     criarEventoAuditoria: vi.fn(async (e: unknown) => e),
-    atualizarLancamento: vi.fn(async () => true),
+    atualizarLancamento: vi.fn(async (id: string, l: Lancamento) => {
+      controle.chamadasAtualizar.push(id)
+      controle.remoto = controle.remoto.map((r) => (r.id === id ? l : r))
+      return l
+    }),
     atualizarFechamento: vi.fn(async () => true),
   }
 })
@@ -51,7 +54,11 @@ function Captura() {
   useEffect(() => {
     ctx = caixa
   })
-  return <div data-testid="qtd">{caixa.lancamentos.length}</div>
+  return (
+    <div data-testid="qtd">
+      {caixa.lancamentos.filter((l) => !l.estornado).length}
+    </div>
+  )
 }
 
 function montar() {
@@ -69,16 +76,16 @@ async function aguardarCarga() {
   })
 }
 
-describe('Caixa — remoção de lançamento (tombstone persistido)', () => {
+describe('Caixa — compensação estorna o lançamento e ele não ressuscita', () => {
   beforeEach(() => {
     localStorage.clear()
     controle.remoto = []
-    controle.removerFalha = false
+    controle.chamadasAtualizar = []
     controle.chamadasRemover = []
     ctx = undefined as unknown as ReturnType<typeof useCaixa>
   })
 
-  it('remoção não confirmada no servidor não volta no F5 e é reenviada', async () => {
+  it('estorna (nunca apaga) e o lançamento segue estornado após o F5', async () => {
     const primeira = montar()
     await aguardarCarga()
 
@@ -100,42 +107,41 @@ describe('Caixa — remoção de lançamento (tombstone persistido)', () => {
     if (!pagamento) throw new Error('pagamento não criado')
     const id = pagamento.id
 
-    // O servidor ainda tem o registro: a remoção remota falhou
+    // O servidor tem o registro e ainda NÃO sabe do estorno
     controle.remoto = [{ ...pagamento }]
-    controle.removerFalha = true
+
     act(() => {
       ctx.desfazerLancamento(id)
     })
 
-    // Tombstone gravado antes do F5 e lançamento fora do local
-    expect(
-      JSON.parse(localStorage.getItem(CHAVE_REMOVIDOS) ?? '[]'),
-    ).toContain(id)
-    expect(ctx.lancamentos).toHaveLength(0)
-    expect(localStorage.getItem(CHAVE_LANCAMENTOS)).not.toBeNull()
+    // Nada foi apagado: o estorno vai por atualização e o DELETE nunca é usado
+    expect(controle.chamadasRemover).toEqual([])
+    expect(controle.chamadasAtualizar).toContain(id)
+    expect(ctx.lancamentos).toHaveLength(1)
+    expect(ctx.lancamentos[0].estornado).toBe(true)
+    expect(screen.getByTestId('qtd').textContent).toBe('0')
+    expect(JSON.parse(localStorage.getItem(CHAVE_LANCAMENTOS) ?? '[]')).toHaveLength(
+      1,
+    )
 
-    // F5: a lista remota ainda devolveria o registro…
+    // F5: a cópia antiga ainda volta do servidor, mas como ESTORNADA — o que
+    // entra na lista é a versão oficial, sem receita
     primeira.unmount()
-    controle.removerFalha = false
-    const segundaSessao = montar()
+    controle.remoto = [{ ...controle.remoto[0] }].map((l) => ({ ...l, estornado: true }))
+    const segunda = montar()
+    await aguardarCarga()
+
     expect(controle.remoto.map((l) => l.id)).toContain(id)
-
-    await aguardarCarga()
-
-    // …mas a fusão respeita o tombstone e o registro não ressuscita
     expect(screen.getByTestId('qtd').textContent).toBe('0')
-    expect(ctx.lancamentos).toHaveLength(0)
-    // a remoção pendente é reenviada (apagar de novo é idempotente)
-    expect(controle.chamadasRemover).toContain(id)
+    expect(ctx.lancamentos.every((l) => l.estornado)).toBe(true)
+    // e o estorno continua sendo reenviado, não a remoção
+    expect(controle.chamadasRemover).toEqual([])
 
-    // Próximo F5: servidor sem o registro → tombstone é descartado
-    segundaSessao.unmount()
-    montar()
+    segunda.unmount()
+    const terceira = montar()
     await aguardarCarga()
     expect(screen.getByTestId('qtd').textContent).toBe('0')
-    expect(
-      JSON.parse(localStorage.getItem(CHAVE_REMOVIDOS) ?? '["pendente"]'),
-    ).toEqual([])
-    expect(controle.remoto).toHaveLength(0)
+    expect(controle.chamadasRemover).toEqual([])
+    terceira.unmount()
   })
 })

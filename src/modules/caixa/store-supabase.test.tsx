@@ -367,7 +367,7 @@ describe('Caixa — lançamentos no Supabase', () => {
     expect(ctx.resumoDoDia(DIA).totalRecebido).toBe(0)
   })
 
-  it('desfazer lançamento (compensação do PDV) remove dos dois lados', async () => {
+  it('desfazer lançamento (compensação do PDV) estorna nos dois lados sem apagar', async () => {
     montar()
     await waitFor(() => expect(ctx.lancamentos).toEqual([]))
     let criado!: Lancamento
@@ -378,8 +378,16 @@ describe('Caixa — lançamentos no Supabase', () => {
 
     act(() => ctx.desfazerLancamento(criado.id))
 
-    expect(ctx.lancamentos).toHaveLength(0)
-    await waitFor(() => expect(remoto.lancamentos).toHaveLength(0))
+    // O lançamento continua no histórico, marcado como estornado, e o servidor
+    // recebe a mesma versão (upsert) — nada é apagado.
+    expect(ctx.lancamentos).toHaveLength(1)
+    expect(ctx.lancamentos[0].estornado).toBe(true)
+    await waitFor(() =>
+      expect(
+        remoto.lancamentos.every((l) => (l as Lancamento).estornado === true),
+      ).toBe(true),
+    )
+    expect(ctx.resumoDoDia(DIA).totalRecebido).toBe(0)
   })
 
   it('falha na escrita: mantém o lançamento local, avisa e não duplica', async () => {

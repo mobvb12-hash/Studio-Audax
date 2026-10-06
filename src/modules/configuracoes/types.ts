@@ -168,7 +168,10 @@ export const CONFIG_PADRAO: Configuracoes = {
   clube: {
     beneficios: {},
     coberturas: { cabelo: [], barba: [], cabelo_barba: [] },
-    desconto: { quimicos: 0, produtos: 0, categorias: [] },
+    // Espelha o default do banco (`configuracoes_sistema.clube.desconto`):
+    // sem Supabase configurado, o PDV aplica o MESMO desconto que em produção
+    // — divergir aqui mudaria o valor cobrado no balcão.
+    desconto: { quimicos: 0.1, produtos: 0.1, categorias: [] },
     pote: { ativo: false, participantes: [] },
     comissao: { percentual: COMISSAO_PADRAO },
   },
@@ -295,8 +298,16 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       beneficios: beneficios(clube.beneficios),
       coberturas: coberturaDe(coberturas),
       desconto: {
-        quimicos: fracao(desconto.quimicos),
-        produtos: fracao(desconto.produtos),
+        // Mesmos padrões de `CONFIG_PADRAO` (e do banco): uma configuração
+        // ausente não pode virar desconto 0 e cobrar mais no balcão.
+        quimicos: fracaoComPadrao(
+          desconto.quimicos,
+          CONFIG_PADRAO.clube.desconto.quimicos,
+        ),
+        produtos: fracaoComPadrao(
+          desconto.produtos,
+          CONFIG_PADRAO.clube.desconto.produtos,
+        ),
         categorias: listaDeTexto(desconto.categorias, 12),
       },
       pote: {
@@ -337,13 +348,6 @@ export function normalizarConfiguracoes(dados: unknown): Configuracoes {
       horarios: normalizarHorarios(barbearia.horarios),
     },
   }
-}
-
-/** Fração de desconto entre 0 e 1 (0.10 = 10%). Fora da faixa = 0. */
-function fracao(valor: unknown): number {
-  const n = typeof valor === 'number' ? valor : Number(valor)
-  if (!Number.isFinite(n) || n < 0 || n > 1) return 0
-  return Math.round(n * 10000) / 10000
 }
 
 /**

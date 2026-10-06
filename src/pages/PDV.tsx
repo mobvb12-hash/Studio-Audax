@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import HistoricoVendas from '@/modules/caixa/components/HistoricoVendas'
 import ResumoPagamento from '@/modules/caixa/components/ResumoPagamento'
@@ -6,11 +6,12 @@ import SelecaoCarrinho, {
   type ItemCarrinho,
 } from '@/modules/caixa/components/SelecaoCarrinho'
 import { useCaixa } from '@/modules/caixa/store'
-import { type FormaPagamento } from '@/modules/caixa/types'
+import { type FormaPagamento, type Lancamento } from '@/modules/caixa/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useComissoes } from '@/modules/comissoes/store'
 import {
   assinaturaVigente,
+  DESCONTO_ASSINANTE_PADRAO,
   valorDescontoAssinante,
 } from '@/modules/clube/regras'
 import { useClube } from '@/modules/clube/store'
@@ -18,6 +19,7 @@ import { useEstoque } from '@/modules/estoque/store'
 import { validarQuantidadeEstoque } from '@/modules/estoque/validacao'
 import { useProdutos } from '@/modules/produtos/store'
 import { useProfissionais } from '@/modules/profissionais/store'
+import { carregarConfiguracoes } from '@/services/supabase/configuracoes'
 import { formatarBRL, parseMoeda } from '@/lib/moeda'
 import { chipClasse } from '@/lib/apresentacao'
 
@@ -44,6 +46,30 @@ export default function PDV() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const finalizandoRef = useRef(false)
+  // Desconto do assinante: fração oficial vinda de
+  // `configuracoes_sistema.clube.desconto.produtos`. O padrão só entra se a
+  // configuração não carregar — nunca fica fixo no cálculo.
+  const [fracaoDescontoAssinante, setFracaoDescontoAssinante] = useState(
+    DESCONTO_ASSINANTE_PADRAO,
+  )
+
+  useEffect(() => {
+    let vivo = true
+    void carregarConfiguracoes()
+      .then((resultado) => {
+        if (!vivo) return
+        const fracao = resultado.dados.clube.desconto.produtos
+        if (Number.isFinite(fracao) && fracao >= 0) {
+          setFracaoDescontoAssinante(fracao)
+        }
+      })
+      .catch(() => {
+        /* mantém o padrão oficial (10%) quando a configuração não responde */
+      })
+    return () => {
+      vivo = false
+    }
+  }, [])
 
   const hoje = hojeISO()
   const caixaFechado = diaFechado(hoje)
@@ -58,12 +84,17 @@ export default function PDV() {
     (soma, i) => soma + i.quantidade * i.preco,
     0,
   )
-  // Assinante vigente do Audax Club: 10% automáticos sobre o subtotal
+  // Assinante vigente do Audax Club: desconto automático sobre o subtotal,
+  // na fração configurada em `clube.desconto.produtos`.
   const assinatura = clienteId ? assinaturaDoCliente(clienteId) : undefined
   const assinanteVigente = Boolean(
     assinatura && assinaturaVigente(assinatura, hoje),
   )
-  const descontoAssinante = valorDescontoAssinante(subtotal, assinanteVigente)
+  const descontoAssinante = valorDescontoAssinante(
+    subtotal,
+    assinanteVigente,
+    fracaoDescontoAssinante,
+  )
   const descontoNum = parseMoeda(descontoTexto) || 0
   const limiteDesconto = Math.max(0, subtotal - descontoAssinante)
   const descontoValido =
@@ -200,9 +231,9 @@ export default function PDV() {
     const cliente = clientes.find((c) => c.id === clienteId)
     const descontoTotal = Math.round((descontoAssinante + descontoNum) * 100) / 100
     finalizandoRef.current = true
-    let vendaId = ''
+    let venda: Lancamento | null = null
     try {
-      const venda = registrarVenda({
+      venda = registrarVenda({
         data: hoje,
         itens: carrinho.map((i) => ({
           produtoId: i.produtoId,
@@ -219,7 +250,6 @@ export default function PDV() {
         profissionalId:
           profissionais.find((p) => p.nome === profissional)?.id,
       })
-      vendaId = venda.id
       // Baixa automática de estoque — uma movimentação por produto da venda
       saidaPorVenda(venda.id, venda.data, venda.itens ?? [])
       setCarrinho([])
@@ -237,7 +267,7 @@ export default function PDV() {
       // A baixa de estoque falhou depois da gravação no caixa: desfaz a
       // receita recém-criada para não deixar venda sem baixa (e o retry
       // não duplica). O carrinho fica intacto para nova tentativa.
-      if (vendaId) desfazerLancamento(vendaId)
+      if (venda) desfazerLancamento(venda)
       setErro(e instanceof Error ? e.message : 'Não foi possível finalizar a venda.')
     } finally {
       finalizandoRef.current = false

@@ -159,14 +159,16 @@ describe('PDV � atomicidade: falha na baixa desfaz a grava��o', () => {
 
     // erro vis�vel, NADA registrou (compensa��o) e o carrinho ficou intacto
     expect(screen.getByText('Falha simulada na baixa de estoque')).toBeTruthy()
-    expect(ctxCaixa.lancamentos).toHaveLength(0)
+    expect(ctxCaixa.lancamentos).toHaveLength(1)
+    expect(ctxCaixa.lancamentos.every((l) => l.estornado)).toBe(true)
+    expect(ctxCaixa.resumoDoDia(DIA).totalRecebido).toBe(0)
     expect(ctxProdutos.porId(id)?.estoque).toBe(5)
     expect(screen.getByDisplayValue('2')).toBeTruthy()
 
     // retry: agora sim � e sem duplicar a receita
     controle.falhar = false
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar venda' }))
-    expect(ctxCaixa.lancamentos).toHaveLength(1)
+    expect(ctxCaixa.lancamentos.filter((l) => !l.estornado)).toHaveLength(1)
     expect(ctxProdutos.porId(id)?.estoque).toBe(3)
     expect(
       screen.getByText(/registrada no caixa e estoque baixado/),
@@ -188,12 +190,13 @@ describe('PDV � atomicidade: falha na baixa desfaz a grava��o', () => {
     controle.falhar = true
     fireEvent.click(screen.getByText('Registrar venda'))
     expect(screen.getByText('Falha simulada na baixa de estoque')).toBeTruthy()
-    expect(ctxCaixa.lancamentos).toHaveLength(0)
+    expect(ctxCaixa.lancamentos.every((l) => l.estornado)).toBe(true)
+    expect(ctxCaixa.resumoDoDia(DIA).totalRecebido).toBe(0)
     expect(ctxProdutos.porId(id)?.estoque).toBe(5)
 
     controle.falhar = false
     fireEvent.click(screen.getByText('Registrar venda'))
-    expect(ctxCaixa.lancamentos).toHaveLength(1)
+    expect(ctxCaixa.lancamentos.filter((l) => !l.estornado)).toHaveLength(1)
     expect(ctxProdutos.porId(id)?.estoque).toBe(3)
     expect(screen.queryByText('Falha simulada na baixa de estoque')).toBeNull()
   })
@@ -291,7 +294,11 @@ describe('Fechamento do atendimento � rollback total e retry', () => {
   }
 
   function lancamentos() {
-    return ler<{ origem: string }[]>(CHAVE_LANC, '[]')
+    return ler<{ origem: string; estornado?: boolean }[]>(CHAVE_LANC, '[]')
+  }
+
+  function lancamentosEfetivos() {
+    return lancamentos().filter((l) => !l.estornado)
   }
 
   function statusAgendamento(): string {
@@ -321,7 +328,8 @@ describe('Fechamento do atendimento � rollback total e retry', () => {
 
     // rollback total: sem pagamento, sem venda, agenda intocada, modal aberto
     expect(screen.getByText('Falha simulada na baixa de estoque')).toBeTruthy()
-    expect(lancamentos()).toHaveLength(0)
+    expect(lancamentosEfetivos()).toHaveLength(0)
+    expect(lancamentos()).toHaveLength(2)
     expect(statusAgendamento()).toBe('confirmado')
     expect(estoqueDe('prod-1')).toBe(10)
     expect(onFechar).not.toHaveBeenCalled()
@@ -330,7 +338,7 @@ describe('Fechamento do atendimento � rollback total e retry', () => {
     controle.falhar = false
     fireEvent.click(screen.getByRole('button', { name: /^Fechar Conta/ }))
     expect(onFechar).toHaveBeenCalled()
-    expect(lancamentos()).toHaveLength(2)
+    expect(lancamentosEfetivos()).toHaveLength(2)
     expect(statusAgendamento()).toBe('concluido')
     expect(estoqueDe('prod-1')).toBe(8)
   })
@@ -358,7 +366,8 @@ describe('Fechamento do atendimento � rollback total e retry', () => {
     // estoque exatamente igual ao estado anterior � tentativa (10, n�o 8)
     expect(estoqueDe('prod-1')).toBe(10)
     // venda e pagamento desfeitos, agenda intocada, modal segue aberto
-    expect(lancamentos()).toHaveLength(0)
+    expect(lancamentosEfetivos()).toHaveLength(0)
+    expect(lancamentos()).toHaveLength(2)
     expect(statusAgendamento()).toBe('confirmado')
     expect(onFechar).not.toHaveBeenCalled()
 
@@ -366,7 +375,8 @@ describe('Fechamento do atendimento � rollback total e retry', () => {
     controleAgenda.falhar = false
     fireEvent.click(screen.getByRole('button', { name: /^Fechar Conta/ }))
     expect(onFechar).toHaveBeenCalled()
-    expect(lancamentos()).toHaveLength(2)
+    expect(lancamentosEfetivos()).toHaveLength(2)
+    expect(lancamentos()).toHaveLength(4)
     expect(statusAgendamento()).toBe('concluido')
     expect(estoqueDe('prod-1')).toBe(8)
   })

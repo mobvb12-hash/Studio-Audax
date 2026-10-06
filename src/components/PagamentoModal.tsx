@@ -343,8 +343,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
       }
     }
     salvandoRef.current = true
-    let pagamentoId = ''
-    let vendaId = ''
+    let pagamento: Lancamento | null = null
     /** Guarda a venda criada para poder devolver a baixa no rollback. */
     let vendaCriada: Lancamento | undefined
     try {
@@ -361,7 +360,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           preco: arredondar(parseMoeda(x.valorTexto) || 0),
         })),
       ]
-      const pagamento = registrarPagamento({
+      pagamento = registrarPagamento({
         agendamentoId: agendamento.id,
         data: agendamento.data,
         hora: agendamento.horario,
@@ -381,7 +380,6 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
         ...(falta > 0 && { falta: arredondar(falta) }),
         ...(gorjeta > 0 && { gorjeta: arredondar(gorjeta) }),
       })
-      pagamentoId = pagamento.id
       if (carrinho.length > 0) {
         // Receita de produto separada da receita de atendimento
         const venda = registrarVenda({
@@ -401,8 +399,7 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
           // Vínculo com a conta: permite que a reabertura devolva esta baixa
           agendamentoId: agendamento.id,
         })
-        vendaId = venda.id
-        vendaCriada = venda
+          vendaCriada = venda
         // Baixa de estoque — idempotente por venda, atômica por venda
         saidaPorVenda(venda.id, venda.data, venda.itens ?? [])
       }
@@ -430,8 +427,8 @@ export default function PagamentoModal({ agendamento, onFechar }: Props) {
             reversao instanceof Error ? reversao.message : 'erro desconhecido'
         }
       }
-      if (vendaId) desfazerLancamento(vendaId)
-      if (pagamentoId) desfazerLancamento(pagamentoId)
+      if (vendaCriada) desfazerLancamento(vendaCriada)
+      if (pagamento) desfazerLancamento(pagamento)
       setErro(
         erroDaReversao
           ? `${erroOriginal} Não foi possível devolver o estoque automaticamente: ${erroDaReversao}.`

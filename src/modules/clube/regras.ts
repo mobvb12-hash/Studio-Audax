@@ -14,6 +14,10 @@ export const DIAS_TOLERANCIA_ATRASO = 7
 
 const RE_DATA = /^\d{4}-\d{2}-\d{2}$/
 
+/** Fração de desconto do assinante quando a configuração não está disponível.
+ * Espelha `configuracoes_sistema.clube.desconto.produtos` (0.1 = 10%). */
+export const DESCONTO_ASSINANTE_PADRAO = 0.1
+
 export function arredondar(valor: number): number {
   return Math.round(valor * 100) / 100
 }
@@ -70,13 +74,23 @@ export function assinaturaVigente(
   return diasEntre(hoje, assinatura.proximoVencimento) >= 0
 }
 
-/** 10% (arredondado em centavos) sobre o subtotal — só para assinantes vigentes. */
+/** Desconto do assinante vigente sobre o subtotal de produtos.
+ *
+ * A fração vem da configuração oficial
+ * (`configuracoes_sistema.clube.desconto.produtos`); o padrão 0.1 (10%) é o
+ * mesmo valor que está no banco e só entra quando a configuração não chegou.
+ * Arredondamento em centavos, como o resto do caixa.
+ */
 export function valorDescontoAssinante(
   subtotal: number,
   vigente: boolean,
+  fracaoDesconto: number = DESCONTO_ASSINANTE_PADRAO,
 ): number {
   if (!vigente || !Number.isFinite(subtotal) || subtotal <= 0) return 0
-  return Math.min(subtotal, arredondar(subtotal * 0.1))
+  const fracao = Number.isFinite(fracaoDesconto)
+    ? Math.max(0, fracaoDesconto)
+    : DESCONTO_ASSINANTE_PADRAO
+  return Math.min(subtotal, arredondar(subtotal * fracao))
 }
 
 /**

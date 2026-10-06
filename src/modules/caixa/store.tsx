@@ -130,7 +130,7 @@ export type CaixaContexto = {
    * de estoque, status): remove o lançamento recém-criado pelo id exato
    * para a operação não ficar parcial (caixa gravado sem estoque).
    */
-  desfazerLancamento: (lancamentoId: string) => void
+  desfazerLancamento: (alvoOuId: string | Lancamento) => void
   fecharCaixa: (data: string) => Fechamento
   reabrirCaixa: (data: string, motivo: string) => void
   /**
@@ -541,6 +541,10 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
       carregarJSON<unknown>(CHAVE_AUDITORIA, null, Array.isArray) === null,
   )
   const alteradosLancamentos = useRef<Set<string>>(new Set())
+  // Ids já compensados/estornados nesta sessão: torna a operação idempotente
+  // mesmo quando duas chamadas acontecem antes de o React reaprender (o estado
+  // capturado no closure ainda não está atualizado).
+  const estornadosNaSessao = useRef<Set<string>>(new Set())
   const removidosLancamentos = useRef<Set<string>>(
     new Set(
       instalacaoNova
@@ -1044,16 +1048,50 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
    * Compensação: quando um passo posterior à gravação falha (baixa de
    * estoque no PDV/venda, status na agenda), desfaz o lançamento criado —
    * a operação inteira volta ao estado anterior em vez de ficar parcial.
+   *
+   * NUNCA apaga o lançamento. O efeito financeiro é o mesmo do estorno
+   * (`estornado`/`estornado_em`, já existentes no schema) e fica registrado em
+   * `caixa_auditoria`, então a receita permanece identificável no histórico —
+   * apagar sumiria com ela do banco e dependeria de permissão de DELETE.
+   * Repetir a compensação não cria um segundo contra-lançamento.
    */
   const desfazerLancamento = useCallback(
-    (lancamentoId: string): void => {
-      if (!lancamentoId) return
-      removidosLancamentos.current.add(lancamentoId)
-      gravarRemovidos(removidosLancamentos.current)
-      setLancamentos((atual) => atual.filter((l) => l.id !== lancamentoId))
-      sincronizar(CHAVE_LANCAMENTOS, () => removerLancamento(lancamentoId))
+    (alvoOuId: string | Lancamento): void => {
+      if (!alvoOuId) return
+      // O compensate vem logo depois da gravação: o estado capturado no
+      // closure pode ainda não conter o lançamento. Aceitar o próprio
+      // lançamento evita depender disso — e o id continua funcionando para
+      // quem chama com o identificador.
+      const alvo: Lancamento | undefined =
+        typeof alvoOuId === 'string'
+          ? lancamentos.find((l) => l.id === alvoOuId)
+          : alvoOuId
+      if (!alvo || alvo.estornado) return
+      if (estornadosNaSessao.current.has(alvo.id)) return
+      estornadosNaSessao.current.add(alvo.id)
+      const estornadoEm = new Date().toISOString()
+      const evento: EventoAuditoria = {
+        id: gerarId(),
+        acao: 'estorno',
+        data: alvo.data,
+        descricao: `${alvo.origem === 'despesa' ? 'Despesa' : 'Receita'}: ${alvo.descricao} — R$ ${alvo.valorLiquido.toFixed(2)} (compensação)`,
+        criadoEm: estornadoEm,
+      }
+      const estornado: Lancamento = { ...alvo, estornado: true, estornadoEm }
+      alteradosLancamentos.current.add(alvo.id)
+      alteradosAuditoria.current.add(evento.id)
+      setLancamentos((atual) => {
+        const existe = atual.some((l) => l.id === alvo.id)
+        const base = existe ? atual : [...atual, estornado]
+        return base.map((l) => (l.id === alvo.id ? estornado : l))
+      })
+      setAuditoria((atual) => [...atual, evento])
+      sincronizar(CHAVE_LANCAMENTOS, async () => {
+        await atualizarLancamento(alvo.id, estornado)
+        await criarEventoAuditoria(evento)
+      })
     },
-    [sincronizar],
+    [lancamentos, sincronizar],
   )
 
   const registrarReceitaClube = useCallback(

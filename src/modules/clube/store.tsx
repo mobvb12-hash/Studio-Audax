@@ -19,6 +19,7 @@ import { normalizarTexto } from '@/lib/moeda'
 import { supabase } from '@/lib/supabase'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
+import type { Lancamento } from '@/modules/caixa/types'
 import { FORMAS_PAGAMENTO, type FormaPagamento } from '@/modules/caixa/types'
 import {
   gravarAssinatura,
@@ -99,6 +100,40 @@ function cicloJaPago(
       p.vencimentoCoberto === vencimento &&
       (!p.caixaLancamentoId || !estornados.has(p.caixaLancamentoId)),
   )
+}
+
+/**
+ * Maior ciclo coberto por um pagamento VÁLIDO (lançamento não estornado) e
+ * maior ciclo coberto por um pagamento ESTORNADO.
+ *
+ * Serve para desfazer o avanço do ciclo quando o dinheiro volta: o pagamento
+ * estornado já tinha empurrado `proximoVencimento` para o mês seguinte, e sem
+ * esta base o pagamento seguinte cobriria esse mês de graça — um pagamento, dois
+ * meses. O ciclo estornado volta a ser o próximo a ser cobrado.
+ */
+function cicloCoberto(
+  pagamentos: PagamentoClube[],
+  assinaturaId: string,
+  estornados: ReadonlySet<string>,
+): { valido: string | null; estornado: string | null } {
+  let valido: string | null = null
+  let estornado: string | null = null
+  for (const p of pagamentos) {
+    if (p.assinaturaId !== assinaturaId) continue
+    if (!p.vencimentoCoberto) continue
+    const coberto =
+      p.caixaLancamentoId && estornados.has(p.caixaLancamentoId)
+        ? estornado
+        : valido
+    if (coberto === null || p.vencimentoCoberto > coberto) {
+      if (p.caixaLancamentoId && estornados.has(p.caixaLancamentoId)) {
+        estornado = p.vencimentoCoberto
+      } else {
+        valido = p.vencimentoCoberto
+      }
+    }
+  }
+  return { valido, estornado }
 }
 
 function carregarEstado(): EstadoClube {
@@ -677,6 +712,10 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
       if (!FORMAS_PAGAMENTO.includes(input.formaPagamento)) {
         throw new Error('Selecione a forma de pagamento.')
       }
+      // Estornados não cobrem ciclo: o dinheiro voltou.
+      const lancamentosEstornados = new Set(
+        lancamentos.filter((l) => l.estornado).map((l) => l.id),
+      )
       // Cobrança do ciclo atual já paga: recusa duplicidade — tanto no mesmo
       // lote (pendência) quanto pelo histórico já gravado (pagamentos com
       // lançamento estornado ficam de fora: o ciclo não está coberto).
@@ -686,17 +725,29 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
           ciclosPagos.current,
           ass.id,
           ass.proximoVencimento,
-          new Set(lancamentos.filter((l) => l.estornado).map((l) => l.id)),
+          lancamentosEstornados,
         )
       ) {
         throw new Error(
           'Esta cobrança já foi paga. O próximo ciclo só pode ser pago após a renovação.',
         )
       }
+      // Base do próximo ciclo: se o ciclo mais recente foi pago com um lançamento
+      // estornado, ele volta a ser o próximo a cobrar (o dinheiro voltou).
+      const { valido, estornado: cicloEstornado } = cicloCoberto(
+        estado.pagamentos,
+        ass.id,
+        lancamentosEstornados,
+      )
+      const cicloVolta =
+        cicloEstornado !== null &&
+        (valido === null || cicloEstornado > valido) &&
+        cicloEstornado <= ass.proximoVencimento
+      const vencimentoBase = cicloVolta ? cicloEstornado : ass.proximoVencimento
 
       // Caixa primeiro (lançamento do dia) — lança erro de caixa fechado
       // antes de qualquer mudança nas assinaturas.
-      let lancamentoId: string | null = null
+      let lancamentoGravado: Lancamento | null = null
       try {
         const lancamento = registrarReceitaClube({
           data: input.data,
@@ -707,7 +758,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
           clienteId: ass.clienteId,
           assinaturaId: ass.id,
         })
-        lancamentoId = lancamento.id
+        lancamentoGravado = lancamento
 
         const pagamento: PagamentoClube = {
           id: gerarId(),
@@ -717,13 +768,13 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
           valor: Math.round(input.valor * 100) / 100,
           formaPagamento: input.formaPagamento,
           caixaLancamentoId: lancamento.id,
-          vencimentoCoberto: ass.proximoVencimento,
+          vencimentoCoberto: vencimentoBase,
           criadoEm: new Date().toISOString(),
         }
         const atualizada: AssinaturaClube = {
           ...ass,
           proximoVencimento: proximoVencimentoAposPagamento(
-            ass.proximoVencimento,
+            vencimentoBase,
             input.data,
           ),
           atualizadoEm: new Date().toISOString(),
@@ -750,7 +801,7 @@ export function ClubeProvider({ children }: { children: ReactNode }) {
         // chegou ao estado. Desfaz a receita para não deixar caixa com entrada
         // órfã — mesmo padrão dos fluxos do PDV, da venda de produtos e do
         // pagamento de agendamento.
-        if (lancamentoId) desfazerLancamento(lancamentoId)
+        if (lancamentoGravado) desfazerLancamento(lancamentoGravado)
         throw erro
       }
     },

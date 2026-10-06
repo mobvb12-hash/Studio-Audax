@@ -540,12 +540,21 @@ describe('Caixa — desfazerLancamento (compensação de falha em cascata)', () 
       ctx.desfazerLancamento(vendaId)
     })
 
-    expect(ctx.lancamentos).toHaveLength(1)
+    // Compensação NÃO apaga: o lançamento permanece identificável como
+    // estornado e sai dos totais do dia.
+    expect(ctx.lancamentos).toHaveLength(2)
+    expect(ctx.lancamentos.filter((l) => !l.estornado)).toHaveLength(1)
     expect(ctx.lancamentos[0].origem).toBe('atendimento')
-    expect(ctx.auditoria).toHaveLength(0)
+    const estornado = ctx.lancamentos.find((l) => l.estornado)
+    expect(estornado?.origem).toBe('produto')
+    expect(estornado?.estornadoEm).toBeTruthy()
+    // evento de auditoria registra o estorno
+    expect(ctx.auditoria).toHaveLength(1)
+    expect(ctx.auditoria[0].acao).toBe('estorno')
+    expect(ctx.resumoDoDia(DIA).receitasProdutos).toBe(0)
     expect(
       JSON.parse(localStorage.getItem(CHAVE_LANC) ?? '[]'),
-    ).toHaveLength(1)
+    ).toHaveLength(2)
   })
 
   it('id inexistente não altera nada (idempotente)', () => {
@@ -558,6 +567,31 @@ describe('Caixa — desfazerLancamento (compensação de falha em cascata)', () 
       ctx.desfazerLancamento('id-que-nao-existe')
     })
     expect(JSON.stringify(ctx.lancamentos)).toBe(antes)
+  })
+
+  it('repetir a compensação não cria um segundo contra-lançamento', () => {
+    montar()
+    let vendaId = ''
+    act(() => {
+      vendaId = ctx.registrarVenda({
+        data: DIA,
+        itens: [{ produtoId: 'p1', produto: 'Pomada', quantidade: 1, preco: 30 }],
+        desconto: 0,
+        formaPagamento: 'pix',
+        profissional: 'Diego',
+      }).id
+    })
+    act(() => {
+      ctx.desfazerLancamento(vendaId)
+    })
+    const depoisDaPrimeira = JSON.stringify(ctx.lancamentos)
+    const auditoriaNaPrimeira = ctx.auditoria.length
+
+    act(() => {
+      ctx.desfazerLancamento(vendaId)
+    })
+    expect(JSON.stringify(ctx.lancamentos)).toBe(depoisDaPrimeira)
+    expect(ctx.auditoria).toHaveLength(auditoriaNaPrimeira)
   })
 
   it('pagamento desfeito libera novo registro do mesmo atendimento (retry)', () => {
@@ -574,7 +608,10 @@ describe('Caixa — desfazerLancamento (compensação de falha em cascata)', () 
     act(() => {
       ctx.registrarPagamento(pagamento())
     })
-    expect(ctx.lancamentos).toHaveLength(1)
+    // o estornado continua no histórico; o novo entra efetivo
+    expect(ctx.lancamentos).toHaveLength(2)
+    expect(ctx.lancamentos.filter((l) => !l.estornado)).toHaveLength(1)
     expect(ctx.lancamentos[0].origem).toBe('atendimento')
+    expect(ctx.lancamentos.some((l) => l.estornado)).toBe(true)
   })
 })

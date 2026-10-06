@@ -51,7 +51,8 @@ function montar() {
   )
 }
 
-const receitasClube = () => caixa.lancamentos.filter((l) => l.origem === 'clube')
+const receitasClube = () =>
+  caixa.lancamentos.filter((l) => l.origem === 'clube' && !l.estornado)
 
 function pagar() {
   clube.registrarPagamento({
