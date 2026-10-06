@@ -536,9 +536,14 @@ describe('Clientes — marca de sincronização e resquícios', () => {
       (ultimaSincronizacao(CHAVE_STORAGE_CLIENTES) ?? '') >= (marcaConcluida ?? ''),
     ).toBe(true)
 
-    // 5) alteração local posterior à marca continua indo para o servidor
+    // 5) alteração local posterior à marca continua indo para o servidor.
+    //    O carimbo é derivado da própria marca (não do relógio do sistema):
+    //    a carga anterior acabou de gravar a marca, então `new Date()` cairia
+    //    no mesmo milissegundo e a comparação `carimbo > marca` — correta e
+    //    conservadora na produção — diria que a alteração não é elegível.
+    const marcaAtual = ultimaSincronizacao(CHAVE_STORAGE_CLIENTES) ?? ''
     const alterado = cliente('cli-7', 'Cliente Apagado No Servidor', {
-      atualizadoEm: new Date().toISOString(),
+      atualizadoEm: new Date(Date.parse(marcaAtual) + 5000).toISOString(),
     })
     const terceira = await migrarClientes([alterado])
 

@@ -123,7 +123,12 @@ describe('App — a carga do Supabase espera a sessão', () => {
     ).toEqual([])
     // a carga inicial de clientes acontece depois do login
     expect(consultas.lista.some((c) => c.tabela === 'clientes')).toBe(true)
-    // e o painel abre de verdade (conteúdo interno, não a tela de login)
-    expect(screen.queryByRole('button', { name: 'Entrar' })).toBeNull()
+    // e o painel abre de verdade (conteúdo interno, não a tela de login).
+    // A troca de tela é aguardada, e não afirmada no mesmo instante: a
+    // primeira consulta dispara antes de o App terminar de desmontar o
+    // formulário, então afirmar logo após `length > 0` era uma corrida.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Entrar' })).toBeNull(),
+    )
   })
 })
