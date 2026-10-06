@@ -301,7 +301,7 @@ describe('Agenda — agendamentos', () => {
 
     expect(editado.cliente).toBe('Ana Editada')
     expect(editado.horario).toBe('10:00')
-    expect(editado.status).toBe('pendente')
+    expect(editado.status).toBe('confirmado')
     await waitFor(() =>
       expect((remoto.agendamentos[0] as { cliente: string }).cliente).toBe(
         'Ana Editada',

@@ -153,7 +153,7 @@ function agendamento(extra: Partial<Agendamento> = {}): Agendamento {
     profissional: 'Cleiton',
     data: DIA,
     horario: '10:00',
-    status: 'pendente',
+    status: 'confirmado',
     observacao: '',
     criadoEm: '2026-05-01T12:00:00.000Z',
     atualizadoEm: '2026-05-01T12:00:00.000Z',
@@ -291,7 +291,7 @@ describe('Agenda — escritas confirmadas e idempotentes', () => {
   it('grava agendamento e devolve a linha confirmada', async () => {
     const gravado = await gravarAgendamento(agendamento())
 
-    expect(gravado).toMatchObject({ id: 'ag-1', status: 'pendente' })
+    expect(gravado).toMatchObject({ id: 'ag-1', status: 'confirmado' })
     expect(banco.estado.gravadas('agendamentos')).toHaveLength(1)
   })
 
@@ -316,7 +316,7 @@ describe('Agenda — escritas confirmadas e idempotentes', () => {
   })
 
   it('mover horário/profissional e concluir continuam sendo o mesmo registro', async () => {
-    banco.estado.reiniciar([['agendamentos', { id: 'ag-1', status: 'pendente' }]])
+    banco.estado.reiniciar([['agendamentos', { id: 'ag-1', status: 'confirmado' }]])
 
     await gravarAgendamento(agendamento({ horario: '15:00' }))
     await gravarAgendamento(agendamento({ horario: '15:00', status: 'concluido' }))

@@ -92,7 +92,7 @@ export function gerarAutomacoes(
   for (const ag of agendamentos) {
     const cliente = clientePorNome(clientes, ag.cliente)
 
-    // 1) Confirmação: agendamento de amanhã ainda pendente.
+    // 1) Confirmação: agendamento de amanhã ainda não confirmado.
     if (ag.status === 'pendente' && ag.data === amanha && cliente) {
       if (
         !jaPreparada(mensagens, 'confirmacao', cliente.id, ag.id)

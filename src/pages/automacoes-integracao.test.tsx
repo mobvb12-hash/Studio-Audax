@@ -13,7 +13,7 @@ import { CaixaProvider } from '@/modules/caixa/store'
 import { ClientesProvider, useClientes } from '@/modules/clientes/store'
 import { ClubeProvider } from '@/modules/clube/store'
 import { EsperaProvider } from '@/modules/espera/store'
-import { WhatsProvider, useWhats } from '@/modules/whatsapp/store'
+import { WhatsProvider } from '@/modules/whatsapp/store'
 
 const HOJE = hojeISO()
 const AMANHA = somarDias(HOJE, 1)
@@ -22,18 +22,15 @@ const CHAVE_AUTOMACOES = 'studio-audax:automacoes:v1'
 
 let ctxAgenda: ReturnType<typeof useAgenda>
 let ctxClientes: ReturnType<typeof useClientes>
-let ctxWhats: ReturnType<typeof useWhats>
 let ctxAutomacoes: ReturnType<typeof useAutomacoes>
 
 function Captura() {
   const agenda = useAgenda()
   const clientes = useClientes()
-  const whats = useWhats()
   const automacoes = useAutomacoes()
   useEffect(() => {
     ctxAgenda = agenda
     ctxClientes = clientes
-    ctxWhats = whats
     ctxAutomacoes = automacoes
   })
   return null
@@ -72,12 +69,11 @@ function tratadas(): string[] {
 
 beforeEach(() => {
   localStorage.clear()
-  ctxWhats = undefined as unknown as ReturnType<typeof useWhats>
   ctxAutomacoes = undefined as unknown as ReturnType<typeof useAutomacoes>
 })
 
 describe('Automações — integração do modal', () => {
-  it('prepara confirmação como PENDENTE, nunca envia, e trava a chave', () => {
+  it('não prepara confirmação para agendamento já confirmado (trigger do banco envia)', () => {
     env(<AutomacoesModal onFechar={() => undefined} />)
     act(() => {
       ctxClientes.adicionar({
@@ -97,29 +93,13 @@ describe('Automações — integração do modal', () => {
       })
     })
 
-    expect(screen.getByText('Confirmação de agendamento')).toBeTruthy()
-    expect(screen.getByText('Ana Souza')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Preparar mensagem' }))
-
-    const lista = mensagens()
-    expect(lista).toHaveLength(1)
-    expect(lista[0]).toMatchObject({
-      template: 'confirmacao',
-      status: 'pendente',
-      origem: 'automacao',
-      cliente: 'Ana Souza',
-    })
-    expect(lista[0].agendamentoId).toBeTruthy()
-    expect(tratadas()[0]).toMatch(/^confirmacao:/)
-    expect(ctxWhats.mensagens[0].status).toBe('pendente')
-
-    // tratada: a sugestão sai da lista e nada é enviado
+    // Agendamento já confirmado: a confirmação é enviada pelo trigger do banco,
+    // não pela automação local. O modal não deve sugerir confirmação.
     expect(screen.queryByText('Confirmação de agendamento')).toBeNull()
-    expect(ctxWhats.integracaoAtiva).toBe(false)
+    expect(mensagens()).toHaveLength(0)
   })
 
-  it('preparada não volta mesmo após reabrir o modal', () => {
+  it('agendamento confirmado não gera sugestão de confirmação', () => {
     const { unmount } = env(<AutomacoesModal onFechar={() => undefined} />)
     act(() => {
       ctxClientes.adicionar({
@@ -138,7 +118,6 @@ describe('Automações — integração do modal', () => {
         observacao: '',
       })
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Preparar mensagem' }))
     unmount()
 
     // "reabrir": novo modal lê a mesma chave de tratadas

@@ -107,12 +107,12 @@ beforeEach(() => {
 })
 
 describe('Agenda — store', () => {
-  it('cria agendamento com status pendente e grava no localStorage', () => {
+  it('cria agendamento com status confirmado e grava no localStorage', () => {
     montar()
     fireEvent.click(screen.getByText('criar'))
     const lista = lerLista()
     expect(lista).toHaveLength(1)
-    expect(lista[0].status).toBe('pendente')
+    expect(lista[0].status).toBe('confirmado')
     expect(lista[0].cliente).toBe('Lucas Mendes')
     expect(lista[0].servico).toBe('Corte Degradê')
 
@@ -582,7 +582,7 @@ describe('Agenda — remarcação', () => {
     const depois = lerExtra().lista
     expect(depois).toHaveLength(1)
     expect(depois[0].id).toBe(antes.id)
-    expect(depois[0].status).toBe('pendente')
+    expect(depois[0].status).toBe('confirmado')
     expect(depois[0].horario).toBe('11:00')
     expect(depois[0].remarcacoes).toHaveLength(1)
     expect(depois[0].remarcacoes?.[0].de).toMatchObject({
@@ -621,7 +621,7 @@ describe('Agenda — edição de agendamento', () => {
     expect(ag.servico).toBe('Barba')
     expect(ag.duracaoMin).toBe(30)
     expect(ag.observacao).toBe('máquina baixa')
-    expect(ag.status).toBe('pendente')
+    expect(ag.status).toBe('confirmado')
     expect(ag.horario).toBe('10:00')
     expect(ag.profissional).toBe('Audax')
 
@@ -788,9 +788,9 @@ describe('Agenda — agendamento pago não pode ser cancelado nem excluído', ()
     expect(lerPagamentos()[0].status).not.toBe('cancelado')
 
     // status original preservado
-    expect(lerPagamentos()[0].status).toBe('pendente')
+    expect(lerPagamentos()[0].status).toBe('confirmado')
     expect(JSON.parse(localStorage.getItem(CHAVE) ?? '[]')[0].status).toBe(
-      'pendente',
+      'confirmado',
     )
   })
 

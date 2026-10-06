@@ -790,7 +790,7 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
         profissional: input.profissional,
         data: input.data,
         horario: input.horario,
-        status: 'pendente',
+        status: 'confirmado',
         observacao: input.observacao.trim(),
         criadoEm,
         atualizadoEm: criadoEm,

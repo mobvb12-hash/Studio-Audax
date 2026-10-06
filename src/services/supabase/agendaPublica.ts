@@ -417,7 +417,7 @@ export async function horariosPublicos(
 }
 
 /**
- * Cria o agendamento público com status 'pendente' (a equipe confirma).
+ * Cria o agendamento público com status 'confirmado' (confirmação automática).
  * Com Supabase o servidor revalida tudo; sem Supabase roda as MESMAS
  * regras da Agenda interna. Nunca mente: erro do servidor vira mensagem.
  */
@@ -518,7 +518,7 @@ export async function criarAgendamentoPublico(
     profissional: p.profissional,
     data: p.data,
     horario: p.horario,
-    status: 'pendente',
+    status: 'confirmado',
     observacao: (p.observacao ?? '').trim(),
     criadoEm: new Date().toISOString(),
     duracaoMin,

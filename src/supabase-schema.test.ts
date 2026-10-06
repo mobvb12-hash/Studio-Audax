@@ -156,8 +156,9 @@ expect(nomes).toEqual([
   '../supabase/migrations/041_perfis_e_conta_do_cliente.sql',
   '../supabase/migrations/042_perfis_permissoes.sql',
   '../supabase/migrations/043_perfis_papel_check.sql',
-  '../supabase/migrations/044_agendamento_dados_do_cliente.sql',
-])
+      '../supabase/migrations/044_agendamento_dados_do_cliente.sql',
+      '../supabase/migrations/045_confirmacao_automatica.sql',
+    ])
   })
 
   it('nenhum script apaga dado, derruba tabela ou remove coluna', () => {

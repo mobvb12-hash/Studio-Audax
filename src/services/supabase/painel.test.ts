@@ -128,7 +128,7 @@ describe('listarMeusAgendamentos', () => {
         profissional: 'Bia',
         data: '2026-01-11',
         horario: '09:00',
-        status: 'pendente',
+        status: 'confirmado',
         duracao_min: null,
         observacao: '',
         criado_em: '',
@@ -267,7 +267,7 @@ describe('criarAgendamentoPainel', () => {
   })
 
   it('chama a RPC 019 com a sessão e devolve o id criado', async () => {
-    banco.estado.rpcResposta = { data: { id: 'ag-9', status: 'pendente' }, error: null }
+    banco.estado.rpcResposta = { data: { id: 'ag-9', status: 'confirmado' }, error: null }
 
     const resultado = await criarAgendamentoPainel(dadosValidos())
 

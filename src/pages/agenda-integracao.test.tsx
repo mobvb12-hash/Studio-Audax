@@ -272,7 +272,7 @@ describe('Integração do usoAgenda com a grade', () => {
       cliente: 'Bruno Dias',
       profissional: 'Ítalo Santos',
       horario: '14:00',
-      status: 'pendente',
+      status: 'confirmado',
       servico: 'Barba',
       duracaoMin: 30,
     })
