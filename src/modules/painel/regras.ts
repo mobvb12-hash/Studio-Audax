@@ -192,6 +192,11 @@ function normalizarRetomada(estado: Partial<EstadoAgendamento> | undefined) {
       : [],
     nome: String(e.nome ?? ''),
     telefone: String(e.telefone ?? ''),
+    // Sem estas duas linhas o rascunho voltaria SEM o e-mail e o nascimento
+    // digitados: `...ESTADO_VAZIO` preenche com '' e some com o que a pessoa
+    // acabou de escrever.
+    email: String(e.email ?? ''),
+    nascimento: String(e.nascimento ?? ''),
     observacao: String(e.observacao ?? ''),
   } satisfies EstadoAgendamento
 }

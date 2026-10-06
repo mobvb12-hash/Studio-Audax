@@ -83,6 +83,15 @@ export type CatalogoPublico = {
 export type PropostaPublica = {
   cliente: string
   telefone: string
+  /**
+   * E-mail e nascimento digitados na etapa de dados.
+   *
+   * Opcionais no CONTRATO (o painel e a IA continuam chamando sem eles), mas
+   * obrigatórios na tela da vitrine. A migration 044 os grava em
+   * `agendamentos.dados` — coluna jsonb que já existia.
+   */
+  email?: string
+  nascimento?: string
   servico: string
   profissional: string
   data: string
@@ -421,6 +430,14 @@ export async function criarAgendamentoPublico(
   if (fone.length < 10 || fone.length > 13) {
     return { ok: false, erro: 'Informe um telefone válido com DDD.' }
   }
+  const email = (p.email ?? '').trim()
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return { ok: false, erro: 'Informe um e-mail válido.' }
+  }
+  const nascimento = (p.nascimento ?? '').trim()
+  if (nascimento && !/^\d{4}-\d{2}-\d{2}$/.test(nascimento)) {
+    return { ok: false, erro: 'Informe uma data de nascimento válida.' }
+  }
   if (!p.servico) return { ok: false, erro: 'Escolha o serviço.' }
   if (!p.profissional) return { ok: false, erro: 'Escolha o profissional.' }
   if (!p.data || p.data < hojeISO()) {
@@ -455,6 +472,8 @@ export async function criarAgendamentoPublico(
         p_data: p.data,
         p_horario: p.horario,
         p_observacao: (p.observacao ?? '').trim(),
+        p_email: email,
+        p_nascimento: nascimento,
         p_complementos: complementos,
       },
     )
@@ -486,6 +505,11 @@ export async function criarAgendamentoPublico(
   })
   if (!validacao.ok) return { ok: false, erro: validacao.erro }
 
+  /*
+   * Local (sem Supabase) não tem onde guardar e-mail/nascimento: o registro
+   * local é a lista da própria Agenda, sem a coluna `dados` do banco. É o modo
+   * de demonstração — quem está em produção grava os dois pela migration 044.
+   */
   const registro: Agendamento = {
     id: gerarId(),
     cliente: nome,

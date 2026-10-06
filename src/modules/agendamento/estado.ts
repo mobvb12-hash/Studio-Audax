@@ -49,7 +49,7 @@ export const ETAPAS: Etapa[] = [
  */
 export const ETAPA_ROTULO: Record<Etapa, string> = {
   servico: 'Serviço',
-  profissional: 'Barbeiro',
+  profissional: 'Profissional',
   data: 'Data',
   horario: 'Horário',
   complementos: 'Extras',
@@ -69,6 +69,15 @@ export type EstadoAgendamento = {
   complementoIds: string[]
   nome: string
   telefone: string
+  /**
+   * E-mail e data de nascimento digitados na etapa de dados.
+   *
+   * São obrigatórios para confirmar (o portão de identificação já exigiu a
+   * conta, e a conta TEM e-mail). Viajam aqui até a confirmação e são gravados
+   * no agendamento pela RPC da migration 044.
+   */
+  email: string
+  nascimento: string
   observacao: string
 }
 
@@ -80,6 +89,8 @@ export const ESTADO_VAZIO: EstadoAgendamento = {
   complementoIds: [],
   nome: '',
   telefone: '',
+  email: '',
+  nascimento: '',
   observacao: '',
 }
 
@@ -302,12 +313,54 @@ export function servicosAdicionais(
   }
 }
 
-/** Dados válidos para confirmar (mesmas regras de antes, sem inventar). */
+/** E-mail com forma de e-mail — sem DNS, só o que dá para julgar na tela. */
+function emailValido(valor: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valor.trim())
+}
+
+/**
+ * Data de nascimento em `YYYY-MM-DD` e que não é amanhã.
+ *
+ * Mesma regra de `nascimentoValido` do painel do cliente, replicada de
+ * propósito: este módulo não importa nada (é testável sem navegador) e
+ * `painel/regras` é quem importa ESTADO_VAZIO — importar de lá aqui tornaria
+ * os dois circularmente dependentes.
+ */
+function nascimentoValido(valor: string): boolean {
+  const data = valor.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return false
+  const [ano, mes, dia] = data.split('-').map(Number)
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return false
+  const validada = new Date(ano, mes - 1, dia)
+  if (
+    validada.getFullYear() !== ano ||
+    validada.getMonth() !== mes - 1 ||
+    validada.getDate() !== dia
+  ) {
+    return false
+  }
+  const hoje = new Date()
+  return (
+    validada.getTime() <=
+    new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).getTime()
+  )
+}
+
+/**
+ * Dados válidos para confirmar: nome, telefone com DDD, e-mail e nascimento.
+ *
+ * Nome e telefone são as duas regras de sempre. E-mail e nascimento entraram
+ * quando a etapa de dados ficou completa: a conta é pré-condição (o portão
+ * aconteceu antes), então não há o que a pessoa possa errar — é o mesmo
+ * e-mail com que ela entrou.
+ */
 export function dadosValidos(estado: EstadoAgendamento): boolean {
   const digitos = estado.telefone.replace(/\D/g, '')
   return (
     estado.nome.trim().length >= 2 &&
     digitos.length >= 10 &&
-    digitos.length <= 13
+    digitos.length <= 13 &&
+    emailValido(estado.email) &&
+    nascimentoValido(estado.nascimento)
   )
 }

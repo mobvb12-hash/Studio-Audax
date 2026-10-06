@@ -156,6 +156,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/041_perfis_e_conta_do_cliente.sql',
   '../supabase/migrations/042_perfis_permissoes.sql',
   '../supabase/migrations/043_perfis_papel_check.sql',
+  '../supabase/migrations/044_agendamento_dados_do_cliente.sql',
 ])
   })
 
@@ -2214,5 +2215,67 @@ describe('043 - perfis.papel aceita os cinco papéis oficiais', () => {
 
   it('não cria regra entre papel e vínculo profissional', () => {
     expect(texto).not.toMatch(/profissionais|user_id\s*is\s+not\s+null/i)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 044 - e-mail e nascimento na etapa de dados do /agendar              */
+/* ------------------------------------------------------------------ */
+
+describe('044 - a etapa de dados do /agendar grava e-mail e nascimento', () => {
+  const bruto = sql('../supabase/migrations/044_agendamento_dados_do_cliente.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('grava em `agendamentos.dados` sem alterar a estrutura', () => {
+    expect(texto).toContain('dados = coalesce(dados')
+    // nem coluna nova, nem tabela nova, e nada destrutivo
+    expect(texto).not.toMatch(/\bcreate table\b|\badd column\b|\balter table\b/i)
+    expect(texto).not.toMatch(/\bdelete from\b|\btruncate\b|\bdrop table\b|\bdrop column\b/i)
+    // o merge preserva o que já estava no jsonb de outra origem
+    expect(texto).toContain("|| jsonb_strip_nulls(")
+    expect(texto).toContain("'email', nullif(v_email, '')")
+    expect(texto).toContain("'nascimento', nullif(v_nasc, '')")
+  })
+
+  it('só o wrapper muda — `agendamento_publico_criar` continua a autoridade', () => {
+    // As 019/024/027/036 chamam `agendamento_publico_criar` com sete
+    // argumentos: redefinir aqui deixaria duas assinaturas e a chamada
+    // passaria a ser ambígua.
+    expect(texto).not.toContain('create or replace function public.agendamento_publico_criar(')
+    expect(texto).toContain('select public.agendamento_publico_criar(')
+    expect(texto).toContain(
+      'create or replace function public.agendamento_publico_criar_complementos(',
+    )
+  })
+
+  it('derruba a assinatura antiga antes de criar a nova (sem sobrecarga)', () => {
+    expect(texto).toContain(
+      'drop function if exists public.agendamento_publico_criar_complementos(',
+    )
+    expect(texto).toMatch(
+      /drop function if exists public\.agendamento_publico_criar_complementos\(\s*text, text, text, text, date, text, text, text\[\]\s*\)/,
+    )
+    // e refaz o grant da assinatura nova, que morreu junto com o drop
+    expect(texto).toMatch(
+      /grant execute on function public\.agendamento_publico_criar_complementos\(\s*text, text, text, text, date, text, text, text\[\], text, text\s*\) to anon, authenticated, service_role/,
+    )
+    expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+
+  it('quem não envia e-mail nem nascimento continua sendo aceito', () => {
+    // Obrigatório é regra da tela; o servidor não pode travar o painel (019)
+    // nem a IA/WhatsApp, que chamam sem esses dois.
+    expect(texto).toContain("p_email text default ''")
+    expect(texto).toContain("p_nascimento text default ''")
+    // e quando vêm preenchidos, são validados — o formato e o futuro
+    expect(texto).toContain("v_email !~ '^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$'")
+    expect(texto).toContain('public.audax_nascimento_iso(p_nascimento)')
+    expect(texto).toContain("to_char(current_date, 'YYYY-MM-DD')")
+  })
+
+  it('não toca em agenda, finanças, clube nem RLS', () => {
+    expect(texto).not.toMatch(/create policy|drop policy|enable row level security/i)
+    expect(texto).not.toMatch(/caixa|comiss|clube|pote|pagamento/i)
+    expect(texto).not.toMatch(/insert into\s+(?!public\.agendamentos)|update public\.(?!agendamentos)/i)
   })
 })

@@ -35,6 +35,8 @@ const CHEIO: EstadoAgendamento = {
   complementoIds: ['srv-sobrancelha'],
   nome: 'Ana Souza',
   telefone: '(81) 99999-9999',
+  email: 'ana@studio.com',
+  nascimento: '1995-06-15',
   observacao: '',
 }
 
@@ -258,7 +260,7 @@ describe('complemento que não cabe no horário', () => {
 })
 
 describe('dados do cliente', () => {
-  it('aceita nome e telefone com DDD', () => {
+  it('aceita nome, telefone com DDD, e-mail e nascimento', () => {
     expect(dadosValidos(CHEIO)).toBe(true)
     expect(dadosValidos({ ...CHEIO, telefone: '81999999999' })).toBe(true)
   })
@@ -267,6 +269,23 @@ describe('dados do cliente', () => {
     expect(dadosValidos({ ...CHEIO, nome: 'A' })).toBe(false)
     expect(dadosValidos({ ...CHEIO, telefone: '9999999' })).toBe(false)
     expect(dadosValidos({ ...CHEIO, telefone: '' })).toBe(false)
+  })
+
+  it('recusa e-mail vazio ou com forma errada', () => {
+    expect(dadosValidos({ ...CHEIO, email: '' })).toBe(false)
+    expect(dadosValidos({ ...CHEIO, email: '   ' })).toBe(false)
+    expect(dadosValidos({ ...CHEIO, email: 'ana@studio' })).toBe(false)
+    expect(dadosValidos({ ...CHEIO, email: 'ana no arroba studio.com' })).toBe(false)
+  })
+
+  it('recusa nascimento vazio, impossível ou do futuro', () => {
+    expect(dadosValidos({ ...CHEIO, nascimento: '' })).toBe(false)
+    expect(dadosValidos({ ...CHEIO, nascimento: '15/06/1995' })).toBe(false)
+    expect(dadosValidos({ ...CHEIO, nascimento: '1995-02-30' })).toBe(false)
+    // Ninguém nasceu amanhã: a data passa pelo formato e ainda assim é recusada.
+    const amanha = new Date(Date.now() + 86400000)
+    const iso = `${amanha.getFullYear()}-${String(amanha.getMonth() + 1).padStart(2, '0')}-${String(amanha.getDate()).padStart(2, '0')}`
+    expect(dadosValidos({ ...CHEIO, nascimento: iso })).toBe(false)
   })
 })
 
@@ -282,7 +301,13 @@ describe('o caminho feliz completo', () => {
     estado = escolherData(estado, '2026-10-05')
     estado = escolherHorario(estado, '14:00')
     estado = { ...estado, complementoIds: ['srv-sobrancelha'] }
-    estado = { ...estado, nome: 'Ana Souza', telefone: '81999999999' }
+    estado = {
+      ...estado,
+      nome: 'Ana Souza',
+      telefone: '81999999999',
+      email: 'ana@studio.com',
+      nascimento: '1995-06-15',
+    }
 
     expect(estado).toEqual({
       servicoNome: 'Corte de  Cabelo',
@@ -292,6 +317,8 @@ describe('o caminho feliz completo', () => {
       complementoIds: ['srv-sobrancelha'],
       nome: 'Ana Souza',
       telefone: '81999999999',
+      email: 'ana@studio.com',
+      nascimento: '1995-06-15',
       observacao: '',
     })
     expect(etapaBloqueia(estado, 'resumo')).toBe(false)

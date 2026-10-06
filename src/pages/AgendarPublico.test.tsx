@@ -926,10 +926,45 @@ describe('dados, resumo e confirmação', () => {
     fireEvent.change(screen.getByLabelText('Telefone com DDD'), {
       target: { value: '81999999999' },
     })
+    fireEvent.change(screen.getByLabelText('E-mail'), {
+      target: { value: 'ana@studio.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Data de nascimento'), {
+      target: { value: '1995-06-15' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /Continuar/ }))
   }
 
-  it('não deixa seguir sem nome e telefone', async () => {
+  /** Mesmo caminho até os dados, mas com e-mail/nascimento que não passam. */
+  async function ateResumoErrado(email: string, nascimento: string) {
+    render(<AgendarPublico />)
+    await screen.findByText('Agende seu horário')
+    escolherServicoNaVitrine('Corte Audax')
+    fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
+    fireEvent.click(await screen.findByText('Escolha o dia'))
+    escolherDia()
+    fireEvent.click(await screen.findByRole('button', { name: 'Horário 08:00' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Continuar/ }))
+    await screen.findByText('Seus dados')
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Ana Souza' } })
+    fireEvent.change(screen.getByLabelText('Telefone com DDD'), {
+      target: { value: '81999999999' },
+    })
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: email } })
+    fireEvent.change(screen.getByLabelText('Data de nascimento'), {
+      target: { value: nascimento },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Continuar/ }))
+  }
+
+  function dataDeAmanha(): string {
+    const d = new Date(Date.now() + 86400000)
+    const mes = String(d.getMonth() + 1).padStart(2, '0')
+    const dia = String(d.getDate()).padStart(2, '0')
+    return `${d.getFullYear()}-${mes}-${dia}`
+  }
+
+  it('não deixa seguir sem nome, telefone, e-mail e nascimento', async () => {
     render(<AgendarPublico />)
     await screen.findByText('Agende seu horário')
     escolherServicoNaVitrine('Corte Audax')
@@ -942,8 +977,37 @@ describe('dados, resumo e confirmação', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Continuar/ }))
     expect(
-      await screen.findByText(/Informe um nome e um telefone com DDD/),
+      await screen.findByText(/Informe nome, telefone com DDD, e-mail/),
     ).toBeTruthy()
+  })
+
+  it('e-mail com forma errada não segue adiante', async () => {
+    await ateResumoErrado('ana no arroba studio', '1995-06-15')
+    expect(
+      await screen.findByText(/Informe nome, telefone com DDD, e-mail/),
+    ).toBeTruthy()
+  })
+
+  it('nascimento do futuro não segue adiante', async () => {
+    await ateResumoErrado('ana@studio.com', dataDeAmanha())
+    expect(
+      await screen.findByText(/Informe nome, telefone com DDD, e-mail/),
+    ).toBeTruthy()
+  })
+
+  it('a observação escrita nos dados aparece no resumo até a confirmação', async () => {
+    await ateResumo()
+    // Volta para os dados, escreve e segue de novo: o que a pessoa escreveu
+    // não pode sumir no caminho.
+    fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
+    await screen.findByText('Seus dados')
+    fireEvent.change(screen.getByLabelText('Observação'), {
+      target: { value: 'Prefiro máquina baixa.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Continuar/ }))
+
+    expect(await screen.findByText('Confira seu horário')).toBeTruthy()
+    expect(screen.getByText('Prefiro máquina baixa.')).toBeTruthy()
   })
 
   it('o resumo mostra serviço, profissional, data, horário, duração e valor', async () => {
@@ -967,6 +1031,8 @@ describe('dados, resumo e confirmação', () => {
     expect(criar).toHaveBeenCalledWith({
       cliente: 'Ana Souza',
       telefone: '81999999999',
+      email: 'ana@studio.com',
+      nascimento: '1995-06-15',
       servico: 'Corte Audax',
       profissional: 'Cleiton Silva',
       data: expect.any(String),

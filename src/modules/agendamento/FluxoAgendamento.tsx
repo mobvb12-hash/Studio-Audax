@@ -12,7 +12,15 @@
 // bloqueio e ocupação da Agenda. Este arquivo só lembra o que a pessoa escolheu
 // e pergunta à Agenda o que está livre.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import BlocoBarbearia from '@/modules/painel/telas/BlocoBarbearia'
 import { SecaoAudaxClub } from './club'
 import {
@@ -29,7 +37,11 @@ import {
   telefoneValido,
 } from '@/modules/painel/regras'
 import { mensagemErroEntrada } from '@/modules/auth/regras'
-import { clientePainel, obterMeuCadastro } from '@/services/supabase/painel'
+import {
+  clientePainel,
+  obterMeuCadastro,
+  type CadastroPainel,
+} from '@/services/supabase/painel'
 import { formatarBRL } from '@/lib/moeda'
 import {
   carregarCatalogo,
@@ -88,6 +100,35 @@ const DIAS_A_FRENTE = 21
  * accordion, esta constante é o único lugar a mudar.
  */
 const AUDAX_CLUB = '__club__'
+
+/**
+ * Completa o formulário da etapa de dados com o que a casa já sabe.
+ *
+ * Só preenche o que está VAZIO — quem digitou não tem o que foi digitado
+ * trocado por baixo. É a MESMA chamada no boot e depois do portão: o e-mail e
+ * o nascimento que a pessoa acabou de informar ao criar a conta chegam aqui
+ * sem um segundo caminho.
+ *
+ * `nascimento` entra só no formato do campo `type="date"` (`YYYY-MM-DD`): uma
+ * ficha antiga guardada como `15/06/1995` não renderiza no input e faria a
+ * validação recusar um dado que existe.
+ */
+function preencherDoCadastro(
+  cad: CadastroPainel | null,
+  setEstado: Dispatch<SetStateAction<EstadoAgendamento>>,
+) {
+  if (!cad) return
+  const nascimento = /^\d{4}-\d{2}-\d{2}$/.test(cad.nascimento)
+    ? cad.nascimento
+    : ''
+  setEstado((atual) => ({
+    ...atual,
+    nome: atual.nome.trim() ? atual.nome : cad.nome,
+    telefone: atual.telefone.trim() ? atual.telefone : cad.telefone,
+    email: atual.email.trim() ? atual.email : cad.email,
+    nascimento: atual.nascimento ? atual.nascimento : nascimento,
+  }))
+}
 
 /** Próximos dias a partir de hoje — atalho de data sem calendário nativo. */
 function proximosDias(quantidade: number): string[] {
@@ -194,17 +235,12 @@ export default function FluxoAgendamento() {
             ? atual
             : { ...atual, nome: preenchimento.nome, telefone: preenchimento.telefone },
         )
-        return
       }
 
       void obterMeuCadastro()
         .then((cad) => {
-          if (!vivo || !cad) return
-          setEstado((atual) =>
-            atual.nome.trim()
-              ? atual
-              : { ...atual, nome: cad.nome, telefone: cad.telefone },
-          )
+          if (!vivo) return
+          preencherDoCadastro(cad, setEstado)
         })
         .catch(() => {
           // Sem cadastro vinculado ou rede fora: o formulário continua vazio.
@@ -461,6 +497,8 @@ export default function FluxoAgendamento() {
       const resultado = await criarAgendamentoPublico({
         cliente: estado.nome,
         telefone: estado.telefone,
+        email: estado.email,
+        nascimento: estado.nascimento,
         servico: base.nome,
         profissional: estado.profissional,
         data: estado.data,
@@ -546,6 +584,12 @@ export default function FluxoAgendamento() {
             nome: dados.nome.trim() || atual.nome,
             telefone: dados.telefone.trim() || atual.telefone,
           }))
+          // Conta recém-criada ou recém-entratada: a etapa de dados nasce
+          // preenchida com o que o cadastro tem (e-mail e nascimento vão
+          // junto com a ficha, não com a sessão).
+          void obterMeuCadastro()
+            .then((cad) => preencherDoCadastro(cad, setEstado))
+            .catch(() => undefined)
           avancar('complementos')
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }}
@@ -589,6 +633,9 @@ export default function FluxoAgendamento() {
           nome: dados.nome.trim() || atual.nome,
           telefone: dados.telefone.trim() || atual.telefone,
         }))
+        void obterMeuCadastro()
+          .then((cad) => preencherDoCadastro(cad, setEstado))
+          .catch(() => undefined)
         if (etapa !== 'dados') avancar('complementos')
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }}
@@ -641,7 +688,10 @@ type PropsEtapa = {
   aoVoltar: () => void
   /** Avanço explícito: "Continuar" na etapa de complementos e de dados. */
   aoAvancar: (destino: Etapa) => void
-  aoDefinir: (campo: 'nome' | 'telefone' | 'observacao', valor: string) => void
+  aoDefinir: (
+    campo: 'nome' | 'telefone' | 'email' | 'nascimento' | 'observacao',
+    valor: string,
+  ) => void
   identificacao: 'verificando' | 'autenticado' | 'anonimo'
   aoIdentificado: (dados: { nome: string; telefone: string }) => void
 }
@@ -1406,6 +1456,7 @@ function EtapaDados({
             rotulo="Nome"
             valor={estado.nome}
             autoComplete="name"
+            obrigatorio
             aoMudar={(v) => aoDefinir('nome', v)}
           />
           <Campo
@@ -1415,12 +1466,50 @@ function EtapaDados({
             placeholder="(81) 99999-9999"
             inputMode="tel"
             autoComplete="tel"
+            obrigatorio
             aoMudar={(v) => aoDefinir('telefone', v)}
           />
+          <Campo
+            id="ag-email"
+            rotulo="E-mail"
+            tipo="email"
+            valor={estado.email}
+            placeholder="voce@email.com"
+            inputMode="email"
+            autoComplete="email"
+            obrigatorio
+            aoMudar={(v) => aoDefinir('email', v)}
+          />
+          <Campo
+            id="ag-nascimento"
+            rotulo="Data de nascimento"
+            tipo="date"
+            valor={estado.nascimento}
+            autoComplete="bday"
+            obrigatorio
+            aoMudar={(v) => aoDefinir('nascimento', v)}
+          />
+          <div>
+            <label
+              htmlFor="ag-observacao"
+              className="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.1em] text-noir-600"
+            >
+              Observação
+            </label>
+            <textarea
+              id="ag-observacao"
+              value={estado.observacao}
+              rows={3}
+              placeholder="Alguma coisa que a gente deva saber? (opcional)"
+              onChange={(evento) => aoDefinir('observacao', evento.target.value)}
+              className="min-h-[52px] w-full rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-[15px] text-noir-900 outline-none placeholder:text-noir-300 focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
+            />
+          </div>
         </div>
         {tentou && !valido && (
           <p role="alert" className="mt-3 text-[13px] text-red-700">
-            Informe um nome e um telefone com DDD para continuar.
+            Informe nome, telefone com DDD, e-mail e uma data de nascimento
+            válida para continuar.
           </p>
         )}
         <div className="mt-5">
@@ -1478,6 +1567,12 @@ function EtapaResumo({
             rotulo="Valor"
             valor={`R$ ${valor.toFixed(2).replace('.', ',')}`}
           />
+          {estado.observacao.trim() && (
+            <LinhaResumo
+              rotulo="Observação"
+              valor={estado.observacao.trim()}
+            />
+          )}
         </Resumo>
         {catalogo.barbearia.endereco && (
           <p className="mt-3 text-[13px] leading-relaxed text-noir-600">

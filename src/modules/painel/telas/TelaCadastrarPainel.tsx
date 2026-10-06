@@ -11,6 +11,25 @@ export default function TelaCadastrarPainel() {
   const [telefone, setTelefone] = useState('')
   const [nascimento, setNascimento] = useState('')
   const [senha, setSenha] = useState('')
+  const [confirmarSenha, setConfirmarSenha] = useState('')
+  const [erroConfirmacao, setErroConfirmacao] = useState('')
+
+  /**
+   * As duas senhas têm que ser iguais ANTES de qualquer chamada de servidor.
+   *
+   * A comparação mora aqui e não no provider de propósito: `DadosCadastro` é o
+   * contrato da autenticação (nome, e-mail, telefone, nascimento, senha) e não
+   * tem — nem deve ter — um campo de confirmação. Confirmar é detalhe da tela;
+   * a senha em si continua só no Supabase Auth.
+   */
+  function enviar() {
+    setErroConfirmacao('')
+    if (confirmarSenha !== senha) {
+      setErroConfirmacao('As senhas precisam ser iguais.')
+      return
+    }
+    void cadastrar({ nome, email, telefone, nascimento, senha })
+  }
 
   function irPara(rota: string) {
     limparMensagens()
@@ -24,11 +43,7 @@ export default function TelaCadastrarPainel() {
     >
       <form
         className="mt-6 space-y-4"
-        onSubmit={(evento) =>
-          submeterFormulario(evento, () =>
-            void cadastrar({ nome, email, telefone, nascimento, senha }),
-          )
-        }
+        onSubmit={(evento) => submeterFormulario(evento, enviar)}
       >
         <Campo
           id="cad-nome"
@@ -73,6 +88,18 @@ export default function TelaCadastrarPainel() {
           autocomplete="new-password"
           dica="Mínimo de 6 caracteres."
         />
+        <Campo
+          id="cad-confirmar-senha"
+          label="Confirmar senha"
+          tipo="password"
+          valor={confirmarSenha}
+          aoMudar={(valor) => {
+            setConfirmarSenha(valor)
+            // Digitou de novo, o erro velho deixa de fazer sentido.
+            setErroConfirmacao('')
+          }}
+          autocomplete="new-password"
+        />
         <BotaoPrimario
           processando={processando}
           rotulo="Criar conta"
@@ -80,7 +107,7 @@ export default function TelaCadastrarPainel() {
         />
       </form>
 
-      <ErroPainel texto={erro} />
+      <ErroPainel texto={erroConfirmacao || erro} />
 
       <div className="mt-5">
         <LinkPainel aoClicar={() => irPara('entrar')}>

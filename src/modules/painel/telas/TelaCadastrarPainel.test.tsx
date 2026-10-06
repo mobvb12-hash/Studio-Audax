@@ -8,7 +8,9 @@ import TelaCadastrarPainel from './TelaCadastrarPainel'
 /**
  * O cadastro do cliente — a porta de entrada da Área do Cliente.
  *
- * São cinco dados obrigatórios, e este teste trava os cinco. O que importa
+ * São cinco dados obrigatórios, e este teste trava os cinco. A tela ainda
+ * pede a confirmação da senha — que é detalhe da tela, não dado: ela não vai
+ * para o servidor, só decide se a senha segue adiante. O que importa
  * aqui é o destino de cada um:
  *
  *   • nome, telefone e e-mail  → conta no Supabase (signUp) e ficha do cliente;
@@ -44,6 +46,7 @@ function preencherTudo() {
     target: { value: '1995-06-15' },
   })
   fireEvent.change(campo('Senha'), { target: { value: 'segredo123' } })
+  fireEvent.change(campo('Confirmar senha'), { target: { value: 'segredo123' } })
 }
 
 /** Submete o formulário direto, sem passar pela validação nativa do navegador. */
@@ -53,7 +56,7 @@ function submeter() {
 }
 
 describe('TelaCadastrarPainel', () => {
-  it('mostra os cinco campos, todos obrigatórios', () => {
+  it('mostra os cinco dados e a confirmação de senha, tudo obrigatório', () => {
     renderizar()
 
     const rotulos = [
@@ -62,6 +65,7 @@ describe('TelaCadastrarPainel', () => {
       'Telefone com DDD',
       'Data de nascimento',
       'Senha',
+      'Confirmar senha',
     ]
     for (const rotulo of rotulos) {
       expect(campo(rotulo).required).toBe(true)
@@ -130,7 +134,9 @@ describe('TelaCadastrarPainel', () => {
   it('senha curta é recusada antes de qualquer chamada', async () => {
     const { cliente } = renderizar()
     preencherTudo()
+    // As duas ficam curtas e iguais: o que é recusado é o tamanho, não a igualdade.
     fireEvent.change(campo('Senha'), { target: { value: '123' } })
+    fireEvent.change(campo('Confirmar senha'), { target: { value: '123' } })
 
     submeter()
 
@@ -140,5 +146,24 @@ describe('TelaCadastrarPainel', () => {
       ),
     )
     expect(cliente.cadastros).toHaveLength(0)
+  })
+
+  it('confirmação diferente da senha não cria conta nem chama o servidor', async () => {
+    const { cliente } = renderizar()
+    preencherTudo()
+    fireEvent.change(campo('Confirmar senha'), { target: { value: 'outrasenha' } })
+
+    submeter()
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe(
+        'As senhas precisam ser iguais.',
+      ),
+    )
+    expect(cliente.cadastros).toHaveLength(0)
+    expect(cliente.chamadasVincular).toHaveLength(0)
+    // Corrigir o campo limpa o aviso: ele não vira ruído de fundo.
+    fireEvent.change(campo('Confirmar senha'), { target: { value: 'segredo123' } })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
