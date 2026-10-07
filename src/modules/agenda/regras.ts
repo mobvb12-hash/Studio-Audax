@@ -274,6 +274,47 @@ export type SlotLivre = {
 }
 
 /**
+ * Corte de "agora" para o dia de hoje: em `data`, só vale horário com início
+ * DEPOIS de `minutos`. As datas futuras não são tocadas.
+ *
+ * O fuso é do quem monta o corte (`agoraStudio`) — a regra só compara.
+ */
+export type CorteHorario = {
+  /** Data (YYYY-MM-DD) em que o corte vale */
+  data: string
+  /** Minutos desde 00:00 dessa data: slots com início <= isto saem */
+  minutos: number
+}
+
+const FORMATADOR_AGORA = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+/**
+ * "Agora" no horário do Studio (America/Sao_Paulo), nunca no fuso do
+ * navegador: em UTC-3, à noite, o dia local do navegador já é o de amanhã
+ * e o corte do dia de hoje sairia errado. `agora` é parâmetro para teste.
+ */
+export function agoraStudio(agora: Date = new Date()): CorteHorario {
+  const partes = Object.fromEntries(
+    FORMATADOR_AGORA.formatToParts(agora).map((p) => [p.type, p.value]),
+  )
+  // hour12:false devolve '24' à meia-noite em alguns runtimes.
+  const hora = Number(partes.hour === '24' ? '00' : partes.hour)
+  const minuto = Number(partes.minute)
+  return {
+    data: `${partes.year}-${partes.month}-${partes.day}`,
+    minutos: hora * 60 + minuto,
+  }
+}
+
+/**
  * O que a regra de disponibilidade precisa saber de um agendamento.
  *
  * Deliberadamente estrutural: a Agenda interna passa `Agendamento`, e a
@@ -304,6 +345,11 @@ export type OcupacaoAgenda = {
  * inteiro couber no expediente e não cair sobre um bloqueio.
  *
  * Cancelados e não comparecidos não ocupam — o horário não foi usado.
+ *
+ * `corte` é opcional e só vale no dia igual ao dele: no dia de hoje a pessoa
+ * não escolhe horário que já passou (`inicio <= agora` sai da lista). Quem
+ * não passa corte (Agenda interna, Painel, WhatsApp) continua exatamente
+ * como antes — editar/remarcar não é agendar um horário novo.
  */
 export function horariosLivresPorProfissional(
   data: string,
@@ -313,6 +359,7 @@ export function horariosLivresPorProfissional(
   profissionais: string[],
   duracaoDo: (servico: string) => number,
   duracaoMin = 30,
+  corte?: CorteHorario,
 ): SlotLivre[] {
   const duracao = Math.max(5, duracaoMin || 30)
   if (profissionais.length === 0) return []
@@ -323,6 +370,8 @@ export function horariosLivresPorProfissional(
     const inicio = paraMinutos(slot.hora)
     const fim = inicio + duracao
 
+    // No dia do corte, horário que já passou (ou é o de agora) não é opção.
+    if (corte && data === corte.data && inicio <= corte.minutos) continue
     // O atendimento inteiro precisa caber no expediente.
     if (fim > paraMinutos(expediente.fim)) continue
     // ...e não pode invadir o almoço.

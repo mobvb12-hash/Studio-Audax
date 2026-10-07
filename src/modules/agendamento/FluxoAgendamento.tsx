@@ -49,6 +49,7 @@ import {
   horariosPublicosPorProfissional,
   type CatalogoPublico,
 } from '@/services/supabase/agendaPublica'
+import { agoraStudio } from '@/modules/agenda/regras'
 import {
   alternarComplemento as alternarComplementoEstado,
   complementosDisponiveis,
@@ -376,6 +377,7 @@ export default function FluxoAgendamento() {
         estado.data,
         duracaoMin,
         [estado.profissional],
+        agoraStudio(),
       )
       setSlots(livres.map((s) => s.horario))
     } catch (e: unknown) {
@@ -397,7 +399,7 @@ export default function FluxoAgendamento() {
     let vivo = true
     void horariosPublicosPorProfissional(estado.data, duracaoMin, [
       estado.profissional,
-    ])
+    ], agoraStudio())
       .then((livres) => {
         if (vivo) setSlots(livres.map((s) => s.horario))
       })
@@ -428,6 +430,7 @@ export default function FluxoAgendamento() {
             estado.data,
             novaDuracao,
             [estado.profissional],
+            agoraStudio(),
           )
           const horas = livres.map((s) => s.horario)
           setSlots(horas)

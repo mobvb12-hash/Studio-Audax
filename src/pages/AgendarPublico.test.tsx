@@ -613,20 +613,34 @@ describe('fluxo: serviço → profissional → data → horário', () => {
   })
 
   it('escolher o dia consulta a Agenda e mostra só horários livres', async () => {
-    render(<AgendarPublico />)
-    await screen.findByText('Agende seu horário')
-    escolherServicoNaVitrine('Corte Audax')
-    fireEvent.click(await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }))
-    fireEvent.click(await screen.findByText('Escolha o dia'))
-    const dia = escolherDia()
+    // Relógio fixo em 15/01 09:00 em São Paulo: a chamada leva o CORTE de
+    // "agora" (4º argumento) — o dia da grade e o dia do corte são o mesmo.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2030-01-15T12:00:00Z'))
+    try {
+      render(<AgendarPublico />)
+      await screen.findByText('Agende seu horário')
+      escolherServicoNaVitrine('Corte Audax')
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Escolher Cleiton Silva' }),
+      )
+      fireEvent.click(await screen.findByText('Escolha o dia'))
+      const dia = escolherDia()
 
-    expect(await screen.findByText('Horários disponíveis')).toBeTruthy()
-    // A regra oficial, chamada para o profissional escolhido.
-    expect(slots).toHaveBeenCalledWith(dia, 30, ['Cleiton Silva'])
-    expect(screen.getByRole('button', { name: 'Horário 08:00' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Horário 09:00' })).toBeTruthy()
-    // Nada de horário de outro profissional na tela.
-    expect(screen.queryByText('Italo Santos')).toBeNull()
+      expect(await screen.findByText('Horários disponíveis')).toBeTruthy()
+      // A regra oficial, chamada para o profissional escolhido, com o corte
+      // do dia de hoje (09:00 em America/Sao_Paulo = 12:00 UTC).
+      expect(slots).toHaveBeenCalledWith(dia, 30, ['Cleiton Silva'], {
+        data: '2030-01-15',
+        minutos: 9 * 60,
+      })
+      expect(screen.getByRole('button', { name: 'Horário 08:00' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Horário 09:00' })).toBeTruthy()
+      // Nada de horário de outro profissional na tela.
+      expect(screen.queryByText('Italo Santos')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('dia sem horário livre diz isso e não mostra botão', async () => {

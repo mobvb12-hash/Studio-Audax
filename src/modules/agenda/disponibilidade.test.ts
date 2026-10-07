@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agoraStudio,
   horariosDisponiveis,
   horariosLivresPorProfissional,
 } from './regras'
@@ -177,5 +178,94 @@ describe('horariosDisponiveis continua igual (mesma regra, forma antiga)', () =>
     )
     expect(resultado.horarios).toHaveLength(8)
     expect(resultado.vagas).toBe(8)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Corte de "agora" — o /agendar não oferece horário que já passou     */
+/* ------------------------------------------------------------------ */
+
+describe('corte de agora: no dia de hoje, só horário futuro', () => {
+  const DIA = '2030-01-15'
+
+  function consultarComCorte(minutos: number, dataDoCorte = DIA, data = DIA) {
+    return horariosLivresPorProfissional(
+      data,
+      EXPEDIENTE,
+      [],
+      [],
+      TODOS,
+      duracao,
+      30,
+      { data: dataDoCorte, minutos },
+    )
+  }
+
+  it('agora 09:00: as 09:00 saem (igual ao agora), 09:30 fica', () => {
+    const horarios = consultarComCorte(9 * 60).map((s) => s.horario)
+    expect(horarios).toEqual(['09:30', '10:00', '10:30', '11:00', '11:30'])
+  })
+
+  it('meia-noite não corta nada; fim do dia corta tudo', () => {
+    expect(consultarComCorte(0)).toHaveLength(8)
+    expect(consultarComCorte(23 * 60 + 59)).toEqual([])
+  })
+
+  it('o corte só vale no PRÓPRIO dia — datas futuras não mudam', () => {
+    // corte de ontem não toca no dia consultado (que é futuro)
+    const horarios = consultarComCorte(11 * 60, '2030-01-14').map((s) => s.horario)
+    expect(horarios).toEqual([
+      '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    ])
+  })
+
+  it('sem corte, nada muda (Agenda interna, Painel e WhatsApp intactos)', () => {
+    const semCorte = horariosLivresPorProfissional(
+      DIA,
+      EXPEDIENTE,
+      [],
+      [],
+      TODOS,
+      duracao,
+      30,
+    )
+    expect(semCorte).toHaveLength(8)
+  })
+
+  it('corte com a duração real: o horário tem que ainda NÃO ter começado', () => {
+    // serviço de 60 min: às 11:00 termina 12:00 e ainda cabe (11:30 invadiria
+    // o almoço e nunca é opção). Corte 10:30: o slot 10:30 — igual a agora —
+    // sai; 11:00, que começa depois, continua.
+    const slots = horariosLivresPorProfissional(
+      DIA,
+      { inicio: '08:00', fim: '13:00', almocoInicio: '12:00', almocoFim: '13:00' },
+      [],
+      [],
+      TODOS,
+      duracao,
+      60,
+      { data: DIA, minutos: 10 * 60 + 30 },
+    )
+    expect(slots.map((s) => s.horario)).toEqual(['11:00'])
+  })
+})
+
+describe('agoraStudio: o "agora" no fuso do Studio, não no do navegador', () => {
+  it('lê America/Sao_Paulo (UTC-3) mesmo vindo de um Date em UTC', () => {
+    // 15:00 UTC = 12:00 em Brasília
+    expect(agoraStudio(new Date('2030-01-15T15:00:00Z'))).toEqual({
+      data: '2030-01-15',
+      minutos: 12 * 60,
+    })
+    // virada: 01:00 UTC do dia 16 ainda é 22:00 do dia 15 em São Paulo
+    expect(agoraStudio(new Date('2030-01-16T01:00:00Z'))).toEqual({
+      data: '2030-01-15',
+      minutos: 22 * 60,
+    })
+    // meia-noite: hora 0 (nunca 24) e o dia já virou
+    expect(agoraStudio(new Date('2030-01-16T03:00:00Z'))).toEqual({
+      data: '2030-01-16',
+      minutos: 0,
+    })
   })
 })

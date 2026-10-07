@@ -165,6 +165,9 @@ expect(nomes).toEqual([
       '../supabase/migrations/050_cron_schema_net.sql',
       '../supabase/migrations/051_cron_token_dedicado.sql',
       '../supabase/migrations/052_correcao_rpc_fila_pendentes.sql',
+      '../supabase/migrations/053_horario_passado.sql',
+      '../supabase/migrations/054_origem_publico.sql',
+      '../supabase/migrations/055_correcao_typo_trigger.sql',
     ])
   })
 
@@ -2285,5 +2288,171 @@ describe('044 - a etapa de dados do /agendar grava e-mail e nascimento', () => {
     expect(texto).not.toMatch(/create policy|drop policy|enable row level security/i)
     expect(texto).not.toMatch(/caixa|comiss|clube|pote|pagamento/i)
     expect(texto).not.toMatch(/insert into\s+(?!public\.agendamentos)|update public\.(?!agendamentos)/i)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 053 - no dia de hoje, só horário que ainda não passou               */
+/* ------------------------------------------------------------------ */
+
+describe('053 - hoje não aceita horário que já passou', () => {
+  const bruto = sql('../supabase/migrations/053_horario_passado.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('redefine a AUTORIDADE (agendamento_publico_criar) sem mudar a assinatura', () => {
+    expect(texto).toContain(
+      'create or replace function public.agendamento_publico_criar(',
+    )
+    // 019/024/027/036 chamam com SETE argumentos: assinatura nova criaria
+    // duas e a chamada passaria a ser ambígua.
+    expect(texto).toMatch(
+      /public\.agendamento_publico_criar\(\s*p_cliente text,\s*p_telefone text,\s*p_servico text,\s*p_profissional text,\s*p_data date,\s*p_horario text,\s*p_observacao text default ''\s*\)/,
+    )
+    // Só a autoridade muda: wrappers e painel continuam os das 019/027.
+    expect(texto).not.toContain(
+      'create or replace function public.agendamento_publico_criar_complementos(',
+    )
+    expect(texto).not.toContain(
+      'create or replace function public.painel_agendamento_criar(',
+    )
+  })
+
+  it('hoje e "agora" vêm de America/Sao_Paulo, não de current_date (UTC)', () => {
+    expect(texto).toContain(
+      "v_data_atual date := (now() at time zone 'America/Sao_Paulo')::date",
+    )
+    expect(texto).toContain(
+      "extract(hour from now() at time zone 'America/Sao_Paulo')",
+    )
+    expect(texto).toContain(
+      "extract(minute from now() at time zone 'America/Sao_Paulo')",
+    )
+    expect(texto).not.toContain('v_data_atual date := current_date')
+  })
+
+  it('recusa horário de hoje <= agora, só no dia de hoje, antes do INSERT', () => {
+    expect(texto).toContain('if p_data = v_data_atual')
+    expect(texto).toContain(
+      'and public.audax_minutos(p_horario) <= v_agora_minutos then',
+    )
+    expect(texto).toContain(
+      "raise exception 'Este horário já passou. Escolha um horário futuro.'",
+    )
+    // a recusa é a PRIMEIRA coisa depois de validar o formato do horário —
+    // antes de ler serviço/profissional, do lock e de qualquer escrita
+    const formato = texto.indexOf("raise exception 'Horário inválido.'")
+    expect(formato).toBeGreaterThan(0)
+    expect(texto.indexOf('raise exception', formato + 1)).toBe(
+      texto.indexOf("raise exception 'Este horário já passou"),
+    )
+    expect(texto.indexOf("'Este horário já passou")).toBeLessThan(
+      texto.indexOf('insert into agendamentos'),
+    )
+    // datas futuras: só a trava antiga de "a partir de hoje" continua
+    expect(texto).toContain('if p_data is null or p_data < v_data_atual then')
+  })
+
+  it('o corpo é o da 040 (a 045 trouxe um corpo velho e derrubou a criação)', () => {
+    // A tabela NUNCA teve `dia_semana` (007: chave/inicio/fim/almoco_*):
+    // é exatamente a referência que a 045 usava e que quebrava Toda chamada.
+    expect(texto).not.toContain('dia_semana')
+    expect(texto).not.toContain('current_date')
+    // O expediente é o DO DIA da 040, e o lock é o da 021 (reentrante no
+    // trigger) — não o advisory avulso do corpo velho.
+    expect(texto).toContain(
+      'from jsonb_to_record(public.agenda_expediente_do_dia(p_data))',
+    )
+    expect(texto).toContain('perform public.agenda_lock_slot(p_profissional, p_data);')
+    // e a sobreposição continua testando a DURAÇÃO real, não a igualdade
+    expect(texto).toContain('+ greatest(coalesce(a.duracao_min, s.duracao_min, 30), 5)')
+    // a regra da 045 que fica: nasce confirmado
+    expect(texto).toContain("'confirmado'")
+    // e o vínculo com a sessão (040/018) volta a existir
+    expect(texto).toContain('public.current_cliente_id()')
+  })
+
+  it('nada de tabela, política ou trigger novo', () => {
+    expect(texto).not.toMatch(/create table|add column|alter table/i)
+    expect(texto).not.toMatch(/create policy|drop policy|enable row level security/i)
+    expect(texto).not.toMatch(/\bdrop\b/i)
+    expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 054 - a reserva da vitrine volta a ser origem = 'publico'           */
+/* ------------------------------------------------------------------ */
+
+describe('054 - a vitrine volta a marcar origem publico', () => {
+  const bruto = sql('../supabase/migrations/054_origem_publico.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('redefine o wrapper COM o update da 045 + origem publico', () => {
+    expect(texto).toContain(
+      'create or replace function public.agendamento_publico_criar_complementos(',
+    )
+    // o corpo é o implantado (045): delega para a autoridade e grava
+    // duração total + e-mail/nascimento, com retorno 'confirmado'
+    expect(texto).toMatch(
+      /public\.agendamento_publico_criar\(\s*p_cliente, p_telefone, p_servico, p_profissional,\s*p_data, p_horario, v_obs\s*\)/,
+    )
+    expect(texto).toContain("'status', 'confirmado'")
+    expect(texto).toContain('v_dur := v_dur + coalesce(v_compl.duracao_min, 0)')
+    // E a marca da 036 que a 044/045 perdeu está de volta no update
+    expect(texto).toMatch(
+      /set duracao_min = v_dur,\s*origem = 'publico',/,
+    )
+    // sem ela o trigger da 045 não confirma ao cliente (só ao profissional)
+    expect(texto).toContain("origem = 'publico'")
+  })
+
+  it('só o wrapper muda: autoridade e painel continuam intocados', () => {
+    expect(texto).not.toContain(
+      'create or replace function public.agendamento_publico_criar(',
+    )
+    expect(texto).not.toContain(
+      'create or replace function public.painel_agendamento_criar(',
+    )
+    // assinatura igual = redefinition limpa, sem drop de grant
+    expect(texto).not.toMatch(/\bdrop\b/i)
+    expect(texto).not.toMatch(/create table|add column|alter table/i)
+    expect(texto).toMatch(
+      /grant execute on function public\.agendamento_publico_criar_complementos\(\s*text, text, text, text, date, text, text, text\[\], text, text\s*\) to anon, authenticated, service_role/,
+    )
+    expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 055 - typo da 045 no DECLARE do trigger derrubava todo INSERT       */
+/* ------------------------------------------------------------------ */
+
+describe('055 - o trigger chama audax_hora_legivel (024), não a variante com E', () => {
+  const bruto = sql('../supabase/migrations/055_correcao_typo_trigger.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('redefine ia_notificar_agendamento com o nome REAL da função da 024', () => {
+    expect(texto).toContain('create or replace function public.ia_notificar_agendamento()')
+    expect(texto).toContain('public.audax_hora_legivel(v_ag.horario)')
+    // O typo da 045 ('legible') não existe em nenhum script: a variante
+    // correta é 'legivel' — a 024 a cria, 026/037 já a chamavam certa.
+    expect(texto).not.toContain('audax_hora_legible(')
+    // create or replace sem troca de assinatura = grants e trigger intactos
+    expect(texto).not.toMatch(/\bdrop\b/i)
+    expect(texto).not.toMatch(/create trigger|create table|alter table/i)
+  })
+
+  it('o corpo continua o da 045: fila, flags, mensagens e swallow de erro', () => {
+    expect(texto).toContain("'profissional_agendamento:' || v_ag.id")
+    expect(texto).toContain("'confirmacao_cliente:' || v_ag.id")
+    expect(texto).toContain('Estamos te esperando!')
+    expect(texto).toContain('pos_atendimento:')
+    expect(texto).toContain('avaliacao:')
+    expect(texto).toContain('public.ia_flag_chave(')
+    expect(texto).toContain('public.ia_notificar_com_seguranca(')
+    // o contrato de não derrubar o INSERT continua: loga e devolve a linha
+    expect(texto).toContain("insert into public.ia_eventos (fluxo, intencao, acao, executada, motivo)")
+    expect((texto.match(/return v_ag;/g) || []).length).toBeGreaterThanOrEqual(2)
+    expect(texto).toContain("notify pgrst, 'reload schema'")
   })
 })

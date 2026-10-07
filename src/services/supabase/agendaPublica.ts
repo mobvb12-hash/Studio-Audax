@@ -20,11 +20,13 @@ import {
 } from '@/modules/agenda/persistencia'
 import {
   EXPEDIENTE_PADRAO,
+  agoraStudio,
   duracaoBase,
   horariosLivresPorProfissional,
+  paraMinutos,
   validarProposta,
 } from '@/modules/agenda/regras'
-import type { OcupacaoAgenda, SlotLivre } from '@/modules/agenda/regras'
+import type { CorteHorario, OcupacaoAgenda, SlotLivre } from '@/modules/agenda/regras'
 import type { Agendamento, Bloqueio, Expediente } from '@/modules/agenda/types'
 
 export type ServicoPublico = {
@@ -380,11 +382,16 @@ async function baseDoDia(data: string): Promise<BaseDoDia> {
  *
  * Não há aqui nenhuma regra nova: é a regra da Agenda, chamada uma vez para
  * todos os profissionais.
+ *
+ * `corte` é repassado adiante e vale só no próprio dia: a vitrine usa para
+ * não oferecer horário que já passou hoje. Quem chama sem corte (o Painel)
+ * continua vendo a grade inteira.
  */
 export async function horariosPublicosPorProfissional(
   data: string,
   duracaoMin: number,
   profissionais: string[],
+  corte?: CorteHorario,
 ): Promise<SlotLivre[]> {
   if (!data || profissionais.length === 0) return []
   const base = await baseDoDia(data)
@@ -396,6 +403,7 @@ export async function horariosPublicosPorProfissional(
     profissionais,
     duracaoServicoLocal,
     Math.max(5, duracaoMin || 30),
+    corte,
   )
 }
 
@@ -488,6 +496,15 @@ export async function criarAgendamentoPublico(
   }
 
   // Local: valida com a regra consolidada da Agenda e grava na mesma lista
+  /*
+   * Horário de hoje que já passou: a MESMA recusa da RPC. Com Supabase o
+   * servidor barra (é ele que manda); sem Supabase a demonstração barra aqui,
+   * para não oferecer o que o modo com servidor não aceita.
+   */
+  const agora = agoraStudio()
+  if (p.data === agora.data && paraMinutos(p.horario) <= agora.minutos) {
+    return { ok: false, erro: 'Este horário já passou. Escolha um horário futuro.' }
+  }
   const duracaoBaseMin = duracaoServicoLocal(p.servico)
   const duracaoComplementos = (p.complementos ?? []).reduce(
     (soma, id) => soma + duracaoServicoLocal(servicosPorIdLocal(id).nome),
