@@ -159,6 +159,12 @@ expect(nomes).toEqual([
       '../supabase/migrations/044_agendamento_dados_do_cliente.sql',
       '../supabase/migrations/045_confirmacao_automatica.sql',
       '../supabase/migrations/046_cron_processar_fila.sql',
+      '../supabase/migrations/047_cron_credencial_server_to_server.sql',
+      '../supabase/migrations/048_cron_credencial_vault.sql',
+      '../supabase/migrations/049_cron_correcao_pg_net.sql',
+      '../supabase/migrations/050_cron_schema_net.sql',
+      '../supabase/migrations/051_cron_token_dedicado.sql',
+      '../supabase/migrations/052_correcao_rpc_fila_pendentes.sql',
     ])
   })
 

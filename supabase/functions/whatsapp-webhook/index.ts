@@ -32,6 +32,7 @@
 // Evolution para enviar.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { withSupabase } from '@supabase/server'
+import { tokensIguais } from './auth.ts'
 import {
   extrairRemetente,
   ehMensagemDeTeste,
@@ -304,20 +305,36 @@ export default {
       if (!token) {
         return responder(401, { ok: false, motivo: 'Sessão inválida ou ausente.' })
       }
+
+      // -------------------------------------------------------------------
+      // Fila de notificações (itens 11/14/15/21). Sai ANTES da validação de
+      // segredos da Evolution: este caminho não fala com a Evolution — quem
+      // envia é o `whatsapp-enviar`.
+      //
+      // Quem processa a fila são DOIS agentes, cada um com sua credencial:
+      //   • pg_cron (pg_net) chama aqui a cada minuto, sem sessão de usuário,
+      //     usando o token dedicado CRON_WEBHOOK_TOKEN (mesmo valor gravado
+      //     no vault do banco como `cron_webhook_token`);
+      //   • o painel pode processar sob sessão de usuário (authenticated).
+      //
+      // A comparação é estrita (timing-safe) e vale SOMENTE para esta ação —
+      // nenhuma outra ação aceita o token.
+      //
+      // A fila é deduplicada pelo banco (chave única), então repetir o
+      // processamento nunca duplica mensagem.
+      // -------------------------------------------------------------------
+      if (acao === 'notificar-pendentes') {
+        const tokenCron = (Deno.env.get('CRON_WEBHOOK_TOKEN') ?? '').trim()
+        if (tokenCron.length > 0 && tokensIguais(token, tokenCron)) {
+          return processarFilaNotificacoes(segredos, responder)
+        }
+      }
+
       const { data, error } = await ctx.supabase.auth.getUser(token)
       if (error || !data.user || data.user.role !== 'authenticated') {
         return responder(401, { ok: false, motivo: 'Sessão inválida ou ausente.' })
       }
 
-      // -------------------------------------------------------------------
-      // Fila de notificações (itens 11/14/15/21). Sai ANTES da validação de
-      // segredos da Evolution: este caminho não fala com a Evolution — quem
-      // envia é o `whatsapp-enviar`. Precisa só da credencial
-      // SUPABASE_SECRET_KEYS e da sessão de usuário.
-      //
-      // A fila é deduplicada pelo banco (chave única), então repetir o
-      // processamento nunca duplica mensagem.
-      // -------------------------------------------------------------------
       if (acao === 'notificar-pendentes') {
         return processarFilaNotificacoes(segredos, responder)
       }
