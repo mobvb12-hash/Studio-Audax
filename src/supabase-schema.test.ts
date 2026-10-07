@@ -158,6 +158,7 @@ expect(nomes).toEqual([
   '../supabase/migrations/043_perfis_papel_check.sql',
       '../supabase/migrations/044_agendamento_dados_do_cliente.sql',
       '../supabase/migrations/045_confirmacao_automatica.sql',
+      '../supabase/migrations/046_cron_processar_fila.sql',
     ])
   })
 
