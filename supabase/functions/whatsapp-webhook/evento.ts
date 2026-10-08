@@ -203,6 +203,34 @@ export function variantesConfiguracao(urlWebhook: string): {
   )
 }
 
+/**
+ * Valida se o evento da Evolution é autêntico.
+ * Verifica instance e apikey contra os valores esperados.
+ */
+export function validarEventoEvolution(
+  bruto: unknown,
+  instanceEsperada: string,
+  apiKeyEsperada: string,
+): { valido: boolean; motivo: string | null } {
+  const registro = objeto(bruto)
+  if (!registro) return { valido: false, motivo: 'corpo-nao-objeto' }
+
+  // Validar instance
+  const instanceRecebida = typeof registro.instance === 'string' ? registro.instance.trim() : ''
+  if (!instanceRecebida) return { valido: false, motivo: 'instance-ausente' }
+  if (instanceRecebida !== instanceEsperada) {
+    return { valido: false, motivo: 'instance-invalida' }
+  }
+
+  // Validar apikey (se presente no evento)
+  const apikeyRecebida = typeof registro.apikey === 'string' ? registro.apikey.trim() : ''
+  if (apikeyRecebida && apikeyRecebida !== apiKeyEsperada) {
+    return { valido: false, motivo: 'apikey-invalida' }
+  }
+
+  return { valido: true, motivo: null }
+}
+
 export function interpretarEventoWebhook(bruto: unknown): EventoInterpretado {
   const registro = objeto(bruto)
   if (!registro) return vazio('corpo-nao-objeto')

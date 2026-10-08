@@ -46,6 +46,73 @@ async function enviar(montado: EnvioMontado) {
   return { status: resposta.status, corpo: await resposta.text() }
 }
 
+/** Normaliza telefone para comparação (apenas dígitos, com DDI 55 se 11 dígitos). */
+function normalizarTelefoneDestino(telefone: string): string {
+  const digitos = telefone.replace(/\D/g, '')
+  if (digitos.length === 11) return `55${digitos}`
+  return digitos
+}
+
+/**
+ * Valida se o destino é permitido para envio.
+ * Permite:
+ * - Números de profissionais ativos com whatsapp_notificacao preenchido
+ * - Números de clientes com agendamento futuro/hoje (via agendamentos)
+ * - O número de teste IA_NUMERO_TESTE (para respostas da IA)
+ */
+async function validarDestino(
+  supabase: unknown,
+  telefone: string,
+  numeroTeste: string,
+): Promise<{ valido: boolean; motivo?: string }> {
+  const telefoneNorm = normalizarTelefoneDestino(telefone)
+  const testeNorm = normalizarTelefoneDestino(numeroTeste)
+
+  // Sempre permite o número de teste configurado
+  if (testeNorm && telefoneNorm === testeNorm) {
+    return { valido: true }
+  }
+
+  // Cast para tipo com método from()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as { from: (table: string) => { select: (columns?: string) => { eq: (col: string, val: any) => any; not: (col: string, op: string, val: any) => any; neq: (col: string, val: any) => any; gte: (col: string, val: any) => any; in: (col: string, val: any[]) => any; then: (onfulfilled?: any) => any } } }
+
+  // Verifica se é WhatsApp de profissional ativo
+  const { data: profissionais, error: errProf } = await db
+    .from('profissionais')
+    .select('whatsapp_notificacao')
+    .eq('ativo', true)
+    .not('whatsapp_notificacao', 'is', null)
+    .neq('whatsapp_notificacao', '')
+
+  if (errProf) {
+    console.error('[whatsapp-enviar] Erro ao buscar profissionais:', errProf.message)
+  } else if (profissionais) {
+    for (const prof of profissionais) {
+      if (normalizarTelefoneDestino(prof.whatsapp_notificacao) === telefoneNorm) {
+        return { valido: true }
+      }
+    }
+  }
+
+  // Verifica se é telefone de cliente com agendamento futuro/hoje
+  const hoje = new Date().toISOString().split('T')[0]
+  const { data: agendamentos, error: errAg } = await db
+    .from('agendamentos')
+    .select('telefone')
+    .gte('data', hoje)
+    .in('status', ['pendente', 'confirmado'])
+    .eq('telefone', telefone)
+
+  if (errAg) {
+    console.error('[whatsapp-enviar] Erro ao buscar agendamentos:', errAg.message)
+  } else if (agendamentos && agendamentos.length > 0) {
+    return { valido: true }
+  }
+
+  return { valido: false, motivo: 'Destino não autorizado para envio.' }
+}
+
 export default {
   fetch: withSupabase({ auth: ['user', 'secret'] }, async (req, ctx) => {
     if (req.method !== 'POST') {
@@ -89,6 +156,13 @@ export default {
     const problemaPedido = validarPedido(pedido)
     if (problemaPedido) {
       return responder(400, { ok: false, motivo: problemaPedido })
+    }
+
+    // Validação de destino: só permite envio para números autorizados
+    const numeroTeste = (Deno.env.get('IA_NUMERO_TESTE') ?? '').trim()
+    const validacaoDestino = await validarDestino(ctx.supabase, pedido.telefone, numeroTeste)
+    if (!validacaoDestino.valido) {
+      return responder(403, { ok: false, motivo: validacaoDestino.motivo })
     }
 
     const botoes = normalizarBotoes(bruto.botoes)

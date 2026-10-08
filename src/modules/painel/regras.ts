@@ -40,9 +40,10 @@ export function areaPelaUrl(): AreaPública {
   if (hashAuthRedirect()) return 'cliente'
 
   const caminho = window.location.pathname.replace(/\/+$/, '')
-  if (caminho.endsWith(CAMINHO_AGENDAR)) return 'agendar'
+  // Prefix match para rotas profundas (/agendar/*, /cliente/*)
+  if (caminho === CAMINHO_AGENDAR || caminho.startsWith(CAMINHO_AGENDAR + '/')) return 'agendar'
   // `/cliente` é a URL oficial; `/painel` é o nome antigo e continua abrindo.
-  if (caminho.endsWith(CAMINHO_CLIENTE)) return 'cliente'
+  if (caminho === CAMINHO_CLIENTE || caminho.startsWith(CAMINHO_CLIENTE + '/')) return 'cliente'
   if (/\/painel$/.test(caminho)) return 'cliente'
   return 'app'
 }

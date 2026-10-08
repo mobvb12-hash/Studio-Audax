@@ -4,6 +4,8 @@
     { "source": "/agendar", "destination": "/index.html" },
     { "source": "/agendar/:path*", "destination": "/index.html" },
     { "source": "/cliente", "destination": "/index.html" },
-    { "source": "/cliente/:path*", "destination": "/index.html" }
+    { "source": "/cliente/:path*", "destination": "/index.html" },
+    { "source": "/painel", "destination": "/index.html" },
+    { "source": "/painel/:path*", "destination": "/index.html" }
   ]
 }

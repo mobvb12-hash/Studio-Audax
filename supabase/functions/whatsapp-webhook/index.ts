@@ -39,6 +39,7 @@ import {
   interpretarEventoWebhook,
   mascararRemetente,
   variantesConfiguracao,
+  validarEventoEvolution,
 } from './evento.ts'
 import {
   deveEnviarResposta,
@@ -497,15 +498,30 @@ export default {
     }
 
     // ---------------------------------------------------------------------
-    // Evento entregue pela Evolution (sem credenciais Supabase)
+    // Evento entregue pela Evolution — validação de autenticidade
     // ---------------------------------------------------------------------
+    const validacao = validarEventoEvolution(
+      corpo,
+      segredos.instancia,
+      segredos.apiKey,
+    )
+
+    if (!validacao.valido) {
+      console.log(
+        '[whatsapp-webhook]',
+        JSON.stringify({
+          evento: 'webhook-rejeitado',
+          motivo: validacao.motivo,
+          instanceRecebida: (corpo as { instance?: unknown } | null)?.instance ?? null,
+          apikeyPresente: typeof (corpo as { apikey?: unknown } | null)?.apikey === 'string',
+        }),
+      )
+      return responder(401, { ok: false, motivo: 'Webhook não autorizado.' })
+    }
+
     const evento = interpretarEventoWebhook(corpo)
 
-    // A Evolution inclui uma apikey no corpo do evento. O valor pode ser a
-    // chave global ou o token da instância (não sabemos qual esta versão
-    // usa), então a comparação é SINAL DE LOG — nunca barreira: rejeitar
-    // custaria o teste real de recebimento. O evento não tem efeito colateral
-    // algum além do log abaixo.
+    // Log de recebimento (apikey agora é barreira, não apenas sinal)
     const apikeyBruta = (corpo as { apikey?: unknown } | null)?.apikey
     const apikeyCorresponde =
       typeof apikeyBruta === 'string' && segredos.apiKey
