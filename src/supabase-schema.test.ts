@@ -168,6 +168,8 @@ expect(nomes).toEqual([
       '../supabase/migrations/053_horario_passado.sql',
       '../supabase/migrations/054_origem_publico.sql',
       '../supabase/migrations/055_correcao_typo_trigger.sql',
+      '../supabase/migrations/056_cron_retry_notificacoes.sql',
+      '../supabase/migrations/057_iniciado_em_notificacoes.sql',
     ])
   })
 
