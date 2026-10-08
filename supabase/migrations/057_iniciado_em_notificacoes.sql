@@ -103,25 +103,40 @@ grant execute on function public.ia_notificacoes_pendentes() to service_role;
 
 -- ----------------------------------------------------------------------------
 -- 3) Atualizar ia_notificacao_resolver() para limpar iniciado_em
+--    PRESERVA: RETURNS json + formato exato de retorno original
 -- ----------------------------------------------------------------------------
 create or replace function public.ia_notificacao_resolver(
   p_id text,
   p_ok boolean,
   p_motivo text default ''
 )
-returns void
+returns json
 language plpgsql
+volatile
 security definer
 set search_path = public
 as $$
 begin
+  if p_id is null or length(p_id) < 8 or length(p_id) > 64 then
+    raise exception 'Identificador inválido.';
+  end if;
+
   update public.ia_notificacoes
-     set status = case when p_ok then 'enviado' else 'falha' end,
+     set status = case when coalesce(p_ok, false) then 'enviado' else 'falha' end,
          iniciado_em = null,
-         ultimo_erro = case when p_ok then null else left(coalesce(p_motivo, ''), 300) end,
-         enviado_em = case when p_ok then now() else null end
+         enviado_em = case when coalesce(p_ok, false) then now() else null end,
+         ultimo_erro = case
+           when coalesce(p_ok, false) then ''
+           else left(coalesce(p_motivo, ''), 300)
+         end
    where id = p_id
      and status = 'enviando';
+
+  if not found then
+    return json_build_object('ok', false, 'motivo', 'Notificação não estava em envio.');
+  end if;
+
+  return json_build_object('ok', true);
 end;
 $$;
 
