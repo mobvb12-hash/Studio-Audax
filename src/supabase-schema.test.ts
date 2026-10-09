@@ -170,6 +170,10 @@ expect(nomes).toEqual([
       '../supabase/migrations/055_correcao_typo_trigger.sql',
       '../supabase/migrations/056_cron_retry_notificacoes.sql',
       '../supabase/migrations/057_iniciado_em_notificacoes.sql',
+      '../supabase/migrations/058_rls_alinhamento_permissoes.sql',
+      '../supabase/migrations/059_rls_posse_agendamentos_comissoes.sql',
+      '../supabase/migrations/060_profissionais_update_sem_autoedicao.sql',
+      '../supabase/migrations/061_horario_passado_remarcacao.sql',
     ])
   })
 
@@ -2456,5 +2460,587 @@ describe('055 - o trigger chama audax_hora_legivel (024), não a variante com E'
     expect(texto).toContain("insert into public.ia_eventos (fluxo, intencao, acao, executada, motivo)")
     expect((texto.match(/return v_ag;/g) || []).length).toBeGreaterThanOrEqual(2)
     expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 059 - a 017 recriou por_papel SEM a posse que a 014 declara          */
+/* ------------------------------------------------------------------ */
+
+describe('059 - posse em agendamentos, comissões, bloqueios e overrides', () => {
+  const bruto = sql('../supabase/migrations/059_rls_posse_agendamentos_comissoes.sql')
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  function trecho(nome: string): string {
+    const blocos = texto.split(/drop policy if exists/)
+    return blocos.find((b) => b.includes(`create policy ${nome} `)) ?? ''
+  }
+
+  it('agendamentos volta a ter posse do profissional no papel e no override', () => {
+    for (const nome of [
+      'agendamentos_select_por_papel',
+      'agendamentos_insert_por_papel',
+      'agendamentos_update_por_papel',
+    ]) {
+      const bloco = trecho(nome)
+      expect(bloco, nome).not.toBe('')
+      expect(bloco, nome).toContain('current_profissional_id()')
+      expect(bloco, nome).toContain('profissional = (')
+    }
+    for (const nome of [
+      'agendamentos_select_por_acao',
+      'agendamentos_insert_por_acao',
+      'agendamentos_update_por_acao',
+    ]) {
+      const bloco = trecho(nome)
+      expect(bloco, nome).not.toBe('')
+      expect(bloco, nome).toContain('current_user_permissao(')
+      expect(bloco, nome).toContain('current_profissional_id()')
+    }
+    // cancelamento real é UPDATE; DELETE continua admin/gerente (014)
+    const deletePorAcao = trecho('agendamentos_delete_por_acao')
+    expect(deletePorAcao).toContain("current_user_permissao('agenda:cancelar')")
+    expect(deletePorAcao).toContain('current_user_is_admin()')
+    expect(deletePorAcao).not.toContain('current_user_is_recepcao_ou_acima()')
+  })
+
+  it('comissões só se enxerga pelo vínculo (recepção e profissional)', () => {
+    for (const nome of [
+      'comissoes_configs_select_por_papel',
+      'comissoes_fechamentos_select_por_papel',
+      'comissoes_auditoria_select_por_papel',
+      'comissoes_configs_select_por_acao',
+      'comissoes_fechamentos_select_por_acao',
+    ]) {
+      const bloco = trecho(nome)
+      expect(bloco, nome).not.toBe('')
+      expect(bloco, nome).toContain('current_profissional_id()')
+      expect(bloco, nome).not.toContain('current_user_is_recepcao_ou_acima()')
+    }
+  })
+
+  it('bloqueios: só a branch do profissional muda; recepção fica como está', () => {
+    for (const nome of [
+      'bloqueios_select_por_papel',
+      'bloqueios_insert_por_papel',
+      'bloqueios_update_por_papel',
+    ]) {
+      const bloco = trecho(nome)
+      expect(bloco, nome).not.toBe('')
+      expect(bloco, nome).toContain('current_user_is_recepcao_ou_acima()')
+      expect(bloco, nome).toContain('current_profissional_id()')
+    }
+  })
+
+  it('override de perfil INATIVO deixa de valer', () => {
+    expect(texto).toContain(
+      'create or replace function public.current_user_permissao(p_acao text)',
+    )
+    expect(texto).toMatch(/where pf\.user_id = auth\.uid\(\)\s+and pf\.ativo/)
+    expect(texto).toContain('security definer')
+    expect(texto).toContain('set search_path = public')
+  })
+
+  it('só autorização: recria policy, não toca em tabela, coluna ou dado', () => {
+    expect(texto).not.toMatch(/create table|add column|alter table|\btruncate\b/i)
+    expect(texto).not.toMatch(/delete\s+from/i)
+    // recriação idempotente (drop policy if exists + create policy)
+    expect((texto.match(/drop policy if exists/g) || []).length).toBe(
+      (texto.match(/create policy/g) || []).length,
+    )
+    expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+
+  it('a verificação falha alto e avisa sobre profissional sem vínculo', () => {
+    expect(texto).toContain('raise exception')
+    expect(texto).toContain('raise warning')
+    expect(texto).toContain('profissionais.user_id')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 060 - o profissional deixa de alterar o próprio registro            */
+/* ------------------------------------------------------------------ */
+
+describe('060 — profissionais não se auto-edita (migração válida e aplicada)', () => {
+  const caminho = '../supabase/migrations/060_profissionais_update_sem_autoedicao.sql'
+  const bruto = sql(caminho)
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('é migração de verdade: está em supabase/migrations e entrou na lista', () => {
+    // Antes vivia em supabase/propostas/ com `STATUS: PROPOSTA` para que nenhum
+    // `db push` a aplicasse por engano. A autorização veio, ela foi promovida
+    // e a lista oficial da etapa "migrations" teve de mudar junto.
+    expect(caminho).toContain('/migrations/')
+    expect(bruto).toContain('STATUS: APLICÁVEL')
+    expect(bruto).not.toContain('STATUS: PROPOSTA')
+    // a 060 é a ÚNICA migration com o número, e ela está em migrations —
+    // o teste da etapa "migrations" (lista oficial) falha se a lista não
+    // mudar junto com o arquivo.
+    expect(
+      Object.keys(scripts).filter(
+        (p) => p.includes('/migrations/') && p.includes('/060_'),
+      ),
+    ).toEqual([caminho])
+    // nada mais em supabase/propostas: a pasta nem existe mais
+    expect(Object.keys(scripts).some((p) => p.includes('/propostas/'))).toBe(
+      false,
+    )
+  })
+
+  it('recria as duas policies de UPDATE sem o ramo de auto-edição', () => {
+    expect((texto.match(/drop policy if exists/g) || []).length).toBe(2)
+    expect((texto.match(/create policy/g) || []).length).toBe(2)
+    expect(texto).toMatch(/create policy "profissionais_update"/)
+    expect(texto).toMatch(/create policy profissionais_update_por_acao/)
+    // O corpo da policy não pode citar o ramo self-service. As menções a
+    // `current_profissional_id` do arquivo vivem SÓ nas aserções E060_*,
+    // que verificam justamente que o ramo saiu de lá.
+    const policy =
+      /create policy "profissionais_update"[\s\S]*?;/.exec(texto)?.[0] ?? ''
+    expect(policy).toContain('on public.profissionais')
+    expect(policy).not.toContain('current_profissional_id')
+    expect(texto).toMatch(
+      /using \(\s*public\.current_user_is_admin\(\)\s*or public\.current_user_is_gerente_ou_acima\(\)\s*\)/,
+    )
+    expect(texto).toMatch(
+      /with check \(\s*public\.current_user_is_admin\(\)\s*or public\.current_user_is_gerente_ou_acima\(\)\s*\)/,
+    )
+  })
+
+  it('a última definição de profissionais_update é a da 060', () => {
+    // A 014 continua trazendo o ramo antigo como caminho de reversão, mas a
+    // ordem das migrations decide quem vale: 060 tem de ser a última.
+    const versao = (p: string): number => Number(/\/(\d+)_/.exec(p)?.[1] ?? 0)
+    const recriacoes = Object.keys(scripts)
+      .filter((p) => /create policy "profissionais_update"/.test(scripts[p]))
+      .sort((a, b) => versao(a) - versao(b))
+    expect(recriacoes.length).toBeGreaterThan(1)
+    expect(recriacoes[recriacoes.length - 1]).toBe(caminho)
+  })
+
+  it('não toca em tabela, coluna, dado ou em outra policy', () => {
+    expect(texto).not.toMatch(/create table|add column|alter table|\btruncate\b/i)
+    expect(texto).not.toMatch(/delete\s+from/i)
+    expect(texto).toMatch(/on public\.profissionais\b/)
+    // nenhuma outra tabela recebe policy nesta migration
+    const tabelas = [...texto.matchAll(/on public\.(\w+)/g)].map((a) => a[1])
+    expect(new Set(tabelas)).toEqual(new Set(['profissionais']))
+    expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+
+  it('validação falha alto: onze asserções E060_ cobrem os lados da regra', () => {
+    const assercoes = [...texto.matchAll(/raise exception 'E060_(\d+)/g)].map(
+      (a) => a[1],
+    )
+    // E060_10 tem dois `raise` (um por lado) — o que importa é cobertura
+    expect([...new Set(assercoes)]).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '10',
+      '11',
+    ])
+    expect(assercoes.length).toBe(12)
+    // garante que olha os DOIS lados (qual e with_check) antes de aceitar
+    expect(texto).toMatch(/select qual, with_check into v_qual, v_check/)
+    expect(texto).toMatch(/v_qual like '%current_profissional_id%'/)
+    expect(texto).toMatch(/v_check like '%current_profissional_id%'/)
+    // e que o SELECT de leitura do próprio cadastro é verificado como preservado
+    expect(texto).toMatch(/policyname = 'profissionais_select'/)
+  })
+
+  it('USING e WITH CHECK são idênticos: ativo, user_id ou qualquer coluna caem na mesma regra', () => {
+    // RLS decide por LINHA: não existe regra por coluna. Se os dois lados
+    // forem o mesmo predicado, trocar `ativo` (auto-inativação), `user_id`
+    // (troca de vínculo = posse no RLS) ou qualquer outro campo passa pelo
+    // MESMO portão — não há como contornar mudando a coluna certa.
+    const corpo = (abertura: string): { using: string; check: string } => {
+      const bloco = new RegExp(`${abertura}[\\s\\S]*?;`).exec(texto)?.[0] ?? ''
+      const usando = /using\s*\(([\s\S]*?)\)\s*with check/.exec(bloco)?.[1] ?? ''
+      const checando = /with check\s*\(([\s\S]*?)\);/.exec(bloco)?.[1] ?? ''
+      const normalizar = (s: string): string => s.replace(/\s+/g, ' ').trim()
+      return { using: normalizar(usando), check: normalizar(checando) }
+    }
+
+    const principal = corpo('create policy "profissionais_update"')
+    expect(principal.using).not.toBe('')
+    expect(principal.using).toBe(principal.check)
+
+    const porAcao = corpo('create policy profissionais_update_por_acao')
+    expect(porAcao.using).not.toBe('')
+    expect(porAcao.using).toBe(porAcao.check)
+
+    // nenhuma das duas cita coluna: a regra é sobre quem é, não sobre o quê
+    for (const regra of [principal.using, porAcao.using]) {
+      expect(regra).not.toMatch(/\bativo\b|\buser_id\b|\bnome\b|\bpapel\b\s*=/)
+    }
+  })
+
+  it('nenhum atalho (função, trigger ou RPC) escreve em profissionais fora da RLS', () => {
+    // Se uma função SECURITY DEFINER passar a fazer `update profissionais`,
+    // ela ignora as policies que esta migration acaba de fechar — o portão
+    // precisa continuar sendo SÓ a RLS da tabela.
+    const semComentario = (t: string): string =>
+      t.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+    const atalhos = Object.entries(scripts)
+      .filter(([, corpo]) =>
+        /\b(update|insert\s+into|delete\s+from|merge\s+into)\s+(public\.)?profissionais\b/i.test(
+          semComentario(corpo),
+        ),
+      )
+      .map(([caminho]) => caminho)
+    expect(atalhos).toEqual([])
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 060 - regra EFETIVA de UPDATE em profissionais                       */
+/* (as permissivas são OR entre si: qualquer uma reabre a escrita)      */
+/* ------------------------------------------------------------------ */
+
+describe('060 — nenhuma policy de UPDATE volta a conceder autoedição', () => {
+  const p014 = '../supabase/migrations/014_rls_role_based.sql'
+  const p042 = '../supabase/migrations/042_perfis_permissoes.sql'
+  const p058 = '../supabase/migrations/058_rls_alinhamento_permissoes.sql'
+  const p060 = '../supabase/migrations/060_profissionais_update_sem_autoedicao.sql'
+
+  it('a única declaração com o ramo próprio é a da 014 (superada pela 060)', () => {
+    const comAutoedicao = Object.entries(scripts)
+      .filter(([, texto]) => {
+        const declaracoes = texto.match(/create policy[\s\S]*?;/gi) || []
+        return declaracoes.some(
+          (declaracao) =>
+            /\bon public\.profissionais\b/i.test(declaracao) &&
+            /\bfor\s+update\b/i.test(declaracao) &&
+            declaracao.includes('current_profissional_id'),
+        )
+      })
+      .map(([caminho]) => caminho)
+    expect(comAutoedicao).toEqual([p014])
+  })
+
+  it('a última definição de cada policy de UPDATE não cita o ramo próprio', () => {
+    const ultima = (alvo: string): string | undefined =>
+      Object.keys(scripts)
+        .filter((caminho) =>
+          new RegExp(`create policy "?${alvo}"?\\s`, 'i').test(scripts[caminho]),
+        )
+        .sort(
+          (a, b) =>
+            Number(/\/(\d+)_/.exec(a)?.[1] ?? 0) -
+            Number(/\/(\d+)_/.exec(b)?.[1] ?? 0),
+        )
+        .pop()
+
+    expect(ultima('profissionais_update')).toBe(p060)
+    expect(ultima('profissionais_update_por_papel')).toBe(p058)
+    expect(ultima('profissionais_update_por_acao')).toBe(p060)
+    // `profissionais_update_limite_por_acao` não tem nome literal: a 042
+    // monta <tabela>_<cmd>_limite_por_acao na execução e a 060 não mexe nela.
+  })
+
+  it('a 058 mantém _por_papel em gerente+ e a 014 mantém o SELECT próprio', () => {
+    const bloco =
+      /create policy profissionais_update_por_papel[\s\S]*?;/.exec(sql(p058))?.[0] ??
+      ''
+    expect(bloco).toContain('current_user_is_gerente_ou_acima()')
+    expect(bloco).not.toContain('current_profissional_id')
+
+    const select =
+      /create policy "profissionais_select"[\s\S]*?;/.exec(sql(p014))?.[0] ?? ''
+    expect(select).toContain('current_profissional_id()')
+    expect(sql(p060)).not.toMatch(/drop policy if exists profissionais_select/i)
+  })
+
+  it('INSERT e DELETE de profissionais seguem admin/gerente+ — a 060 não os toca', () => {
+    const t060 = sql(p060).replace(/--[^\n]*/g, ' ')
+    // a 060 só derruba/recria UPDATE: nenhum drop de insert/delete/select
+    expect(t060).not.toMatch(/drop policy if exists\s+profissionais_(insert|delete|select)/)
+    expect(t060).not.toMatch(/create policy\s+"?profissionais_(insert|delete|select)"?\s/)
+
+    const inserir =
+      /create policy "profissionais_insert"[\s\S]*?;/.exec(sql(p014))?.[0] ?? ''
+    expect(inserir).toContain('public.current_user_is_gerente_ou_acima()')
+    expect(inserir).not.toContain('current_profissional_id')
+
+    const apagar =
+      /create policy "profissionais_delete"[\s\S]*?;/.exec(sql(p014))?.[0] ?? ''
+    expect(apagar).toContain('public.current_user_is_admin()')
+    expect(apagar).not.toContain('recepcao_ou_acima')
+
+    // os pares por papel continuam no nível que a 058 fixou
+    const inserirPapel =
+      /create policy profissionais_insert_por_papel[\s\S]*?;/.exec(sql(p058))?.[0] ?? ''
+    expect(inserirPapel).toContain('current_user_is_gerente_ou_acima()')
+    const apagarPapel =
+      /create policy profissionais_delete_por_papel[\s\S]*?;/.exec(sql(p058))?.[0] ?? ''
+    expect(apagarPapel).toContain('current_user_is_admin()')
+
+    // e a edição de perfil pessoal (tabela perfis) continua fora do alcance
+    expect(t060).not.toMatch(/on public\.perfis\b/)
+  })
+
+  it('a 042 mantém o template genérico; o gate de papel vem da 060', () => {
+    const t042 = sql(p042)
+    // par gerado para profissionais/update: a permissive da 042 é só a
+    // permissão — é exatamente por isso que ela precisou ser recriada.
+    expect(t042).toMatch(/\('profissionais',\s*'update',\s*'profissionais:editar'\)/)
+    expect(t042).toContain('public.current_user_permissao(%L) is true')
+    // e a RESTRICTIVE é COALESCE(..., true): sem override ela não restringe
+    // nada — não é ela que fecha a porta.
+    expect(t042).toContain('coalesce(public.current_user_permissao(%L), true)')
+    // o template da 042 nunca usa o ramo do próprio registro
+    expect(t042).not.toContain('current_profissional_id')
+    // nenhum arquivo declara autoedição em profissionais além da 014
+    expect(sql(p060)).not.toMatch(/create policy[\s\S]{0,200}current_profissional_id/i)
+
+    // a 060 recria o par com o envelope de papel (formato da 059) nos DOIS lados
+    const porAcao =
+      /create policy profissionais_update_por_acao[\s\S]*?;/.exec(sql(p060))?.[0] ??
+      ''
+    expect(porAcao).toContain(
+      "public.current_user_permissao('profissionais:editar') is true",
+    )
+    expect(porAcao).toContain('public.current_user_is_gerente_ou_acima()')
+    expect((porAcao.match(/current_user_is_gerente_ou_acima/g) || []).length).toBe(2)
+    expect(porAcao).not.toContain('current_profissional_id')
+    // a restrictive da 042 continua sendo a única a não ser tocada
+    expect(sql(p060)).not.toMatch(
+      /drop policy if exists profissionais_update_limite_por_acao/,
+    )
+    expect(sql(p060)).not.toMatch(
+      /create policy profissionais_update_limite_por_acao/,
+    )
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 060 - o override `profissionais:editar` não concede UPDATE sozinho  */
+/* ------------------------------------------------------------------ */
+
+describe('060 — override profissionais:editar sem papel não abre UPDATE', () => {
+  const p060 = '../supabase/migrations/060_profissionais_update_sem_autoedicao.sql'
+  type Papel = 'dono' | 'admin' | 'gerente' | 'recepcao' | 'profissional'
+  type Cenario = { papel: Papel; override: boolean | null; propria: boolean }
+
+  /** Regra efetiva DEPOIS da 060: (qualquer permissiva) AND (todas as restrictives). */
+  function updateDepois({ papel, override }: Cenario): boolean {
+    const gerenteOuAcima = papel === 'dono' || papel === 'admin' || papel === 'gerente'
+    const permissivas = [
+      gerenteOuAcima, // profissionais_update (060)
+      gerenteOuAcima, // profissionais_update_por_papel (058)
+      override === true && gerenteOuAcima, // profissionais_update_por_acao (060)
+      // O RAMO `profissional ∧ própria linha` da 014 NÃO entra aqui: ele é
+      // justamente o que a 060 remove (o modelo sem ele é o teste).
+    ]
+    const restrictives = [override !== false] // coalesce(override, true) da 042
+    return permissivas.some(Boolean) && restrictives.every(Boolean)
+  }
+
+  /** Estado ANTES da 060 (014 + 042) — só para provar que o cenário importa. */
+  function updateAntes({ papel, override, propria }: Cenario): boolean {
+    const gerenteOuAcima = papel === 'dono' || papel === 'admin' || papel === 'gerente'
+    const permissivas = [
+      gerenteOuAcima || (papel === 'profissional' && propria), // 014
+      override === true, // 042: permissão sozinha concedia
+    ]
+    const restrictives = [override !== false]
+    return permissivas.some(Boolean) && restrictives.every(Boolean)
+  }
+
+  it('sem override, quem muda é só quem já podia (dono/admin/gerente)', () => {
+    const semOverride = (papel: Papel, propria = false): Cenario => ({
+      papel,
+      override: null,
+      propria,
+    })
+    expect(updateDepois(semOverride('dono'))).toBe(true)
+    expect(updateDepois(semOverride('admin'))).toBe(true)
+    expect(updateDepois(semOverride('gerente'))).toBe(true)
+    expect(updateDepois(semOverride('recepcao'))).toBe(false)
+    expect(updateDepois(semOverride('profissional', true))).toBe(false)
+    expect(updateDepois(semOverride('profissional', false))).toBe(false)
+  })
+
+  it('COM override concedido, profissional e recepção continuam sem UPDATE', () => {
+    const comOverride = (papel: Papel, propria = true): Cenario => ({
+      papel,
+      override: true,
+      propria,
+    })
+    // o cenário da auditoria: o override existe e a pessoa tem a linha em mãos
+    expect(updateDepois(comOverride('profissional', true))).toBe(false)
+    expect(updateDepois(comOverride('profissional', false))).toBe(false)
+    expect(updateDepois(comOverride('recepcao', true))).toBe(false)
+    // e o mesmo cenário, ANTES da 060, abria a porta pelos DOIS caminhos
+    expect(updateAntes(comOverride('profissional', true))).toBe(true)
+    expect(updateAntes(comOverride('recepcao', true))).toBe(true)
+    // quem já podia continua podendo com o override em mãos
+    expect(updateDepois(comOverride('gerente'))).toBe(true)
+    expect(updateDepois(comOverride('admin'))).toBe(true)
+    expect(updateDepois({ papel: 'dono', override: true, propria: true })).toBe(true)
+  })
+
+  it('a revogação (permitido = false) continua vetando até para gerente', () => {
+    const vetado = (papel: Papel): Cenario => ({ papel, override: false, propria: true })
+    expect(updateDepois(vetado('gerente'))).toBe(false)
+    expect(updateDepois(vetado('admin'))).toBe(false)
+    expect(updateDepois(vetado('profissional'))).toBe(false)
+    // sem linha de override, o veto não existe e o papel volta a valer
+    expect(updateDepois({ papel: 'gerente', override: null, propria: true })).toBe(true)
+  })
+
+  it('a regra modelada bate com o texto real das três policies', () => {
+    const texto = sql(p060)
+    // 1) a autoedição da 014 saiu — o ramo que o modelo deixou de considerar
+    expect(texto).not.toMatch(/create policy "profissionais_update"[\s\S]{0,300}current_profissional_id/)
+    // 2) o override agora exige papel nos DOIS lados
+    const porAcao =
+      /create policy profissionais_update_por_acao[\s\S]*?;/.exec(texto)?.[0] ?? ''
+    expect(porAcao).toContain("public.current_user_permissao('profissionais:editar') is true")
+    expect(porAcao).toContain('public.current_user_is_gerente_ou_acima()')
+    // 3) a restrictive continua sendo a da 042 (coalesce → true sem override)
+    const t042 = sql('../supabase/migrations/042_perfis_permissoes.sql')
+    expect(t042).toContain('coalesce(public.current_user_permissao(%L), true)')
+    // 4) e as aserções da migration cobrem exatamente esses três pontos
+    for (const assercao of ['E060_3', 'E060_10', 'E060_11']) {
+      expect(texto).toContain(`raise exception '${assercao}`)
+    }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 061 - remarcar também não aceita horário de hoje que já passou      */
+/* ------------------------------------------------------------------ */
+
+describe('061 — remarcação não aceita horário de hoje que já passou', () => {
+  const caminho = '../supabase/migrations/061_horario_passado_remarcacao.sql'
+  const p015 = '../supabase/migrations/015_ia_agendamentos_whatsapp.sql'
+  const bruto = sql(caminho)
+  const texto = bruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  it('redefine SÓ ia_agendamento_remarcar, com a MESMA assinatura de 5 argumentos', () => {
+    expect(texto).toContain(
+      'create or replace function public.ia_agendamento_remarcar(',
+    )
+    expect(texto).toMatch(
+      /p_id text,\s*p_telefone text,\s*p_data date,\s*p_horario text,\s*p_profissional text/,
+    )
+    // 019 e o webhook chamam com cinco: assinatura nova criaria DUAS e a
+    // chamada passaria a ser ambígua.
+    expect(texto).toMatch(
+      /ia_agendamento_remarcar\(text, text, date, text, text\)/,
+    )
+    expect(
+      [...texto.matchAll(/create or replace function public\.(\w+)/g)].map(
+        (a) => a[1],
+      ),
+    ).toEqual(['ia_agendamento_remarcar'])
+    // nenhuma tabela, policy, trigger ou coluna nova
+    expect(texto).not.toMatch(
+      /create table|create policy|create trigger|add column|alter table/i,
+    )
+    expect(texto).not.toMatch(/delete\s+from|drop\s+table|truncate/i)
+  })
+
+  it('é a ÚLTIMA definição da função — a ordem decide quem vale', () => {
+    const versao = (p: string): number => Number(/\/(\d+)_/.exec(p)?.[1] ?? 0)
+    const recriacoes = Object.keys(scripts)
+      .filter((p) =>
+        /create or replace function public\.ia_agendamento_remarcar\(/.test(
+          scripts[p],
+        ),
+      )
+      .sort((a, b) => versao(a) - versao(b))
+    expect(recriacoes).toEqual([p015, caminho])
+  })
+
+  it('recusa horário de hoje <= agora, com a MESMA frase da 053', () => {
+    const frase = 'Este horário já passou. Escolha um horário futuro.'
+    expect(texto).toContain(
+      "v_hoje date := (now() at time zone 'America/Recife')::date",
+    )
+    expect(texto).toContain('v_agora_minutos :=')
+    expect(texto).toContain('if p_data = v_hoje')
+    expect(texto).toContain(
+      'and public.audax_minutos(p_horario) <= v_agora_minutos then',
+    )
+    expect(texto).toContain(`raise exception '${frase}'`)
+    // a frase é LITERALMENTE a da 053 (mesma frase da tela nos dois caminhos)
+    expect(sql('../supabase/migrations/053_horario_passado.sql')).toContain(
+      `raise exception '${frase}'`,
+    )
+    // a definição anterior (015) validava data/formato mas NÃO o horário
+    // de hoje — é a 061 que fecha o gap, e só ela tem o corte.
+    expect(sql(p015)).not.toContain('v_agora_minutos')
+    expect(sql(p015)).not.toContain(frase)
+  })
+
+  it('o corte vem depois do "nada mudou" e antes de QUALQUER escrita', () => {
+    const noOp = texto.indexOf("json_build_object('ok', true, 'igual', true)")
+    const corte = texto.indexOf("raise exception 'Este horário já passou")
+    const escrita = texto.indexOf('update public.agendamentos a')
+    expect(noOp).toBeGreaterThan(0)
+    expect(corte).toBeGreaterThan(noOp)
+    expect(escrita).toBeGreaterThan(corte)
+    // datas futuras não passam pelo corte (só o dia igual a "hoje")
+    expect(texto).toContain('if p_data = v_hoje')
+    expect(texto).not.toContain('if p_data <= v_hoje')
+  })
+
+  it('todas as validações da 015 continuam: o corte é um ACRÉSCIMO', () => {
+    for (const trecho of [
+      "raise exception 'Identificador inválido.'",
+      "raise exception 'Telefone inválido.'",
+      "raise exception 'Escolha uma data a partir de hoje.'",
+      "raise exception 'Horário inválido.'",
+      "raise exception 'Profissional inválido.'",
+      "raise exception 'Agendamento não encontrado.'",
+      "raise exception 'Este agendamento não está mais ativo.'",
+      "raise exception 'Profissional indisponível.'",
+      "raise exception 'Horário fora do expediente (% às %).'",
+      "raise exception 'Horário bloqueado pelo almoço (% às %).'",
+      "raise exception 'Horário bloqueado: % (% às %).'",
+      "raise exception 'Este horário acabou de ser ocupado. Escolha outro.'",
+    ]) {
+      expect(texto, trecho).toContain(trecho)
+    }
+    // a remarcação continua anexando o histórico em `remarcacoes`
+    expect(texto).toContain('remarcacoes = coalesce(a.remarcacoes')
+    // posse inalterada: só a linha com o MESMO telefone responde
+    expect(texto).toContain('public.audax_digitos(a.telefone) = v_fone')
+  })
+
+  it('grants idênticos aos da 015: SOMENTE service_role', () => {
+    expect(texto).toMatch(
+      /revoke execute on function public\.ia_agendamento_remarcar\(text, text, date, text, text\)\s+from public, anon, authenticated/,
+    )
+    expect(texto).toMatch(
+      /grant execute on function public\.ia_agendamento_remarcar\(text, text, date, text, text\)\s+to service_role/,
+    )
+    // anon/authenticated continuam sem acesso: quem é cliente entra pela 019
+    expect(texto).not.toMatch(
+      /grant execute on function public\.ia_agendamento_remarcar[^\n]*to (anon|authenticated)/,
+    )
+    expect(texto).toContain("notify pgrst, 'reload schema'")
+  })
+
+  it('a Agenda interna NÃO usa esta função: o corte não mexe na tela da equipe', () => {
+    // `ia_agendamento_remarcar` só é alcançada pela 019 (Painel do cliente,
+    // security definer) e pelo webhook com a chave secreta. Nenhum arquivo da
+    // Agenda interna a chama.
+    const chamadores = Object.entries(scripts)
+      .filter(([p, corpo]) => p !== caminho && /perform public\.ia_agendamento_remarcar\(/.test(corpo))
+      .map(([p]) => p)
+    expect(chamadores).toEqual(['../supabase/migrations/019_painel_agendamento.sql'])
+    // e o app só a alcança pela RPC do Painel
+    expect(sql(p015)).toContain('revoke execute on function public.ia_agendamento_remarcar')
   })
 })

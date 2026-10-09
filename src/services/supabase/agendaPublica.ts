@@ -2,8 +2,11 @@
 // Agendamento público (§16) — o cliente agenda por link.
 //
 // Mesma fonte de dados da Agenda interna (NUNCA uma segunda agenda):
-//   • com Supabase: três funções SECURITY DEFINER da migration 012 —
-//     catálogo, ocupação do dia e criação (que revalida no servidor);
+//   • com Supabase: funções SECURITY DEFINER do servidor - catálogo e
+//     ocupação do dia (012, ampliadas pela 027/040) e a CRIAÇÃO, que entra
+//     pelo wrapper `agendamento_publico_criar_complementos` (027 → 054) e
+//     delega à autoridade `agendamento_publico_criar` (012 → 040 → 045 →
+//     053), sempre revalidando no servidor;
 //   • sem Supabase: localStorage da própria Agenda + as MESMAS regras de
 //     `validarProposta` (expediente → almoço → bloqueio → conflito).
 //
