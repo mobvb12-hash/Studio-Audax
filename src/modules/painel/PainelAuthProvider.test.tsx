@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { PainelAuthProvider } from './PainelAuthProvider'
 import { AVISO_LINK_ENVIADO } from './regras'
 import { usePainelAuth } from './usePainelAuth'
@@ -19,6 +19,7 @@ function Probe() {
     recuperar,
     redefinir,
     vincular,
+    aoConfirmarEmail,
     atualizar,
     sair,
   } = usePainelAuth()
@@ -72,6 +73,9 @@ function Probe() {
       </button>
       <button type="button" onClick={() => void redefinir('novasenha1')}>
         Redefinir
+      </button>
+      <button type="button" onClick={() => void aoConfirmarEmail()}>
+        Confirmar email
       </button>
       <button
         type="button"
@@ -138,6 +142,12 @@ function renderizar(cliente: ClientePainelFalso | null) {
 function status(): string {
   return screen.getByTestId('status').textContent ?? ''
 }
+
+beforeEach(() => {
+  // a ponte da confirmação de e-mail mora no sessionStorage: sem limpeza,
+  // uma tentativa anterior contaminaria a próxima
+  sessionStorage.clear()
+})
 
 describe('PainelAuthProvider — autenticação do cliente', () => {
   it('sem Supabase o painel fica desabilitado', () => {
@@ -247,6 +257,66 @@ describe('PainelAuthProvider — autenticação do cliente', () => {
       nome: 'Ana Silva',
       telefone: '(11) 98888-7777',
       nascimento: '1995-06-15',
+    })
+  })
+
+  it('a confirmação de e-mail NÃO perde nome, telefone e nascimento digitados', async () => {
+    const cliente = criarClientePainelFalso(null)
+    cliente.cadastroSemSessao = true
+    renderizar(cliente)
+    await waitFor(() => expect(status()).toBe('sem_sessao'))
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }))
+    await waitFor(() => expect(status()).toBe('confirme_email'))
+    // o link do e-mail chega: sessão nova (a página reabriu, o React zerou)
+    cliente.sessaoAtual = sessaoValidaPainel('ana@studio.com')
+    cliente.confirmada = true
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar email' }))
+    await waitFor(() => expect(status()).toBe('pronto'))
+    expect(cliente.chamadasVincular[0]).toEqual({
+      nome: 'Ana Silva',
+      telefone: '(11) 98888-7777',
+      nascimento: '1995-06-15',
+    })
+    // e a pendência é descartada depois de usada
+    expect(sessionStorage.length).toBe(0)
+  })
+
+  it('a pendência de um e-mail NÃO é herdada por outra conta confirmada', async () => {
+    const cliente = criarClientePainelFalso(null)
+    cliente.cadastroSemSessao = true
+    renderizar(cliente)
+    await waitFor(() => expect(status()).toBe('sem_sessao'))
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }))
+    await waitFor(() => expect(status()).toBe('confirme_email'))
+    // outra pessoa confirma a própria conta nesta mesma aba
+    cliente.sessaoAtual = sessaoValidaPainel('outra@studio.com')
+    cliente.confirmada = true
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar email' }))
+    await waitFor(() => expect(status()).toBe('pronto'))
+    expect(cliente.chamadasVincular[0]).toEqual({
+      nome: null,
+      telefone: null,
+      nascimento: '',
+    })
+    // a pendência do e-mail original continua guardada para quem a fez
+    expect(sessionStorage.length).toBeGreaterThan(0)
+  })
+
+  it('o login normal NÃO herda o cadastro pendente de outra tentativa', async () => {
+    const cliente = criarClientePainelFalso(null)
+    cliente.cadastroSemSessao = true
+    renderizar(cliente)
+    await waitFor(() => expect(status()).toBe('sem_sessao'))
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }))
+    await waitFor(() => expect(status()).toBe('confirme_email'))
+    // em vez de confirmar, a pessoa entra com uma conta já existente: a
+    // pendência é de OUTRA tentativa e não pode ser usada como prova
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    await waitFor(() => expect(status()).toBe('pronto'))
+    expect(cliente.chamadasVincular[0]).toEqual({
+      nome: null,
+      telefone: null,
+      nascimento: '',
     })
   })
 

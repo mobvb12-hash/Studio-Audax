@@ -4,17 +4,21 @@ import {
   areaPelaUrl,
   CAMINHO_AGENDAR,
   CAMINHO_CLIENTE,
+  cadastroPendenteDo,
   ehRotaPainel,
   ehRotaPublica,
   irParaAgendamentoOficial,
   irParaAreaDoCliente,
+  lerCadastroPendente,
   lerPreenchimento,
   lerRetomadaAgendamento,
+  limparCadastroPendente,
   limparPreenchimento,
   limparRetomadaAgendamento,
   navegarPainel,
   nascimentoValido,
   rotaPainelAtual,
+  salvarCadastroPendente,
   salvarRetomadaAgendamento,
   temRetomadaAgendamento,
   urlAgendamentoOficial,
@@ -368,5 +372,53 @@ describe('data de nascimento (prova de vínculo da RPC 018)', () => {
 
   it('recusa data futura: ninguém nasceu amanhã', () => {
     expect(nascimentoValido('2999-01-01')).toBe(false)
+  })
+})
+
+describe('cadastro pendente: a confirmação de e-mail não perde o que foi digitado', () => {
+  const PENDENTE = {
+    email: 'ana@studio.com',
+    nome: 'Ana Silva',
+    telefone: '(11) 98888-7777',
+    nascimento: '1995-06-15',
+  }
+
+  beforeEach(() => sessionStorage.clear())
+
+  it('guarda, devolve e apaga os quatro campos da tentativa', () => {
+    salvarCadastroPendente(PENDENTE)
+    expect(lerCadastroPendente()).toEqual(PENDENTE)
+    limparCadastroPendente()
+    expect(lerCadastroPendente()).toBeNull()
+  })
+
+  it('expira: depois de 30 minutos é papel picado', () => {
+    vi.useFakeTimers()
+    try {
+      salvarCadastroPendente(PENDENTE)
+      expect(lerCadastroPendente()).not.toBeNull()
+      vi.advanceTimersByTime(30 * 60 * 1000 + 1)
+      expect(lerCadastroPendente()).toBeNull()
+      expect(sessionStorage.length).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('gravação malformada é ignorada sem quebrar a leitura', () => {
+    salvarCadastroPendente(PENDENTE)
+    const chave = sessionStorage.key(0)
+    expect(chave).not.toBeNull()
+    sessionStorage.setItem(chave as string, '{sem json')
+    expect(lerCadastroPendente()).toBeNull()
+  })
+
+  it('só serve para o MESMO e-mail da sessão', () => {
+    expect(cadastroPendenteDo(PENDENTE, 'ana@studio.com')).toEqual(PENDENTE)
+    expect(cadastroPendenteDo(PENDENTE, 'ANA@Studio.COM')).toEqual(PENDENTE)
+    expect(cadastroPendenteDo(PENDENTE, 'outra@studio.com')).toBeNull()
+    expect(cadastroPendenteDo(PENDENTE, '')).toBeNull()
+    expect(cadastroPendenteDo(PENDENTE, null)).toBeNull()
+    expect(cadastroPendenteDo(null, 'ana@studio.com')).toBeNull()
   })
 })

@@ -153,6 +153,108 @@ export function limparPreenchimento(): void {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Cadastro pendente: a confirmação de e-mail não perde o que foi digitado      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * O que a pessoa escreveu no formulário de cadastro enquanto o Supabase pede
+ * a confirmação do e-mail.
+ *
+ * Com a confirmação ativa, `signUp` não devolve sessão: o fluxo para em
+ * `confirme_email` e só continua quando o link do e-mail chega — que abre a
+ * página DE NOVO, perdendo o estado do React. Sem esta ponte, a RPC 018 é
+ * chamada sem `nome`, `telefone` e `nascimento` e o cadastro nasce com o
+ * nascimento em branco, mesmo sendo campo obrigatório da tela.
+ *
+ * Vive no `sessionStorage` (uma visita) com validade curta: é dado de uma
+ * tentativa em andamento, não um perfil salvo.
+ */
+const CHAVE_CADASTRO_PENDENTE = 'studio-audax:painel:cadastro-pendente'
+
+/** Passou disso, a pessoa preenche de novo — nada de usar dado velho. */
+const VIDA_CADASTRO_PENDENTE_MS = 30 * 60 * 1000
+
+export type CadastroPendente = {
+  email: string
+  nome: string
+  telefone: string
+  nascimento: string
+}
+
+type CadastroPendenteBruto = CadastroPendente & { salvoEm?: number }
+
+/** Guarda o cadastro enquanto a caixa de entrada confirma o e-mail. */
+export function salvarCadastroPendente(dados: CadastroPendente): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(
+      CHAVE_CADASTRO_PENDENTE,
+      JSON.stringify({ ...dados, salvoEm: Date.now() }),
+    )
+  } catch {
+    // sessionStorage indisponível: o formulário de vínculo cobre o resto.
+  }
+}
+
+/**
+ * Lê o cadastro pendente (sem apagar) para a confirmação concluir o vínculo.
+ *
+ * `null` = não há pendência, pendência velha ou dado malformado. Só os
+ * campos do cadastro são aceitos (incluindo o e-mail, que é a chave para
+ * saber a quem a pendência pertence): o resto é ruído de gravação anterior.
+ */
+export function lerCadastroPendente(): CadastroPendente | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const bruto = window.sessionStorage.getItem(CHAVE_CADASTRO_PENDENTE)
+    if (!bruto) return null
+    const dados = JSON.parse(bruto) as CadastroPendenteBruto
+    if (typeof dados.salvoEm !== 'number') return null
+    if (Date.now() - dados.salvoEm > VIDA_CADASTRO_PENDENTE_MS) {
+      limparCadastroPendente()
+      return null
+    }
+    const email = String(dados.email ?? '')
+    const nome = String(dados.nome ?? '')
+    const telefone = String(dados.telefone ?? '')
+    if (!email || !nome || !telefone) return null
+    return {
+      email,
+      nome,
+      telefone,
+      nascimento: String(dados.nascimento ?? ''),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A pendência é de UM e-mail: só quem confirmou o MESMO e-mail pode usá-la.
+ * Sem isto, um link de confirmação aberto com a conta de outra pessoa
+ * herdaria nome, telefone e nascimento de uma tentativa anterior.
+ */
+export function cadastroPendenteDo(
+  pendente: CadastroPendente | null,
+  emailSessao?: string | null,
+): CadastroPendente | null {
+  if (!pendente) return null
+  const dono = emailSessao?.trim().toLowerCase() ?? ''
+  if (!dono || dono !== pendente.email.trim().toLowerCase()) return null
+  return pendente
+}
+
+/** Apaga a pendência: ela vale para uma tentativa, não para sempre. */
+export function limparCadastroPendente(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(CHAVE_CADASTRO_PENDENTE)
+  } catch {
+    // sessionStorage indisponível: nada a limpar.
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Retomada do agendamento: a ponte /agendar → /cliente → /agendar              */
 /* -------------------------------------------------------------------------- */
 

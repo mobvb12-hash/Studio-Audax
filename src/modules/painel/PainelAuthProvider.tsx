@@ -9,10 +9,13 @@ import { ContextoPainel } from './contexto'
 import {
   AVISO_LINK_ENVIADO,
   avisoParaEstadoVinculo,
+  cadastroPendenteDo,
   exigeNascimento,
   hashAuthRedirect,
-  limparHashAuth,
+  lerCadastroPendente,
   lerRetomadaAgendamento,
+  limparCadastroPendente,
+  limparHashAuth,
   mensagemErroCadastro,
   mensagemErroPerfil,
   mensagemErroRecuperacao,
@@ -20,6 +23,7 @@ import {
   mensagemErroVinculo,
   nascimentoValido,
   nomeValido,
+  salvarCadastroPendente,
   senhaValida,
   telefoneValido,
   urlAgendamentoOficial,
@@ -148,6 +152,33 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
     [cliente, marcarPronto],
   )
 
+  /**
+   * Conclui o vínculo reaproveitando o cadastro guardado pela confirmação de
+   * e-mail — só se a pendência for do MESMO e-mail da sessão. A pendência é
+   * apagada em sucesso; um erro de rede não pode jogar fora o que a pessoa
+   * acabou de digitar.
+   */
+  const concluirComCadastroPendente = useCallback(
+    async (
+      usarPendente: boolean,
+      emailSessao?: string | null,
+    ): Promise<boolean> => {
+      const pendente = usarPendente
+        ? cadastroPendenteDo(lerCadastroPendente(), emailSessao)
+        : null
+      const ok = pendente
+        ? await concluirVinculo(
+            pendente.nome,
+            pendente.telefone,
+            pendente.nascimento,
+          )
+        : await concluirVinculo()
+      if (pendente && ok) limparCadastroPendente()
+      return ok
+    },
+    [concluirVinculo],
+  )
+
   useEffect(() => {
     if (cliente === null) return
     let vivo = true
@@ -157,6 +188,7 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
     // estado fica DENTRO da cadeia assíncrona — setState síncrono no corpo do
     // effect é proibido pelas regras do React.
     const redirect = hashAuthRedirect()
+    const veioDaConfirmacao = redirect === 'signup'
     if (redirect === 'signup') {
       limparHashAuth()
     }
@@ -177,7 +209,7 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
           setEstado({ status: 'sem_sessao', aviso: AVISO_SESSAO_EXPIRADA })
           return
         }
-        await concluirVinculo()
+        await concluirComCadastroPendente(veioDaConfirmacao, sessao.email)
       })
       .catch(() => {
         if (vivo) setEstado({ status: 'sem_sessao', aviso: '' })
@@ -197,14 +229,16 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
         })
         return
       }
-      void concluirVinculo()
+      // a sessão também chega pelo observer (confirmação sem recarregar);
+      // mesmo caminho da cadeia acima, com a mesma cadência de pendência
+      void concluirComCadastroPendente(veioDaConfirmacao, sessao.email)
     })
 
     return () => {
       vivo = false
       cancelar()
     }
-  }, [cliente, concluirVinculo])
+  }, [cliente, concluirComCadastroPendente])
 
   /**
    * Terminou de entrar (ou de criar conta) E tinha um agendamento a retomar:
@@ -284,6 +318,15 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
           telefone: dados.telefone.trim(),
         })
         if (!sessao) {
+          // Confirmação de e-mail em andamento: o link reabre a página e o
+          // estado do React some. Guarda o que foi digitado para a prova de
+          // vínculo não nascer sem o nascimento.
+          salvarCadastroPendente({
+            email: dados.email.trim(),
+            nome: dados.nome.trim(),
+            telefone: dados.telefone.trim(),
+            nascimento: dados.nascimento.trim(),
+          })
           setEstado({ status: 'confirme_email', email: dados.email.trim() })
           return true
         }
@@ -422,14 +465,14 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
         )
         return false
       }
-      return await concluirVinculo()
+      return await concluirComCadastroPendente(true, sessao.email)
     } catch {
       setErro('Não foi possível verificar a conta. Tente novamente.')
       return false
     } finally {
       setProcessando(false)
     }
-  }, [cliente, concluirVinculo])
+  }, [cliente, concluirComCadastroPendente])
 
   const sair = useCallback(async (): Promise<boolean> => {
     if (cliente === null) {
@@ -440,6 +483,7 @@ export function PainelAuthProvider({ children, cliente: informado }: Props) {
     setProcessando(true)
     try {
       await cliente.sair()
+      limparCadastroPendente()
       prontoRef.current = false
       setErro('')
       setEstado({ status: 'sem_sessao', aviso: '' })
