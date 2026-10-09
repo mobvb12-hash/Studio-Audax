@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import ConfigComissaoModal from '@/components/ConfigComissaoModal'
 import ConfirmarModal from '@/components/ConfirmarModal'
@@ -7,6 +7,8 @@ import FechamentoComissaoModal from '@/components/FechamentoComissaoModal'
 import { CelulaKpi } from '@/components/PainelUi'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { useCaixa } from '@/modules/caixa/store'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import {
   periodoHoje,
   periodoMes,
@@ -47,6 +49,26 @@ export default function Comissoes() {
     auditoria,
   } = useComissoes()
 
+  // Permissões de ação (mesmo mapa único do RLS). Fora do AuthProvider
+  // (testes/render isolado) não há papel a consultar — mantém o
+  // comportamento atual; em produção a página só existe dentro do AuthProvider.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const comSessao = auth !== null
+  const podeVerTodas = !comSessao || pode('comissoes:ver_todas')
+  // Fechar/Reabrir fechamento de comissão = `comissoes:fechar` / `comissoes:reabrir`
+  // (dono/admin/gerente no mapa; RLS de comissoes_fechamentos é gerente+).
+  const podeFechar = !comSessao || pode('comissoes:fechar')
+  const podeReabrir = !comSessao || pode('comissoes:reabrir')
+  // Configurar percentual = `profissionais:comissoes_configurar` (gerente+ no
+  // mapa; RLS de comissoes_configs também é gerente+).
+  const podeConfigurar = !comSessao || pode('profissionais:comissoes_configurar')
+  // Mesma posse da RLS (014/059): quem só tem `comissoes:ver_proprias` vê a
+  // linha do cadastro vinculado à própria conta (`profissionais.user_id`).
+  const meuProfissional = profissionais.find(
+    (p) => p.userId && p.userId === auth?.perfil?.userId,
+  )?.nome
+
   const [tipo, setTipo] = useState<TipoPreenchido>('mes')
   const [custom, setCustom] = useState<Periodo>(() => periodoMes())
   const [configurando, setConfigurando] = useState<{
@@ -72,10 +94,15 @@ export default function Comissoes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, custom, hoje])
 
-  const linhas = useMemo<LinhaProducao[]>(
-    () => linhasDoPeriodo(lancamentos, profissionais, configDe, periodo),
-    [lancamentos, profissionais, configDe, periodo],
-  )
+  const linhas = useMemo<LinhaProducao[]>(() => {
+    const todas = linhasDoPeriodo(lancamentos, profissionais, configDe, periodo)
+    if (podeVerTodas) return todas
+    // Produção e comissão dos colegas ficam fora da tela: sem `ver_todas` a
+    // pessoa só enxerga a própria linha. Sem vínculo não há linha nenhuma —
+    // que é exatamente o que o RLS devolve.
+    if (!meuProfissional) return []
+    return todas.filter((linha) => linha.nome === meuProfissional)
+  }, [lancamentos, profissionais, configDe, periodo, podeVerTodas, meuProfissional])
 
   const { qtd: totalQtd, producao: totalProducao, comissao: totalComissao } =
     useMemo(() => totaisDoPeriodo(linhas), [linhas])
@@ -248,39 +275,45 @@ export default function Comissoes() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setConfigurando({
-                            id: linha.profissionalId,
-                            nome: linha.nome,
-                          })
-                        }
-                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                      >
-                        Configurar
-                      </button>
-                      {fechamento ? (
+                      {podeConfigurar && (
                         <button
                           type="button"
                           onClick={() =>
-                            setReabrindo({
-                              id: fechamento.id,
+                            setConfigurando({
+                              id: linha.profissionalId,
                               nome: linha.nome,
                             })
                           }
-                          className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                          className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
                         >
-                          Reabrir
+                          Configurar
                         </button>
+                      )}
+                      {fechamento ? (
+                        podeReabrir && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReabrindo({
+                                id: fechamento.id,
+                                nome: linha.nome,
+                              })
+                            }
+                            className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                          >
+                            Reabrir
+                          </button>
+                        )
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setFechando(linha)}
-                          className="rounded-lg bg-[#C9A24A] px-2.5 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
-                        >
-                          Fechar
-                        </button>
+                        podeFechar && (
+                          <button
+                            type="button"
+                            onClick={() => setFechando(linha)}
+                            className="rounded-lg bg-[#C9A24A] px-2.5 py-1.5 text-xs font-semibold text-[#121110] hover:bg-[#A8842C]"
+                          >
+                            Fechar
+                          </button>
+                        )
                       )}
                     </div>
                   </td>

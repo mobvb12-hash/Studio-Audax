@@ -1,6 +1,8 @@
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import { CAMPO_SELECT, ROTULO_FORM } from '@/lib/apresentacao'
 import { formatarBRL } from '@/lib/moeda'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { ROTULO_STATUS, statusEstoque } from '@/modules/estoque/indicadores'
 import type { Produto } from '@/modules/produtos/types'
 
@@ -32,6 +34,11 @@ export default function ListaProdutos({
   aoEntrada,
   aoAlternar,
 }: Props) {
+  // Entrada de estoque manual = `estoque:entrada` (mapa único; RLS 042/058).
+  // Sem sessão de auth (testes/render isolado) não há papel a consultar.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeEntrada = auth === null || pode('estoque:entrada')
   const visiveis = useMemo(() => {
     const ordenados = [...produtos].sort((a, b) =>
       a.nome.localeCompare(b.nome, 'pt-BR'),
@@ -118,13 +125,15 @@ export default function ListaProdutos({
                 >
                   Editar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => aoEntrada(produto.id)}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                >
-                  Entrada
-                </button>
+                {podeEntrada && (
+                  <button
+                    type="button"
+                    onClick={() => aoEntrada(produto.id)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  >
+                    Entrada
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => aoAlternar(produto.id)}

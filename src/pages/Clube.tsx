@@ -1,12 +1,14 @@
 // Audax Club — assinaturas dos clientes (planos Cabelo, Barba e Cabelo + Barba).
 // Status é sempre derivado do vencimento (nunca armazenado); cancelamento
 // preserva assinatura e pagamentos; pagamento renova o ciclo e entra no Caixa.
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { chipClasse } from '@/lib/apresentacao'
 import AssinaturaDetalheModal from '@/components/AssinaturaDetalheModal'
 import AssinaturaFormModal from '@/components/AssinaturaFormModal'
 import { CelulaKpi } from '@/components/PainelUi'
 import { hojeISO } from '@/modules/agenda/catalogo'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { useCaixa } from '@/modules/caixa/store'
 import ListaAssinaturas from '@/modules/clube/components/ListaAssinaturas'
 import {
@@ -40,6 +42,11 @@ const ORDEM_STATUS: Record<StatusAssinatura, number> = {
 export default function Clube() {
   const { assinaturas, pagamentos } = useClube()
   const { lancamentos } = useCaixa()
+  // Criar assinatura = `clube:assinatura_criar` (mapa único; RLS 042).
+  // Sem sessão de auth (testes/render isolado) não há papel a consultar.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeCriarAssinatura = auth === null || pode('clube:assinatura_criar')
 
   // Recalculado a cada render: uma sessão que cruza a meia-noite não
   // pode continuar exibindo o "hoje" do dia anterior.
@@ -101,13 +108,15 @@ export default function Clube() {
             desconto em produtos para assinantes vigentes
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setNovoAberto(true)}
-          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C]"
-        >
-          + Nova assinatura
-        </button>
+        {podeCriarAssinatura && (
+          <button
+            type="button"
+            onClick={() => setNovoAberto(true)}
+            className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C]"
+          >
+            + Nova assinatura
+          </button>
+        )}
       </div>
 
       <div className="mt-5 overflow-x-auto border-y border-[#E5DCC3]">

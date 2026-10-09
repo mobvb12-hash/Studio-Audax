@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import ProfissionalFormModal from '@/components/ProfissionalFormModal'
 import { normalizarTexto } from '@/lib/moeda'
 import { useAgenda } from '@/modules/agenda/store'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { useCaixa } from '@/modules/caixa/store'
 import { useComissoesOpcional } from '@/modules/comissoes/store'
 import { useEsperaOpcional } from '@/modules/espera/store'
@@ -38,6 +40,16 @@ export default function Profissionais() {
     renomearProfissional: renomearNasComissoes,
   } = useComissoesOpcional()
   const { renomearProfissional: renomearNaEspera } = useEsperaOpcional()
+  // Cadastro de profissionais = `profissionais:criar` / `:editar` / `:excluir`
+  // (mapa único; RLS 042). Sem sessão de auth (testes/render isolado) não há
+  // papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeCriar = auth === null || pode('profissionais:criar')
+  const podeEditar = auth === null || pode('profissionais:editar')
+  const podeExcluir = auth === null || pode('profissionais:excluir')
+  // Inativar/Reativar = `profissionais:ativar_inativar` (gerente+ no mapa).
+  const podeAtivar = auth === null || pode('profissionais:ativar_inativar')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Profissional | null>(null)
   const [excluindo, setExcluindo] = useState<Profissional | null>(null)
@@ -80,16 +92,18 @@ export default function Profissionais() {
             vira uma coluna na Agenda
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setEditando(null)
-            setModalAberto(true)
-          }}
-          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
-        >
-          + Novo profissional
-        </button>
+        {podeCriar && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditando(null)
+              setModalAberto(true)
+            }}
+            className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
+          >
+            + Novo profissional
+          </button>
+        )}
       </div>
 
       {profissionais.length === 0 ? (
@@ -133,37 +147,43 @@ export default function Profissionais() {
                 {contagem.get(prof.nome) ?? 0} atendimento(s)
               </span>
               <div className="flex shrink-0 flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditando(prof)
-                    setModalAberto(true)
-                  }}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  aria-label={rotuloAcao('Editar', prof, repetidos.has(prof.id))}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => alternarAtivo(prof.id)}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  aria-label={rotuloAcao(
-                    prof.ativo ? 'Inativar' : 'Reativar',
-                    prof,
-                    repetidos.has(prof.id),
-                  )}
-                >
-                  {prof.ativo ? 'Inativar' : 'Reativar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExcluindo(prof)}
-                  className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-                  aria-label={rotuloAcao('Excluir', prof, repetidos.has(prof.id))}
-                >
-                  Excluir
-                </button>
+                {podeEditar && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditando(prof)
+                      setModalAberto(true)
+                    }}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                    aria-label={rotuloAcao('Editar', prof, repetidos.has(prof.id))}
+                  >
+                    Editar
+                  </button>
+                )}
+                {podeAtivar && (
+                  <button
+                    type="button"
+                    onClick={() => alternarAtivo(prof.id)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                    aria-label={rotuloAcao(
+                      prof.ativo ? 'Inativar' : 'Reativar',
+                      prof,
+                      repetidos.has(prof.id),
+                    )}
+                  >
+                    {prof.ativo ? 'Inativar' : 'Reativar'}
+                  </button>
+                )}
+                {podeExcluir && (
+                  <button
+                    type="button"
+                    onClick={() => setExcluindo(prof)}
+                    className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
+                    aria-label={rotuloAcao('Excluir', prof, repetidos.has(prof.id))}
+                  >
+                    Excluir
+                  </button>
+                )}
               </div>
             </li>
           ))}

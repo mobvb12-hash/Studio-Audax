@@ -72,6 +72,8 @@ function normalizar(partial: Partial<Profissional>): Profissional | null {
     criadoEm: partial.criadoEm ?? new Date().toISOString(),
     whatsappNotificacao: partial.whatsappNotificacao ?? '',
     notificarAgendamentos: partial.notificarAgendamentos !== false,
+    // vínculo com a conta de acesso (014): é o que dá posse ao profissional
+    userId: partial.userId ?? null,
   }
 }
 

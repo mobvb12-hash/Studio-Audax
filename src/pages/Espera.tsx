@@ -1,10 +1,12 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useContext, useMemo, useState, type FormEvent } from 'react'
 import { chipClasse } from '@/lib/apresentacao'
 import SeletorCliente from '@/components/cliente/SeletorCliente'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import NovoAgendamentoModal from '@/components/NovoAgendamentoModal'
 import { formatarDataCurta } from '@/modules/agenda/catalogo'
 import { useAgenda } from '@/modules/agenda/store'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { useClientes } from '@/modules/clientes/store'
 import {
   comPosicao,
@@ -50,6 +52,20 @@ export default function Espera() {
   const { servicos } = useServicos()
   const { expediente, bloqueios, agendamentos } = useAgenda()
   const { pedidos, adicionar, editar, mudarStatus, remover } = useEspera()
+  // Encerrar pedido = `espera:pedido_atender` / `espera:pedido_cancelar`
+  // (mapa único; RLS 042). Sem sessão de auth (testes/render isolado) não há
+  // papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeAtender = auth === null || pode('espera:pedido_atender')
+  const podeCancelar = auth === null || pode('espera:pedido_cancelar')
+  // Editar pedido da fila = `espera:pedido_editar` (mapa único; RLS de
+  // espera_pedidos é recepção ou acima para UPDATE).
+  const podeEditar = auth === null || pode('espera:pedido_editar')
+  // "Remover" NÃO tem gate de permissão: a ação é só local (o app não fala
+  // com `espera_pedidos`) — ver o comentário de `remover` em
+  // `modules/espera/store.tsx`, onde está registrada a decisão (opção C) e a
+  // condição para rever essa escolha.
 
   const [clienteId, setClienteId] = useState('')
   const [servico, setServico] = useState('')
@@ -457,27 +473,33 @@ export default function Espera() {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {pedido.status === 'aguardando' && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => iniciarEdicao(pedido)}
-                        className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => encerrar(pedido, 'atendido')}
-                        className="rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-2.5 py-1 text-xs font-medium text-[#3F6B33] hover:bg-[#DCEED4]"
-                      >
-                        Atendido
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => encerrar(pedido, 'cancelado')}
-                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
-                      >
-                        Cancelar pedido
-                      </button>
+                      {podeEditar && (
+                        <button
+                          type="button"
+                          onClick={() => iniciarEdicao(pedido)}
+                          className="rounded-lg border border-[#E5DCC3] bg-white px-2.5 py-1 text-xs font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
+                        >
+                          Editar
+                        </button>
+                      )}
+                      {podeAtender && (
+                        <button
+                          type="button"
+                          onClick={() => encerrar(pedido, 'atendido')}
+                          className="rounded-lg border border-[#BFE0B2] bg-[#E9F5E4] px-2.5 py-1 text-xs font-medium text-[#3F6B33] hover:bg-[#DCEED4]"
+                        >
+                          Atendido
+                        </button>
+                      )}
+                      {podeCancelar && (
+                        <button
+                          type="button"
+                          onClick={() => encerrar(pedido, 'cancelado')}
+                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                        >
+                          Cancelar pedido
+                        </button>
+                      )}
                     </>
                   )}
                   <button

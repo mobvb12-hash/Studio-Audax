@@ -21,6 +21,8 @@ type ProfissionalRow = {
   /** migration 024 — podem não existir em bases ainda não migradas */
   whatsapp_notificacao?: string | null
   notificar_agendamentos?: boolean | null
+  /** migration 014 — vínculo com a conta de acesso (posse no RLS) */
+  user_id?: string | null
 }
 
 function paraProfissional(row: ProfissionalRow): Profissional {
@@ -34,6 +36,7 @@ function paraProfissional(row: ProfissionalRow): Profissional {
     criadoEm: row.criado_em,
     whatsappNotificacao: row.whatsapp_notificacao ?? '',
     notificarAgendamentos: row.notificar_agendamentos !== false,
+    userId: row.user_id ?? null,
   }
 }
 

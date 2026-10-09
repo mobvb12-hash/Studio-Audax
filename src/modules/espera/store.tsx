@@ -153,6 +153,20 @@ export function EsperaProvider({ children }: { children: ReactNode }) {
     [pedidos],
   )
 
+  /**
+   * "Remover da fila" é uma ação SÓ LOCAL: a fila vive no `localStorage` e
+   * nenhuma camada do app fala com `public.espera_pedidos` (não existe
+   * `services/supabase/espera.ts`), então não há policy de DELETE envolvida e
+   * nenhuma chave do mapa de permissões encaixa — `espera:pedido_cancelar`
+   * cobre o encerramento de status, não a exclusão do registro.
+   *
+   * DECISÃO (auditoria 08/10/2026, opção C): manter sem gate. A escolha da
+   * chave certa depende do futuro da persistência da fila — se ela migrar
+   * para o Supabase, o DELETE real passa a valer (`espera_pedidos_delete*` =
+   * admin/gerente) e aí nasce a chave `espera:pedido_excluir`, com gate na UI
+   * e regra no RLS alinhados. Enquanto for local, gatear seria fingir uma
+   * proteção que o banco não aplica.
+   */
   const remover = useCallback((id: string) => {
     setPedidos((atual) => atual.filter((p) => p.id !== id))
   }, [])

@@ -1,5 +1,5 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { slotsDoExpediente } from '@/modules/agenda/regras'
@@ -9,6 +9,8 @@ import type { Agendamento } from '@/modules/agenda/types'
 import { useClientes } from '@/modules/clientes/store'
 import { useProfissionais } from '@/modules/profissionais/store'
 import { useServicos } from '@/modules/servicos/store'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { normalizarTexto } from '@/lib/moeda'
 import { useWhats } from '@/modules/whatsapp/store'
 import { dadosDoAgendamento, textoTemplate } from '@/modules/whatsapp/templates'
@@ -41,6 +43,18 @@ export default function NovoAgendamentoModal({
   useEffect(() => {
     whatsRef.current = whats
   })
+  // Permissões de ação (mesmo mapa único do RLS). Fora do AuthProvider
+  // (testes/render isolado) não há papel a consultar — mantém o
+  // comportamento atual; em produção a modal só abre dentro do AuthProvider.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const comSessao = auth !== null
+  const podeVerTodas = !comSessao || pode('agenda:ver_todas')
+  // Mesma posse da RLS (014/059): quem só tem `agenda:ver_propria` escolhe
+  // somente o cadastro vinculado à própria conta (`profissionais.user_id`).
+  const meuProfissional = profissionais.find(
+    (p) => p.userId && p.userId === auth?.perfil?.userId,
+  )?.nome
   // Novos agendamentos só podem usar serviços/profissionais ativos
   const servicosAtivos = useMemo(
     () => servicos.filter((s) => s.ativo),
@@ -50,20 +64,28 @@ export default function NovoAgendamentoModal({
     // Uma opção por nome: com duplicidade de cadastro, o registro ativo
     // é o representante da escolha (o select e o agendamento usam nome).
     const vistos = new Set<string>()
-    return profissionais.filter((p) => {
+    const ativos = profissionais.filter((p) => {
       if (!p.ativo || vistos.has(p.nome)) return false
       vistos.add(p.nome)
       return true
     })
-  }, [profissionais])
+    if (podeVerTodas || !meuProfissional) return ativos
+    return ativos.filter((p) => p.nome === meuProfissional)
+  }, [profissionais, podeVerTodas, meuProfissional])
   const [cliente, setCliente] = useState(clienteInicial ?? '')
   const [telefone, setTelefone] = useState(
     () => (clienteInicial ? porNome(clienteInicial)?.telefone ?? '' : ''),
   )
   const [servico, setServico] = useState(() => servicosAtivos[0]?.nome ?? '')
-  const [profissional, setProfissional] = useState(
-    () => profissionalInicial ?? profissionaisAtivos[0]?.nome ?? '',
-  )
+  const [profissional, setProfissional] = useState(() => {
+    const inicial = profissionalInicial ?? profissionaisAtivos[0]?.nome ?? ''
+    if (podeVerTodas || !meuProfissional) return inicial
+    // `profissionalInicial` pode vir de outra tela: se não está entre as
+    // opções próprias, cai no próprio cadastro.
+    return profissionaisAtivos.some((p) => p.nome === inicial)
+      ? inicial
+      : meuProfissional
+  })
   const [data, setData] = useState(() => dataInicial ?? hojeISO())
   const [horario, setHorario] = useState(() => horarioInicial ?? '14:00')
   const [observacao, setObservacao] = useState('')

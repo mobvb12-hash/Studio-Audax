@@ -1,4 +1,7 @@
+import { useContext } from 'react'
 import { formatarDataLonga } from '@/modules/agenda/catalogo'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import {
   statusAssinatura,
   statusClasse,
@@ -23,6 +26,11 @@ export default function ListaAssinaturas({
   aoDetalhe,
   aoEditar,
 }: Props) {
+  // Editar assinatura = `clube:assinatura_editar` (mapa único; RLS 042).
+  // Sem sessão de auth (testes/render isolado) não há papel a consultar.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeEditar = auth === null || pode('clube:assinatura_editar')
   return (
     <section className="mt-4 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-5">
       <h2 className="text-[15px] font-bold text-[#121110]">Assinaturas</h2>
@@ -86,7 +94,7 @@ export default function ListaAssinaturas({
                         >
                           Detalhes
                         </button>
-                        {!a.cancelada && (
+                        {!a.cancelada && podeEditar && (
                           <button
                             type="button"
                             onClick={() => aoEditar(a.id)}

@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import VerFechamentoModal from '@/components/VerFechamentoModal'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { formatarDataCurta } from '@/modules/agenda/catalogo'
 import { estiloBadge } from '@/modules/agenda/presentacao'
 import { somaMinutos } from '@/modules/agenda/regras'
@@ -40,6 +42,12 @@ export default function DetalheAgendamento({
   // no ramo em aberto — depois de uma reabertura o histórico continua
   // acessível e a conta aparece como estornado/reaberto.
   const { possuiFechamento } = useCaixa()
+  // Excluir agendamento é DELETE no RLS (042: agendamentos_delete →
+  // `agenda:cancelar`; 014: admin/gerente). Sem sessão de auth (testes/
+  // render isolado) não há papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeExcluir = auth === null || pode('agenda:cancelar')
   const temHistorico = possuiFechamento(ag.id)
   const remarcacoes = ag.remarcacoes ?? []
   const ultimaRemarcacao = remarcacoes[remarcacoes.length - 1]
@@ -233,7 +241,7 @@ export default function DetalheAgendamento({
                   Cancelar
                 </button>
               )}
-              {!pago && !confirmandoExclusao && (
+              {podeExcluir && !pago && !confirmandoExclusao && (
                 <button
                   type="button"
                   onClick={() => setConfirmandoExclusao(true)}
@@ -242,7 +250,7 @@ export default function DetalheAgendamento({
                   Excluir
                 </button>
               )}
-              {!pago && confirmandoExclusao && (
+              {podeExcluir && !pago && confirmandoExclusao && (
                 <>
                   <span className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                     Excluir este agendamento? Esta ação não pode ser desfeita.

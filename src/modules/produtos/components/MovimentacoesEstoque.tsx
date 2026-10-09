@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import { CAMPO_SELECT, ROTULO_FORM } from '@/lib/apresentacao'
 import { formatarBRL } from '@/lib/moeda'
 import { hojeISO } from '@/modules/agenda/catalogo'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import type { MovimentacaoEstoque } from '@/modules/estoque/types'
 import {
   ROTULO_TIPO_MOVIMENTACAO,
@@ -55,6 +57,13 @@ export default function MovimentacoesEstoque({
   aoEntrada,
   aoAjuste,
 }: Props) {
+  // Movimentação manual de estoque = `estoque:entrada` / `estoque:ajuste`
+  // (mapa único; RLS 042/058). Sem sessão de auth (testes/render isolado)
+  // não há papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeEntrada = auth === null || pode('estoque:entrada')
+  const podeAjuste = auth === null || pode('estoque:ajuste')
   const movimentacoesFiltradas = useMemo(() => {
     const inicio = inicioDoPeriodo(periodo)
     return movimentacoes
@@ -127,20 +136,24 @@ export default function MovimentacoesEstoque({
           </select>
         </div>
         <div className="ml-auto flex gap-2">
-          <button
-            type="button"
-            onClick={aoEntrada}
-            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
-          >
-            + Nova entrada
-          </button>
-          <button
-            type="button"
-            onClick={aoAjuste}
-            className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
-          >
-            + Ajuste
-          </button>
+          {podeEntrada && (
+            <button
+              type="button"
+              onClick={aoEntrada}
+              className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
+            >
+              + Nova entrada
+            </button>
+          )}
+          {podeAjuste && (
+            <button
+              type="button"
+              onClick={aoAjuste}
+              className="rounded-lg border border-[#E5DCC3] bg-white px-4 py-2 text-sm font-medium text-[#3A352C] hover:bg-[#F3ECDA]"
+            >
+              + Ajuste
+            </button>
+          )}
         </div>
       </div>
 

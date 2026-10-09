@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import ServicoFormModal from '@/components/ServicoFormModal'
 import { useAgenda } from '@/modules/agenda/store'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { useCaixa } from '@/modules/caixa/store'
 import { useEsperaOpcional } from '@/modules/espera/store'
 import { servicoEmUso } from '@/modules/servicos/regras'
@@ -14,6 +16,17 @@ export default function Servicos() {
   const { agendamentos, renomearServico: renomearNaAgenda } = useAgenda()
   const { lancamentos, renomearServico: renomearNoCaixa } = useCaixa()
   const { renomearServico: renomearNaEspera } = useEsperaOpcional()
+  // Cadastro de serviços = `servicos:criar` / `servicos:editar` /
+  // `servicos:excluir` (mapa único; RLS 042). Sem sessão de auth (testes/
+  // render isolado) não há papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeCriar = auth === null || pode('servicos:criar')
+  const podeEditar = auth === null || pode('servicos:editar')
+  const podeExcluir = auth === null || pode('servicos:excluir')
+  // Inativar/Reativar = `servicos:ativar_inativar` (gerente+ no mapa; RLS de
+  // servicos também exige gerente ou acima para UPDATE).
+  const podeAtivar = auth === null || pode('servicos:ativar_inativar')
   const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<Servico | null>(null)
@@ -49,13 +62,15 @@ export default function Servicos() {
             inativo(s) · preço e duração usados na Agenda
           </p>
         </div>
-        <button
-          type="button"
-          onClick={abrirNovo}
-          className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
-        >
-          + Novo serviço
-        </button>
+        {podeCriar && (
+          <button
+            type="button"
+            onClick={abrirNovo}
+            className="shrink-0 rounded-lg bg-[#C9A24A] px-4 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
+          >
+            + Novo serviço
+          </button>
+        )}
       </div>
 
       <div className="mt-5 rounded-xl border border-[#E5DCC3] bg-[#FDFBF3] p-4">
@@ -116,32 +131,38 @@ export default function Servicos() {
                 {formatarBRL(servico.preco)}
               </span>
               <div className="flex shrink-0 flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditando(servico)
-                    setModalAberto(true)
-                  }}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => alternarAtivo(servico.id)}
-                  className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
-                  aria-label={`${servico.ativo ? 'Inativar' : 'Reativar'} ${servico.nome}`}
-                >
-                  {servico.ativo ? 'Inativar' : 'Reativar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExcluindo(servico)}
-                  className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
-                  aria-label={`Excluir ${servico.nome}`}
-                >
-                  Excluir
-                </button>
+                {podeEditar && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditando(servico)
+                      setModalAberto(true)
+                    }}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                  >
+                    Editar
+                  </button>
+                )}
+                {podeAtivar && (
+                  <button
+                    type="button"
+                    onClick={() => alternarAtivo(servico.id)}
+                    className="rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F3ECDA]"
+                    aria-label={`${servico.ativo ? 'Inativar' : 'Reativar'} ${servico.nome}`}
+                  >
+                    {servico.ativo ? 'Inativar' : 'Reativar'}
+                  </button>
+                )}
+                {podeExcluir && (
+                  <button
+                    type="button"
+                    onClick={() => setExcluindo(servico)}
+                    className="rounded-lg px-2 py-1.5 text-xs text-[#A99E85] hover:bg-[#F3ECDA] hover:text-red-600"
+                    aria-label={`Excluir ${servico.nome}`}
+                  >
+                    Excluir
+                  </button>
+                )}
               </div>
             </li>
           ))}

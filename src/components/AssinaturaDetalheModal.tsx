@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import PagamentoAssinaturaModal from '@/components/PagamentoAssinaturaModal'
 import { formatarDataLonga, hojeISO } from '@/modules/agenda/catalogo'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { useCaixa } from '@/modules/caixa/store'
 import { useClube } from '@/modules/clube/store'
 import {
@@ -22,6 +24,13 @@ type Props = {
 export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) {
   const { pagamentosDaAssinatura, cancelar } = useClube()
   const { lancamentos } = useCaixa()
+  // Cancelar assinatura = `clube:assinatura_editar`; registrar pagamento =
+  // `clube:pagamento_registrar` (mapa único; RLS 042). Sem sessão de auth
+  // (testes/render isolado) não há papel a consultar.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeEditar = auth === null || pode('clube:assinatura_editar')
+  const podePagar = auth === null || pode('clube:pagamento_registrar')
   const [pagamentoAberto, setPagamentoAberto] = useState(false)
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
   const [mensagem, setMensagem] = useState('')
@@ -217,20 +226,24 @@ export default function AssinaturaDetalheModal({ assinatura, onFechar }: Props) 
           </button>
           {!assinatura.cancelada && (
             <>
-              <button
-                type="button"
-                onClick={() => setConfirmarCancelamento(true)}
-                className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                Cancelar assinatura
-              </button>
-              <button
-                type="button"
-                onClick={() => setPagamentoAberto(true)}
-                className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
-              >
-                + Registrar pagamento
-              </button>
+              {podeEditar && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmarCancelamento(true)}
+                  className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Cancelar assinatura
+                </button>
+              )}
+              {podePagar && (
+                <button
+                  type="button"
+                  onClick={() => setPagamentoAberto(true)}
+                  className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
+                >
+                  + Registrar pagamento
+                </button>
+              )}
             </>
           )}
         </div>

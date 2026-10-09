@@ -1,5 +1,7 @@
 import { CAMPO_FORM as campo, ROTULO_FORM as rotulo } from '@/lib/apresentacao'
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import { hojeISO } from '@/modules/agenda/catalogo'
 import { TIPOS_BLOQUEIO_ROTULO, rotuloBloqueio } from '@/modules/agenda/regras'
 import { useAgenda } from '@/modules/agenda/store'
@@ -15,6 +17,11 @@ const TIPOS = Object.keys(TIPOS_BLOQUEIO_ROTULO) as TipoBloqueio[]
 export default function BloqueiosModal({ onFechar }: Props) {
   const { bloqueios, criarBloqueio, removerBloqueio } = useAgenda()
   const { profissionais } = useProfissionais()
+  // Criar/remover bloqueio = `agenda:bloqueios_gerenciar` (mapa único).
+  // Sem sessão de auth (testes/render isolado) não há papel a consultar.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeGerenciar = auth === null || pode('agenda:bloqueios_gerenciar')
   const profissionaisAtivos = profissionais.filter((p) => p.ativo)
   const [profissional, setProfissional] = useState(
     () => profissionaisAtivos[0]?.nome ?? '',
@@ -192,13 +199,15 @@ export default function BloqueiosModal({ onFechar }: Props) {
         )}
 
         <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={criar}
-            className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
-          >
-            Criar bloqueio
-          </button>
+          {podeGerenciar && (
+            <button
+              type="button"
+              onClick={criar}
+              className="rounded-lg bg-[#C9A24A] px-4 py-2 text-sm font-semibold text-[#121110] hover:bg-[#A8842C]"
+            >
+              Criar bloqueio
+            </button>
+          )}
         </div>
 
         <div className="mt-5 border-t border-[#E5DCC3] pt-4">
@@ -226,13 +235,15 @@ export default function BloqueiosModal({ onFechar }: Props) {
                       {b.fim} · {b.profissional}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removerBloqueio(b.id)}
-                    className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                  >
-                    Remover
-                  </button>
+                  {podeGerenciar && (
+                    <button
+                      type="button"
+                      onClick={() => removerBloqueio(b.id)}
+                      className="shrink-0 rounded-lg border border-[#E5DCC3] bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Remover
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

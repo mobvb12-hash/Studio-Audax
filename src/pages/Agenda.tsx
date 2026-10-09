@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import BloqueiosModal from '@/components/BloqueiosModal'
 import EditarAgendamentoModal from '@/components/EditarAgendamentoModal'
@@ -6,6 +6,8 @@ import ExpedienteModal from '@/components/ExpedienteModal'
 import PagamentoModal from '@/components/PagamentoModal'
 import RemarcarAgendamentoModal from '@/components/RemarcarAgendamentoModal'
 import DetalheAgendamento from '@/modules/agenda/components/DetalheAgendamento'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import {
   formatarDataCurta,
   formatarDataLonga,
@@ -53,6 +55,22 @@ export default function Agenda({ onNovo }: Props) {
   const { jaPago } = useCaixa()
   const { profissionais } = useProfissionais()
   const { servicos } = useServicos()
+
+  // Permissões de ação (mesmo mapa único do RLS). Fora do AuthProvider
+  // (testes/render isolado) não há papel a consultar — mantém o comportamento
+  // atual; em produção a página só existe dentro do AuthProvider.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const comSessao = auth !== null
+  const podeVerTodas = !comSessao || pode('agenda:ver_todas')
+  const podeExpediente = !comSessao || pode('agenda:expediente_gerenciar')
+  const podeBloqueios = !comSessao || pode('agenda:bloqueios_gerenciar')
+  // Nome do cadastro vinculado à conta (`profissionais.user_id`). É a mesma
+  // posse do RLS: sem vínculo não há coluna a restringir — a grade fica como
+  // está e os dados continuam protegidos pelo banco.
+  const meuProfissional = profissionais.find(
+    (p) => p.userId && p.userId === auth?.perfil?.userId,
+  )?.nome
   const [data, setData] = useState(hojeISO())
   const [visual, setVisual] = useState<'dia' | 'semana'>('dia')
   const [selecionado, setSelecionado] = useState<Agendamento | null>(null)
@@ -124,8 +142,12 @@ export default function Agenda({ onNovo }: Props) {
       })
       lista.push({ nome: ag.profissional, foto: '' })
     }
-    return lista
-  }, [profissionais, doDia])
+    // Somente a própria coluna para quem não tem `agenda:ver_todas` (a
+    // profissional com conta vinculada) — mesma posse da RLS. Sem vínculo
+    // não há o que restringir e o banco já devolve só a agenda própria.
+    if (podeVerTodas || !meuProfissional) return lista
+    return lista.filter((c) => c.nome === meuProfissional)
+  }, [profissionais, doDia, podeVerTodas, meuProfissional])
 
   const duracaoDo = useMemo(() => {
     return (servico: string) =>
@@ -158,9 +180,13 @@ export default function Agenda({ onNovo }: Props) {
   const temAlmoco = linhaAlmoco >= 0
 
   const passo = visual === 'semana' ? 7 : 1
-  // Clique rápido na semana agenda com o primeiro profissional ativo
+  // Clique rápido na semana agenda com o primeiro profissional ativo.
+  // Quem só enxerga a própria agenda agenda sempre no próprio cadastro —
+  // senão o clique rápido criaria um agendamento para um colega.
   const profissionalPadrao =
-    (profissionais.find((p) => p.ativo) ?? profissionais[0])?.nome ?? ''
+    podeVerTodas || !meuProfissional
+      ? ((profissionais.find((p) => p.ativo) ?? profissionais[0])?.nome ?? '')
+      : meuProfissional
   // Profissional inativo mantém coluna e histórico, apenas sinalizado.
   // Com duplicidade de nome, a marca só aparece quando NENHUM cadastro
   // ativo tem esse nome — o registro ativo representa a coluna. Nome que
@@ -254,20 +280,24 @@ export default function Agenda({ onNovo }: Props) {
               Semana
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setExpedienteAberto(true)}
-            className={botaoToolbar}
-          >
-            Expediente
-          </button>
-          <button
-            type="button"
-            onClick={() => setBloqueiosAberto(true)}
-            className={botaoToolbar}
-          >
-            Bloqueios
-          </button>
+          {podeExpediente && (
+            <button
+              type="button"
+              onClick={() => setExpedienteAberto(true)}
+              className={botaoToolbar}
+            >
+              Expediente
+            </button>
+          )}
+          {podeBloqueios && (
+            <button
+              type="button"
+              onClick={() => setBloqueiosAberto(true)}
+              className={botaoToolbar}
+            >
+              Bloqueios
+            </button>
+          )}
         </div>
       </div>
 

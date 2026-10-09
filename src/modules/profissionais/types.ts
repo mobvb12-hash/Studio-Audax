@@ -21,6 +21,13 @@ export type Profissional = {
   whatsappNotificacao: string
   /** Se false, o profissional não é notificado de novos agendamentos. */
   notificarAgendamentos: boolean
+  /**
+   * Vínculo com a conta de acesso (`profissionais.user_id`, migration 014).
+   * É o que dá posse ao profissional: RLS (`current_profissional_id()`) e as
+   * telas de Agenda/Comissões usam este vínculo para mostrar só o que é dele.
+   * null = cadastro sem conta de acesso (não aparece para o próprio dono).
+   */
+  userId?: string | null
 }
 
 export type NovoProfissionalInput = {

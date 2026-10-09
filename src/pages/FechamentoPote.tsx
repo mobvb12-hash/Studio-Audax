@@ -11,13 +11,15 @@
 // Snapshot: depois de fechado, o resultado é imutável. Correção é reabrir com
 // motivo, e o histórico do cálculo original fica guardado (item 22).
 // ============================================================================
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import ConfirmarModal from '@/components/ConfirmarModal'
 import { CelulaKpi } from '@/components/PainelUi'
 import { ROTULO_FORM as rotulo } from '@/lib/apresentacao'
 import { CAMPO_FORM as campo } from '@/lib/apresentacao'
 import { formatarBRL, normalizarTexto } from '@/lib/moeda'
 import { hojeISO } from '@/modules/agenda/catalogo'
+import { ContextoAuth } from '@/modules/auth/contexto'
+import { useAuthPermissao } from '@/modules/auth/useAuthPermissao'
 import {
   atendimentosDoProfissional,
   calcularRateioPote,
@@ -72,6 +74,12 @@ export default function FechamentoPote() {
   const hoje = hojeISO()
   const { pagamentos } = useClube()
   const { lancamentos } = useCaixa()
+  // Fechar e reabrir o pote = `clube:pote_fechar` (única ação do catálogo
+  // para as duas operações; mapa: dono/admin/gerente). Sem sessão de auth
+  // (testes/render isolado) não há papel a consultar — mantém o comportamento.
+  const auth = useContext(ContextoAuth)
+  const { pode } = useAuthPermissao()
+  const podeGerenciarPote = auth === null || pode('clube:pote_fechar')
   // A configuração é carregada aqui (mesma fonte da tela de Configurações):
   // o percentual do pote nunca é fixado no código.
   const [config, setConfig] = useState<Configuracoes>(CONFIG_PADRAO)
@@ -417,14 +425,16 @@ const online = Boolean(supabase())
                 </p>
               ) : (
                 <div className="mt-5">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmando(true)}
-                    disabled={!poteAtivo}
-                    className="rounded-lg bg-[#C9A24A] px-5 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    FECHAR PERÍODO
-                  </button>
+                  {podeGerenciarPote && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmando(true)}
+                      disabled={!poteAtivo}
+                      className="rounded-lg bg-[#C9A24A] px-5 py-2.5 text-sm font-semibold text-[#121110] transition-colors hover:bg-[#A8842C] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      FECHAR PERÍODO
+                    </button>
+                  )}
                   <p className="mt-2 text-[12px] text-[#7C7469]">
                     Fechar grava receita, pote, produção e a parte de cada
                     profissional — com a comissão e a receita da empresa — como
@@ -553,13 +563,15 @@ const online = Boolean(supabase())
                     Reaberto: {f.reaberto.motivo}
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setReabrindo(f)}
-                    className="rounded-lg border border-red-300 px-3 py-1.5 text-[12.5px] font-medium text-red-700 transition-colors hover:bg-red-50"
-                  >
-                    Reabrir
-                  </button>
+                  podeGerenciarPote && (
+                    <button
+                      type="button"
+                      onClick={() => setReabrindo(f)}
+                      className="rounded-lg border border-red-300 px-3 py-1.5 text-[12.5px] font-medium text-red-700 transition-colors hover:bg-red-50"
+                    >
+                      Reabrir
+                    </button>
+                  )
                 )}
               </li>
             ))}
