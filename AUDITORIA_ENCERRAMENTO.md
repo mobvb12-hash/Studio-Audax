@@ -18,7 +18,10 @@ Não foi feito push, deploy, aplicação de migration nem alteração remota. Os
 - `origin/main`: `5962ae7`; referências locais indicam a branch 1 commit à frente e 0 atrás.
 - O commit `79e1365` foi revisado: altera somente `AUDITORIA_ENCERRAMENTO.md`; o título não descreve seu conteúdo e nenhuma implementação de WhatsApp foi incluída nesse commit.
 - Commit local criado após validação: `2c3899a fix(whatsapp): fail closed on dedup errors`. Inclui as correções locais verificadas e a versão do relatório anterior a este adendo; não foi enviado ao remoto.
-- Após `2c3899a`, o worktree ficou limpo e a branch passou a 2 commits à frente de `origin/main`, 0 atrás. Esta revisão documental do relatório será registrada separadamente, sem novas mudanças de código.
+- Commit documental local: `0390500 docs: record final verification and commit state`. O commit que contém esta atualização do relatório será acrescentado separadamente; nenhuma mudança de código acompanha este adendo.
+- `git ls-remote` confirmou que `origin/main` permanece em `5962ae7`. Os três commits locais continuam íntegros e a branch está 3 commits à frente, 0 atrás; o worktree estava limpo antes deste adendo.
+- Uma consulta pública read-only listou deployments GitHub com ambiente Production apontando para `5962ae7`. Isso não confirma, por si só, o alias nem o deployment ativo na Vercel.
+- `git push --dry-run` para `agents/studio-audax-completion-tasks` terminou sem erro e indicou criação de branch, mas não gravou nada. O ref remoto dessa branch não existia na consulta; o dry-run não comprova autorização para push real nem constitui publicação.
 - Arquivos modificados antes do novo commit local: `AUDITORIA_ENCERRAMENTO.md`, `src/modules/auth/AuthProvider.tsx`, `src/pages/FechamentoPote.tsx`, `src/supabase-schema.test.ts`, `supabase/functions/whatsapp-webhook/index.ts`, `supabase/functions/whatsapp-webhook/memoria.ts` e `supabase/functions/whatsapp-webhook/memoria.test.ts`.
 - Arquivos não rastreados: nenhum. `git diff --check` passou.
 - As alterações locais anteriores foram preservadas e revisadas. A correção nova de deduplicação foi revisada e testada.
@@ -64,14 +67,14 @@ Não foi feito push, deploy, aplicação de migration nem alteração remota. Os
 - No site `https://studio-audax.vercel.app`, a rota `/agendar` carregou a vitrine e os serviços.
 - No fluxo público, sem submeter dados nem criar agendamento, foram verificados: seleção de serviço, profissional, data, horários disponíveis, etapa Extras e formulário de dados. A jornada exibiu as sete etapas esperadas. O fluxo foi interrompido antes de qualquer confirmação/escrita.
 - A rota `/cliente` abriu em uma sessão já autenticada do navegador e chegou ao painel do cliente (`#/painel/clube`). Nenhum dado pessoal foi consultado; a tela indicava ausência de assinatura ativa. Isso comprova abertura da rota nessa sessão, não valida login/cadastro/recuperação em uma sessão nova.
-- A página pública é evidência de que o site está acessível, mas o commit/ID do deployment atual, logs, erros de console e estado do backend remoto não foram verificados.
+- A página pública é evidência de que o site está acessível. O registro público do GitHub aponta `5962ae7` como SHA mais recente de Production, mas alias, deployment/commit ativo na Vercel, logs, erros de console e estado do backend remoto não foram verificados.
 - Nenhum deploy novo foi realizado. As alterações verificadas permanecem locais e não foram enviadas ao remoto nem publicadas.
-- A revisão final deste relatório é somente documental e não altera o commit de código `2c3899a`.
+- Esta atualização do relatório é documental e não altera o commit de código `2c3899a`.
 
 ## Pendências e próxima ação
 
 1. **Supabase:** obter sessão autenticada na CLI (`supabase login`, por interação do titular se necessário) e vincular ao projeto correto; então consultar migrations aplicadas, RLS/permissões e versões das Edge Functions somente em leitura. Só propor alteração após comparar o remoto e revisar impactos.
-2. **Vercel/GitHub:** disponibilizar sessão autenticada das CLIs ou painel do titular; identificar o commit e estado do deployment atual e consultar logs/rotas antes de planejar publicação. Não publicar o commit local sem confirmar o fluxo oficial e o estado remoto.
+2. **Vercel/GitHub:** a consulta pública read-only do GitHub já funcionou e mostrou Production em `5962ae7`; autenticar Vercel/GitHub para identificar alias, commit ativo e logs e para qualquer publicação. O dry-run não substitui autorização de escrita. Não publicar o commit local sem confirmar o fluxo oficial e o estado remoto.
 3. **Evolution:** no ambiente autorizado, consultar estado da instância `studio-audax` e executar `webhook/find`; conferir URL/eventos e o número de teste configurado. Confirmar pela documentação/telemetria se a Evolution reentrega eventos após 503.
 4. **Gemini:** usando configuração já existente, consultar disponibilidade real de `gemini-3.1-flash-lite` e fazer chamada controlada, sem criar chaves/projetos ou ativar billing.
 5. **Ponta a ponta:** após os itens anteriores, testar apenas com o número de teste autorizado, confirmar persistência/deduplicação/resposta, reentrega após 503 e comportamento de falha posterior à reserva do ID; não usar contato de cliente.
