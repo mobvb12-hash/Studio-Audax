@@ -180,7 +180,7 @@ export function AuthProvider({ children, cliente: informado }: PropsAuthProvider
         setEntrando(false)
       }
     },
-    [cliente],
+    [cliente, entrarComConfirmacao],
   )
 
   /**

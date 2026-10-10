@@ -66,7 +66,13 @@ import {
   type ContextoConversa,
   type SaidaConversa,
 } from './conversa.ts'
-import { comTurnos, criarArmazenamentoRpc, criarMemoria, criarRecentes } from './memoria.ts'
+import {
+  comTurnos,
+  criarArmazenamentoRpc,
+  criarMemoria,
+  criarRecentes,
+  verificarDeduplicacao,
+} from './memoria.ts'
 import {
   interpretarAgendamentos,
   interpretarRpc,
@@ -597,28 +603,26 @@ export default {
       const memoriaConversa = criarMemoria(armazenamento, { agora: () => Date.now() })
       const eventosRecentes = criarRecentes(armazenamento)
 
-      // Dedup PERSISTENTE (RPC atômica): a Evolution reentrega eventos e a
-      // 2ª cópia não roda Gemini, não muda estado e não executa ação —
-      // mesmo que ela chegue em OUTRA execução/isolate. Id ausente →
-      // processa. Falha do armazenamento → fail-open com log: mensagem
-      // legítima nunca é bloqueada por indisponibilidade pontual.
-      let mensagemNova = true
-      if (evento.idMensagem) {
-        try {
-          mensagemNova = await eventosRecentes.registrar(evento.idMensagem)
-        } catch (erro) {
-          mensagemNova = true
-          console.log(
-            '[whatsapp-ia]',
-            JSON.stringify({
-              evento: 'dedup-indisponivel',
-              idMensagem: evento.idMensagem,
-              motivo: motivoSeguro(erro instanceof Error ? erro.message : 'erro'),
-            }),
-          )
-        }
+      // Sem confirmação persistente da deduplicação, não processa nem envia:
+      // retornar erro permite uma eventual reentrega sem arriscar duplicidade.
+      const deduplicacao = await verificarDeduplicacao(eventosRecentes, evento.idMensagem)
+      if (deduplicacao.estado === 'indisponivel') {
+        console.log(
+          '[whatsapp-ia]',
+          JSON.stringify({
+            evento: 'dedup-indisponivel',
+            idMensagem: evento.idMensagem,
+            motivo: motivoSeguro(
+              deduplicacao.erro instanceof Error ? deduplicacao.erro.message : 'erro',
+            ),
+          }),
+        )
+        return responder(503, {
+          ok: false,
+          motivo: 'Não foi possível confirmar a deduplicação da mensagem.',
+        })
       }
-      if (!mensagemNova) {
+      if (deduplicacao.estado === 'duplicada') {
         console.log(
           '[whatsapp-ia]',
           JSON.stringify({ evento: 'duplicado', idMensagem: evento.idMensagem }),

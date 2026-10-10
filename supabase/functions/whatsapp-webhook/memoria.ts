@@ -156,6 +156,10 @@ export type Recentes = {
   registrar: (idMensagem: string) => Promise<boolean>
 }
 
+export type ResultadoDeduplicacao =
+  | { estado: 'nova' | 'duplicada' }
+  | { estado: 'indisponivel'; erro: unknown }
+
 /**
  * Deduplicação de reentregas pela RPC atômica (INSERT ... ON CONFLICT): a
  * segunda entrega do mesmo id — mesmo vinda de outro isolate/execução —
@@ -164,6 +168,21 @@ export type Recentes = {
 export function criarRecentes(armazenamento: Armazenamento): Recentes {
   return {
     registrar: (idMensagem) => armazenamento.registrar(idMensagem),
+  }
+}
+
+export async function verificarDeduplicacao(
+  recentes: Recentes,
+  idMensagem: string | null,
+): Promise<ResultadoDeduplicacao> {
+  if (!idMensagem) return { estado: 'nova' }
+
+  try {
+    return {
+      estado: (await recentes.registrar(idMensagem)) ? 'nova' : 'duplicada',
+    }
+  } catch (erro) {
+    return { estado: 'indisponivel', erro }
   }
 }
 

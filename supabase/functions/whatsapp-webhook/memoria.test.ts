@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { TTL_CONTEXTO_MS, comTurnos, criarMemoria, criarRecentes } from './memoria'
+import {
+  TTL_CONTEXTO_MS,
+  comTurnos,
+  criarMemoria,
+  criarRecentes,
+  verificarDeduplicacao,
+} from './memoria'
 import { criarArmazenamentoFalso } from './armazenamento-falso'
 import type { ContextoConversa } from './conversa'
 import type { Turno } from './ia'
@@ -146,6 +152,18 @@ describe('criarRecentes — deduplicação persistente', () => {
     const recentes = criarRecentes(armazenamento)
     armazenamento.falhar('registrar')
     await expect(recentes.registrar('msg-1')).rejects.toThrow(/falha simulada/)
+  })
+
+  it('falha ao confirmar a deduplicação não é tratada como mensagem nova', async () => {
+    const recentes = {
+      registrar: async () => {
+        throw new Error('falha simulada')
+      },
+    }
+
+    await expect(verificarDeduplicacao(recentes, 'msg-1')).resolves.toMatchObject({
+      estado: 'indisponivel',
+    })
   })
 })
 

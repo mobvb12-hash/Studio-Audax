@@ -174,7 +174,37 @@ expect(nomes).toEqual([
       '../supabase/migrations/059_rls_posse_agendamentos_comissoes.sql',
       '../supabase/migrations/060_profissionais_update_sem_autoedicao.sql',
       '../supabase/migrations/061_horario_passado_remarcacao.sql',
+      '../supabase/migrations/062_rpc_execute_privileges.sql',
     ])
+  })
+
+  it('restringe o processamento da fila de notificações ao lado do servidor', () => {
+    const comandosMigracao = comandos(
+      sql('../supabase/migrations/062_rpc_execute_privileges.sql'),
+    )
+
+    expect(comandosMigracao).toContain(
+      'revoke execute on function public.processar_fila_notificacoes() from public',
+    )
+    expect(comandosMigracao).toContain(
+      'revoke execute on function public.processar_fila_notificacoes() from anon, authenticated',
+    )
+    expect(comandosMigracao).toContain(
+      'grant execute on function public.processar_fila_notificacoes() to service_role',
+    )
+  })
+
+  it('mantém a RPC de agendamento do painel restrita a sessões autenticadas', () => {
+    const comandosMigracao = comandos(
+      sql('../supabase/migrations/062_rpc_execute_privileges.sql'),
+    )
+
+    expect(comandosMigracao).toContain(
+      'revoke execute on function public.painel_agendamento_criar( text, text, date, text, text, text[] ) from public, anon',
+    )
+    expect(comandosMigracao).toContain(
+      'grant execute on function public.painel_agendamento_criar( text, text, date, text, text, text[] ) to authenticated, service_role',
+    )
   })
 
   it('nenhum script apaga dado, derruba tabela ou remove coluna', () => {
@@ -713,7 +743,7 @@ describe('Supabase — lock de concorrência da Agenda (021)', () => {
       texto.indexOf('$$;', texto.indexOf('create or replace function public.agendamento_publico_criar(')),
     )
     const trava = corpo.indexOf('perform public.agenda_lock_slot')
-    const conflito = corpo.indexOf('if exists (\n    select 1\n      from agendamentos')
+    const conflito = corpo.search(/if exists\s*\(\s*select 1\s+from agendamentos\b/)
     expect(trava).toBeGreaterThan(-1)
     expect(trava).toBeLessThan(conflito)
     // a frase que o cliente recebe continua a mesma de antes
