@@ -17,6 +17,8 @@ Não foi feito push, deploy, aplicação de migration nem alteração remota. Os
 - `HEAD` inicial: `79e1365 feat(whatsapp): add webhook and button fallback`.
 - `origin/main`: `5962ae7`; referências locais indicam a branch 1 commit à frente e 0 atrás.
 - O commit `79e1365` foi revisado: altera somente `AUDITORIA_ENCERRAMENTO.md`; o título não descreve seu conteúdo e nenhuma implementação de WhatsApp foi incluída nesse commit.
+- Commit local criado após validação: `2c3899a fix(whatsapp): fail closed on dedup errors`. Inclui as correções locais verificadas e a versão do relatório anterior a este adendo; não foi enviado ao remoto.
+- Após `2c3899a`, o worktree ficou limpo e a branch passou a 2 commits à frente de `origin/main`, 0 atrás. Esta revisão documental do relatório será registrada separadamente, sem novas mudanças de código.
 - Arquivos modificados antes do novo commit local: `AUDITORIA_ENCERRAMENTO.md`, `src/modules/auth/AuthProvider.tsx`, `src/pages/FechamentoPote.tsx`, `src/supabase-schema.test.ts`, `supabase/functions/whatsapp-webhook/index.ts`, `supabase/functions/whatsapp-webhook/memoria.ts` e `supabase/functions/whatsapp-webhook/memoria.test.ts`.
 - Arquivos não rastreados: nenhum. `git diff --check` passou.
 - As alterações locais anteriores foram preservadas e revisadas. A correção nova de deduplicação foi revisada e testada.
@@ -64,6 +66,7 @@ Não foi feito push, deploy, aplicação de migration nem alteração remota. Os
 - A rota `/cliente` abriu em uma sessão já autenticada do navegador e chegou ao painel do cliente (`#/painel/clube`). Nenhum dado pessoal foi consultado; a tela indicava ausência de assinatura ativa. Isso comprova abertura da rota nessa sessão, não valida login/cadastro/recuperação em uma sessão nova.
 - A página pública é evidência de que o site está acessível, mas o commit/ID do deployment atual, logs, erros de console e estado do backend remoto não foram verificados.
 - Nenhum deploy novo foi realizado. As alterações verificadas permanecem locais e não foram enviadas ao remoto nem publicadas.
+- A revisão final deste relatório é somente documental e não altera o commit de código `2c3899a`.
 
 ## Pendências e próxima ação
 
