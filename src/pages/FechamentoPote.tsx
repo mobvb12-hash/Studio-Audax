@@ -29,6 +29,7 @@ import {
   type RateioPote,
 } from '@/modules/clube/pote'
 import {
+  calcularPote,
   fecharPote,
   listarPote,
   reabrirPote,
@@ -168,7 +169,7 @@ const online = Boolean(supabase())
     setCarregando(true)
     try {
       if (supabase()) {
-        const resposta = await (await import('@/services/supabase/clubePote')).calcularPote({ periodo })
+        const resposta = await calcularPote({ periodo })
         setCalculo(resposta)
       } else {
         setCalculo(null)

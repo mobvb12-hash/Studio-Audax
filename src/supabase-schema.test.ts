@@ -713,7 +713,7 @@ describe('Supabase — lock de concorrência da Agenda (021)', () => {
       texto.indexOf('$$;', texto.indexOf('create or replace function public.agendamento_publico_criar(')),
     )
     const trava = corpo.indexOf('perform public.agenda_lock_slot')
-    const conflito = corpo.indexOf('if exists (\n    select 1\n      from agendamentos')
+    const conflito = corpo.search(/if exists\s*\(\s*select 1\s+from agendamentos\b/)
     expect(trava).toBeGreaterThan(-1)
     expect(trava).toBeLessThan(conflito)
     // a frase que o cliente recebe continua a mesma de antes
